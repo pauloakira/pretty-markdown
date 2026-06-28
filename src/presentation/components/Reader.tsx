@@ -1,9 +1,11 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 
 interface ReaderProps {
   html: string;
   initialScrollTop: number;
   onScrollPersist: (scrollTop: number) => void;
+  /** Optional shared ref to the scroll container, used by find-in-page. */
+  containerRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -15,11 +17,12 @@ interface ReaderProps {
  * mounting). On mount we restore the saved scroll position; on unmount (tab switch) we
  * hand the current scroll back so it's preserved when the tab is reopened.
  */
-export function Reader({ html, initialScrollTop, onScrollPersist }: ReaderProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+export function Reader({ html, initialScrollTop, onScrollPersist, containerRef }: ReaderProps) {
+  const localRef = useRef<HTMLDivElement>(null);
+  const ref = containerRef ?? localRef;
 
   useLayoutEffect(() => {
-    const el = scrollRef.current;
+    const el = ref.current;
     if (el) el.scrollTop = initialScrollTop;
     return () => {
       if (el) onScrollPersist(el.scrollTop);
@@ -29,7 +32,7 @@ export function Reader({ html, initialScrollTop, onScrollPersist }: ReaderProps)
   }, []);
 
   return (
-    <div className="reader-scroll" ref={scrollRef}>
+    <div className="reader-scroll" ref={ref}>
       <article
         className="reader markdown-body"
         // eslint-disable-next-line react/no-danger -- trusted pipeline output (see MarkdownPipeline)

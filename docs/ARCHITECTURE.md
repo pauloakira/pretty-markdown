@@ -173,3 +173,6 @@ Record notable architectural decisions here (lightweight ADR style) as the proje
 | 2026-06-28 | Macros scoped per `render()` pass (fresh copy of preamble); KaTeX persists in-doc `\gdef` | Document-wide defs without leaking across tabs; MathJax gets the static preamble |
 | 2026-06-28 | Copy-as-LaTeX via a global `copy` handler reading `data-tex` off the `.pm-math` wrapper | Source LaTeX on the clipboard when a selection sits within one formula; no change otherwise |
 | 2026-06-28 | MathJax split into its own Vite chunk; still eagerly loaded | Keeps the main app chunk small; lazy-loading on first fallback is deferred (sync renderer interface) |
+| 2026-06-28 | Container lifted into a React context (`ContainerProvider`/`useContainer`) | One shared composition root for all hooks (was: `useWorkspace` built its own) |
+| 2026-06-28 | Settings persisted in localStorage; applied live as CSS variables (`--reading-width`, `--reader-font-scale`) | Simple offline persistence; the reader is themed by variables, so changes are instant |
+| 2026-06-28 | Find-in-page uses the CSS Custom Highlight API over DOM Ranges (no DOM mutation) | Coexists with React's `dangerouslySetInnerHTML`; trivial to clear; feature-detected with graceful no-op fallback |

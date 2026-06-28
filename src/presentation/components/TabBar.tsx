@@ -9,6 +9,7 @@ interface TabBarProps {
   onClose: (id: TabId) => void;
   onNew: () => void;
   onReorder: (id: TabId, toIndex: number) => void;
+  onOpenSettings: () => void;
 }
 
 export function TabBar({
@@ -19,6 +20,7 @@ export function TabBar({
   onClose,
   onNew,
   onReorder,
+  onOpenSettings,
 }: TabBarProps) {
   const [dragId, setDragId] = useState<TabId | null>(null);
   const [overId, setOverId] = useState<TabId | null>(null);
@@ -86,6 +88,14 @@ export function TabBar({
         disabled={busy}
       >
         +
+      </button>
+      <button
+        className="tabbar__settings"
+        aria-label="Settings"
+        title="Settings"
+        onClick={onOpenSettings}
+      >
+        ⚙
       </button>
     </div>
   );

@@ -6,6 +6,7 @@
   --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
 
   --reading-width: 46rem;
+  --reader-font-scale: 1;
 
   --bg: #ffffff;
   --bg-elevated: #f6f7f9;
@@ -64,6 +65,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  position: relative; /* anchor for the find bar */
 }
 
 /* ---- Tab bar -------------------------------------------------------------- */
@@ -134,16 +136,24 @@ body {
   opacity: 1;
 }
 
-.tabbar__new {
+.tabbar__new,
+.tabbar__settings {
   flex: none;
   width: 38px;
   border: none;
   background: none;
   color: var(--fg-muted);
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   cursor: pointer;
 }
-.tabbar__new:hover:not(:disabled) {
+.tabbar__new {
+  font-size: 1.2rem;
+}
+.tabbar__settings {
+  border-left: 1px solid var(--border);
+}
+.tabbar__new:hover:not(:disabled),
+.tabbar__settings:hover {
   background: var(--border);
   color: var(--fg);
 }
@@ -164,6 +174,7 @@ body {
 
 /* ---- Welcome -------------------------------------------------------------- */
 .welcome {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -215,7 +226,7 @@ body {
   margin: 0 auto;
   padding: 2.5rem 1.5rem 6rem;
   font-family: var(--font-serif);
-  font-size: 1.125rem;
+  font-size: calc(1.125rem * var(--reader-font-scale));
   line-height: 1.7;
 }
 
@@ -326,4 +337,166 @@ body {
   margin: 1rem auto;
   padding: 0.6rem 0.8rem;
   text-align: center;
+}
+
+/* ---- Find in page --------------------------------------------------------- */
+.findbar {
+  position: absolute;
+  top: 0.75rem;
+  right: 1.25rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+}
+.findbar__input {
+  font: inherit;
+  font-size: 0.9rem;
+  width: 16rem;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+}
+.findbar__count {
+  min-width: 3.2rem;
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.findbar__btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.findbar__btn:hover:not(:disabled) {
+  background: var(--border);
+  color: var(--fg);
+}
+.findbar__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Match highlights (CSS Custom Highlight API). */
+::highlight(pm-find) {
+  background-color: rgb(250 204 21 / 0.4);
+}
+::highlight(pm-find-current) {
+  background-color: #f59e0b;
+  color: #1a1d21;
+}
+
+/* ---- Settings ------------------------------------------------------------- */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(0 0 0 / 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.settings-panel {
+  width: min(28rem, 92vw);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+.settings-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.settings-panel__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.settings-panel__close {
+  border: none;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.settings-panel__close:hover {
+  color: var(--fg);
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+.settings-field__label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.settings-field__value {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.settings-field__hint {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+.settings-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.settings-panel__footer {
+  margin-top: 1.25rem;
+  display: flex;
+  justify-content: flex-end;
+}
+.settings-reset {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.settings-reset:hover {
+  border-color: var(--accent);
+}
+
+.welcome__settings {
+  position: absolute;
+  top: 0.9rem;
+  right: 1.1rem;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--fg-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.welcome__settings:hover {
+  background: var(--bg-elevated);
+  color: var(--fg);
 }

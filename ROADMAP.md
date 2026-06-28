@@ -12,7 +12,8 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] markdown-it pipeline (CommonMark + GFM-ish: tables, linkify, typographer).
 - [x] KaTeX math rendering for `$...$` / `$$...$$` via a custom math plugin.
 - [x] Clean reading typography, light/dark theme.
-- [ ] Adjustable font size, find-in-page, smooth scroll. *(carried forward)*
+- [x] Find-in-page (`⌘F`/`Ctrl+F`): highlight all, count, next/prev, smooth scroll.
+- [x] Settings (persisted): reading width (side margins) + font size, live-applied.
 
 ## M2 — Robust math ✅
 - [x] MathRenderer abstraction with KaTeX → MathJax fallback (full TeX packages, SVG output).

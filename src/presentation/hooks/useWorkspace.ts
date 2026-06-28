@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createContainer } from "../../composition/container";
+import { useContainer } from "../../composition/ContainerContext";
 import type { TabId } from "../../domain/entities/Tab";
 import { activeTab } from "../../domain/entities/Workspace";
 
@@ -10,7 +10,7 @@ import { activeTab } from "../../domain/entities/Workspace";
  * and inactive tabs cost nothing (lazy mounting, DESIGN.md §3.4).
  */
 export function useWorkspace() {
-  const container = useMemo(() => createContainer(), []);
+  const container = useContainer();
   const { tabManager } = container;
 
   const workspace = useSyncExternalStore(tabManager.subscribe, tabManager.getSnapshot);

@@ -1,11 +1,13 @@
 import { DocumentService } from "../application/services/DocumentService";
 import { TabManager } from "../application/services/TabManager";
 import type { MacroMap } from "../domain/ports/MathRenderer";
+import type { SettingsRepository } from "../domain/ports/SettingsRepository";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { MathJaxRenderer } from "../infrastructure/math/MathJaxRenderer";
 import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
+import { LocalStorageSettingsRepository } from "../infrastructure/persistence/LocalStorageSettingsRepository";
 
 /**
  * Default math preamble — custom macros available in every document, fed to both
@@ -22,6 +24,7 @@ export interface Container {
   readonly documentService: DocumentService;
   readonly pipeline: MarkdownPipeline;
   readonly tabManager: TabManager;
+  readonly settingsRepository: SettingsRepository;
 }
 
 export function createContainer(): Container {
@@ -35,6 +38,7 @@ export function createContainer(): Container {
   const fileSystem = new TauriFileSystem();
   const documentService = new DocumentService(fileSystem, fileSystem);
   const tabManager = new TabManager();
+  const settingsRepository = new LocalStorageSettingsRepository();
 
-  return { documentService, pipeline, tabManager };
+  return { documentService, pipeline, tabManager, settingsRepository };
 }
