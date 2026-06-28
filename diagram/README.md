@@ -1,23 +1,19 @@
 # Diagrams
 
-UML diagrams for pretty-markdown, written in [PlantUML](https://plantuml.com) so they stay
-text-based and version-controlled alongside the code.
+UML diagrams for pretty-markdown, written in [Mermaid](https://mermaid.js.org) so they
+render natively on GitHub and stay text-based / version-controlled alongside the code.
 
 | File | Diagram |
 |------|---------|
-| [`use-case.puml`](use-case.puml) | Use case diagram — actors and what they can do |
-| [`sequence-open-document.puml`](sequence-open-document.puml) | Sequence — open a document in a new tab, render math with KaTeX→MathJax fallback |
-| [`sequence-edit-live-preview.puml`](sequence-edit-live-preview.puml) | Sequence — edit mode incremental live preview |
+| [`use-case.md`](use-case.md) | Use case diagram — actors and what they can do |
+| [`sequence-open-document.md`](sequence-open-document.md) | Sequence — open a document in a new tab, render math with KaTeX→MathJax fallback |
+| [`sequence-edit-live-preview.md`](sequence-edit-live-preview.md) | Sequence — edit mode incremental live preview |
 
-## Rendering them
+## Viewing them
 
-**VS Code:** install the *PlantUML* extension, open a `.puml`, `Alt+D` to preview.
+- **GitHub** renders the Mermaid blocks automatically — just open the file.
+- **VS Code** — install the *Markdown Preview Mermaid Support* extension, then open preview.
+- **Locally** — paste a block into <https://mermaid.live>.
 
-**CLI** (needs Java + Graphviz):
-
-```bash
-brew install plantuml        # macOS
-plantuml diagram/*.puml      # outputs PNGs next to the sources
-```
-
-**Online:** paste the file contents into <https://www.plantuml.com/plantuml>.
+> Note: Mermaid has no native use-case diagram type, so `use-case.md` is modeled as a
+> flowchart — stadium nodes are use cases, dotted edges are `include` / `extend` relations.
