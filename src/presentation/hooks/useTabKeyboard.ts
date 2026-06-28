@@ -6,12 +6,16 @@ export interface TabShortcuts {
   focusSibling: (delta: 1 | -1) => void;
   activateIndex: (index: number) => void;
   openFind: () => void;
+  save: () => void;
+  saveAs: () => void;
+  toggleMode: () => void;
 }
 
 /**
- * Browser-familiar shortcuts: ⌘/Ctrl+T new, ⌘/Ctrl+W close, ⌘/Ctrl+Shift+[ or ]
- * (and Ctrl+Tab) to switch, ⌘/Ctrl+1–9 to jump, ⌘/Ctrl+F to find. Uses `event.code`
- * for brackets/digits so it's independent of the shifted character and keyboard layout.
+ * Browser/editor-familiar shortcuts: ⌘/Ctrl+T new, ⌘/Ctrl+W close, ⌘/Ctrl+Shift+[ or ]
+ * (and Ctrl+Tab) to switch, ⌘/Ctrl+1–9 to jump, ⌘/Ctrl+F to find, ⌘/Ctrl+S to save
+ * (⇧ for save-as), ⌘/Ctrl+E to toggle reader/edit. Uses `event.code` so it's independent
+ * of the shifted character and keyboard layout.
  */
 export function useTabKeyboard(shortcuts: TabShortcuts): void {
   useEffect(() => {
@@ -31,7 +35,16 @@ export function useTabKeyboard(shortcuts: TabShortcuts): void {
       } else if (e.code === "KeyW") {
         e.preventDefault();
         shortcuts.closeActive();
+      } else if (e.code === "KeyS") {
+        e.preventDefault();
+        if (e.shiftKey) shortcuts.saveAs();
+        else shortcuts.save();
+      } else if (e.code === "KeyE") {
+        e.preventDefault();
+        shortcuts.toggleMode();
       } else if (e.code === "KeyF") {
+        // Let CodeMirror handle its own search when the editor is focused.
+        if (document.activeElement?.closest(".cm-editor")) return;
         e.preventDefault();
         shortcuts.openFind();
       } else if (e.shiftKey && e.code === "BracketLeft") {

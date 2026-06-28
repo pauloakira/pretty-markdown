@@ -1,9 +1,13 @@
+/** Reading vs. editing for a tab. */
+export type EditorMode = "reader" | "edit";
+
 /**
  * Per-tab view state — the bits of "where the reader was" that survive tab switches.
- * Kept minimal for M3 (scroll only); the editor milestone adds mode, cursor, font size.
+ * Scroll position and the current mode; the editor adds cursor/selection later.
  */
 export interface ViewState {
   readonly scrollTop: number;
+  readonly mode: EditorMode;
 }
 
-export const initialViewState: ViewState = { scrollTop: 0 };
+export const initialViewState: ViewState = { scrollTop: 0, mode: "reader" };

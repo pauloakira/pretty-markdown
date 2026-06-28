@@ -11,12 +11,19 @@ fn read_text_file(path: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to read '{path}': {e}"))
 }
 
+/// Write UTF-8 text to a file on disk (overwriting). Native side of the `FileWriter` port.
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(PathBuf::from(&path), contents)
+        .map_err(|e| format!("Failed to write '{path}': {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![read_text_file])
+        .invoke_handler(tauri::generate_handler![read_text_file, write_text_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

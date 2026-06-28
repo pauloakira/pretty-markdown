@@ -32,11 +32,13 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Keyboard shortcuts (`⌘T`, `⌘W`, `⌘⇧[`/`⌘⇧]`, `Ctrl+Tab`, `⌘1–9`); middle-click to close.
 - [ ] Dirty-save prompt on close. *(deferred to M4 — needs the editor's dirty state)*
 
-## M4 — Editor
-- CodeMirror 6 edit mode with markdown highlighting.
-- Split pane source ⇆ live preview, incremental rendering.
-- Synced scrolling.
-- Save / save-as, dirty-state indicator.
+## M4 — Editor ✅
+- [x] CodeMirror 6 edit mode with markdown highlighting (per-tab, themed to match the app).
+- [x] Split pane source ⇆ live preview (debounced render) with proportional synced scrolling.
+- [x] Save / Save-as (`⌘S` / `⌘⇧S`), native write command, dirty-state indicator (tab + toolbar).
+- [x] Reader/Edit toggle (`⌘E`) and dirty-save-on-close prompt (deferred from M3).
+- [ ] True incremental (per-block) rendering — currently a debounced full re-render. *(optimization)*
+- [ ] Preserve editor undo history across tab switches (editor remounts per tab). *(later)*
 
 ## M5 — App polish
 - OS file associations (double-click `.md`).

@@ -1,5 +1,5 @@
 import { useState, type MouseEvent } from "react";
-import type { Tab, TabId } from "../../domain/entities/Tab";
+import { isTabDirty, type Tab, type TabId } from "../../domain/entities/Tab";
 
 interface TabBarProps {
   tabs: readonly Tab[];
@@ -70,6 +70,7 @@ export function TabBar({
               }}
             >
               <span className="tab__name">{tab.document.name}</span>
+              {isTabDirty(tab) && <span className="tab__dirty" aria-label="Unsaved changes">●</span>}
               <button
                 className="tab__close"
                 aria-label="Close tab"

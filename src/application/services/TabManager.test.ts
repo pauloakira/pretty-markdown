@@ -53,12 +53,27 @@ describe("TabManager", () => {
 
     const listener = vi.fn();
     manager.subscribe(listener);
-    manager.persistViewState(id, { scrollTop: 0 }); // same as initial
+    manager.persistScroll(id, 0); // same as initial
     expect(listener).not.toHaveBeenCalled();
 
-    manager.persistViewState(id, { scrollTop: 120 });
+    manager.persistScroll(id, 120);
     expect(listener).toHaveBeenCalledTimes(1);
     expect(activeTab(manager.getSnapshot())?.viewState.scrollTop).toBe(120);
+  });
+
+  it("toggles mode, updates content, and marks saved", () => {
+    const manager = new TabManager();
+    manager.openDocument(doc("/a.md"));
+    const id = manager.getSnapshot().tabs[0].id;
+
+    manager.updateContent(id, "edited");
+    expect(activeTab(manager.getSnapshot())?.document.content).toBe("edited");
+
+    manager.toggleMode(id);
+    expect(activeTab(manager.getSnapshot())?.viewState.mode).toBe("edit");
+
+    manager.markSaved(id, "/a.md", "a.md");
+    expect(activeTab(manager.getSnapshot())?.savedContent).toBe("edited");
   });
 
   it("stops notifying after a subscriber unsubscribes", () => {

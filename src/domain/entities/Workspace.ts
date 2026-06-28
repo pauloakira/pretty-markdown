@@ -1,4 +1,4 @@
-import type { ViewState } from "../values/ViewState";
+import type { EditorMode } from "../values/ViewState";
 import type { Tab, TabId } from "./Tab";
 
 /**
@@ -69,12 +69,54 @@ export function moveTab(ws: Workspace, id: TabId, toIndex: number): Workspace {
   return { ...ws, tabs };
 }
 
-/** Replace a tab's view state (e.g. saved scroll position). No-op if unchanged. */
-export function setViewState(ws: Workspace, id: TabId, viewState: ViewState): Workspace {
+/** Save a tab's scroll position (preserving the rest of its view state). No-op if unchanged. */
+export function setScrollTop(ws: Workspace, id: TabId, scrollTop: number): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
-  if (!tab || tab.viewState.scrollTop === viewState.scrollTop) return ws;
+  if (!tab || tab.viewState.scrollTop === scrollTop) return ws;
   return {
     ...ws,
-    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, viewState } : t)),
+    tabs: ws.tabs.map((t) =>
+      t.id === id ? { ...t, viewState: { ...t.viewState, scrollTop } } : t,
+    ),
+  };
+}
+
+/** Switch a tab between reader and edit mode. No-op if unchanged. */
+export function setMode(ws: Workspace, id: TabId, mode: EditorMode): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.viewState.mode === mode) return ws;
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) =>
+      t.id === id ? { ...t, viewState: { ...t.viewState, mode } } : t,
+    ),
+  };
+}
+
+/** Update a tab's document content (an edit). No-op if unchanged. */
+export function updateContent(ws: Workspace, id: TabId, content: string): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.document.content === content) return ws;
+  const document = { ...tab.document, content };
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, document } : t)),
+  };
+}
+
+/** Mark a tab as saved to `path`: updates the path/name and the dirty baseline. */
+export function markSaved(
+  ws: Workspace,
+  id: TabId,
+  saved: { path: string; name: string },
+): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab) return ws;
+  const document = { ...tab.document, path: saved.path, name: saved.name };
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) =>
+      t.id === id ? { ...t, document, savedContent: document.content } : t,
+    ),
   };
 }

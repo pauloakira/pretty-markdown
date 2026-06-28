@@ -3,7 +3,7 @@ import type { TabId } from "../../domain/entities/Tab";
 import { createTab } from "../../domain/entities/Tab";
 import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
-import type { ViewState } from "../../domain/values/ViewState";
+import type { EditorMode } from "../../domain/values/ViewState";
 
 type Listener = () => void;
 
@@ -58,9 +58,26 @@ export class TabManager {
     this.commit(W.moveTab(this.workspace, id, toIndex));
   }
 
-  /** Persist a tab's view state (e.g. scroll). Notifies only if something changed. */
-  persistViewState(id: TabId, viewState: ViewState): void {
-    this.commit(W.setViewState(this.workspace, id, viewState));
+  /** Persist a tab's scroll position. Notifies only if it changed. */
+  persistScroll(id: TabId, scrollTop: number): void {
+    this.commit(W.setScrollTop(this.workspace, id, scrollTop));
+  }
+
+  setMode(id: TabId, mode: EditorMode): void {
+    this.commit(W.setMode(this.workspace, id, mode));
+  }
+
+  toggleMode(id: TabId): void {
+    const tab = this.workspace.tabs.find((t) => t.id === id);
+    if (tab) this.commit(W.setMode(this.workspace, id, tab.viewState.mode === "edit" ? "reader" : "edit"));
+  }
+
+  updateContent(id: TabId, content: string): void {
+    this.commit(W.updateContent(this.workspace, id, content));
+  }
+
+  markSaved(id: TabId, path: string, name: string): void {
+    this.commit(W.markSaved(this.workspace, id, { path, name }));
   }
 
   private nextId(): TabId {

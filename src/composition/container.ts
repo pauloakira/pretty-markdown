@@ -36,7 +36,7 @@ export function createContainer(): Container {
   const pipeline = new MarkdownPipeline(mathRenderer, DEFAULT_PREAMBLE);
 
   const fileSystem = new TauriFileSystem();
-  const documentService = new DocumentService(fileSystem, fileSystem);
+  const documentService = new DocumentService(fileSystem, fileSystem, fileSystem);
   const tabManager = new TabManager();
   const settingsRepository = new LocalStorageSettingsRepository();
 

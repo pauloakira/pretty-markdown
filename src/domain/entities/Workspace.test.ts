@@ -62,12 +62,25 @@ describe("Workspace", () => {
     const ws = workspaceOf(tab("a", "/a.md"));
     expect(W.activateTab(ws, "a")).toBe(ws); // already active
     expect(W.closeTab(ws, "nope")).toBe(ws); // unknown id
-    expect(W.setViewState(ws, "a", { scrollTop: 0 })).toBe(ws); // unchanged scroll
+    expect(W.setScrollTop(ws, "a", 0)).toBe(ws); // unchanged scroll
   });
 
-  it("updates a tab's view state", () => {
+  it("updates a tab's scroll position", () => {
     const ws = workspaceOf(tab("a", "/a.md"));
-    const updated = W.setViewState(ws, "a", { scrollTop: 240 });
+    const updated = W.setScrollTop(ws, "a", 240);
     expect(W.activeTab(updated)?.viewState.scrollTop).toBe(240);
+  });
+
+  it("toggles mode, updates content (dirty), and marks saved", () => {
+    const ws = workspaceOf(tab("a", "/a.md"));
+    const edited = W.updateContent(ws, "a", "# changed");
+    expect(W.activeTab(edited)?.document.content).toBe("# changed");
+
+    const inEdit = W.setMode(edited, "a", "edit");
+    expect(W.activeTab(inEdit)?.viewState.mode).toBe("edit");
+
+    const saved = W.markSaved(inEdit, "a", { path: "/b.md", name: "b.md" });
+    expect(W.activeTab(saved)?.document.path).toBe("/b.md");
+    expect(W.activeTab(saved)?.savedContent).toBe("# changed");
   });
 });
