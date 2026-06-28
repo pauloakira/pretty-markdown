@@ -28,6 +28,22 @@ and a clean editing mode when you want it.
 See [DESIGN.md](DESIGN.md) for the full architecture, [ROADMAP.md](ROADMAP.md) for the build
 plan, and [diagram/](diagram/) for the UML use-case and sequence diagrams.
 
+## Development
+
+```bash
+npm install        # install JS deps (also fetches Rust crates on first tauri run)
+npm run tauri dev  # run the desktop app (Vite + Tauri)
+npm run dev        # run just the web frontend (no native shell)
+npm run typecheck  # tsc --noEmit
+npm test           # vitest
+npm run build      # type-check + bundle the frontend
+```
+
+There's a sample document at [samples/welcome.md](samples/welcome.md) to open and test math
+rendering.
+
 ## Status
 
-🚧 Design phase. No implementation yet.
+✅ **M0 scaffold** + **M1 reader MVP** — open a `.md` file and read it rendered, with KaTeX
+math, light/dark themes, and inline error chips for bad formulas. Next: M2 (MathJax
+fallback), then M3 (multi-tab). See [ROADMAP.md](ROADMAP.md).

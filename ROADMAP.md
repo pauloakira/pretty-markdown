@@ -2,21 +2,22 @@
 
 Reader-first build plan. Each milestone is independently shippable.
 
-## M0 — Scaffold
-- Tauri + React + TypeScript project.
-- Vite dev setup, basic window, open-file dialog wired through Tauri.
+## M0 — Scaffold ✅
+- [x] Tauri + React + TypeScript project.
+- [x] Vite dev setup, basic window, open-file dialog wired through Tauri.
+- [x] Layered folder structure + composition root; typecheck/test/build scripts.
 
-## M1 — Reader MVP (the "feels like a PDF reader" milestone)
-- Open a `.md` file → rendered, read-only view.
-- markdown-it pipeline (CommonMark + GFM).
-- KaTeX math rendering for `$...$` / `$$...$$`.
-- Clean reading typography, light/dark theme, adjustable font size.
-- Find-in-page, smooth scroll.
+## M1 — Reader MVP (the "feels like a PDF reader" milestone) ✅
+- [x] Open a `.md` file → rendered, read-only view.
+- [x] markdown-it pipeline (CommonMark + GFM-ish: tables, linkify, typographer).
+- [x] KaTeX math rendering for `$...$` / `$$...$$` via a custom math plugin.
+- [x] Clean reading typography, light/dark theme.
+- [ ] Adjustable font size, find-in-page, smooth scroll. *(carried forward)*
 
 ## M2 — Robust math
-- MathRenderer abstraction with KaTeX → MathJax fallback.
-- Inline error chips instead of page-breaking failures.
-- Custom `\newcommand` / preamble support.
+- [ ] MathRenderer abstraction with KaTeX → MathJax fallback. *(KaTeX + Composite done; MathJax adapter pending)*
+- [x] Inline error chips instead of page-breaking failures.
+- [ ] Custom `\newcommand` / preamble support.
 
 ## M3 — Multi-tab workspace
 - Tab bar UI; `TabManager` owning open tabs + active tab.

@@ -163,3 +163,6 @@ Record notable architectural decisions here (lightweight ADR style) as the proje
 |------|----------|-----------|
 | 2026-06-28 | Tauri + React + TS, KaTeX→MathJax, reader-first, multi-tab | See DESIGN.md §2 |
 | 2026-06-28 | Layered/clean architecture with ports & adapters | Keep domain framework-independent, swappable renderers |
+| 2026-06-28 | Custom markdown-it math plugin emits tokens; rendering delegated to injected `MathRenderer` | Keep the parser independent of the math engine, per the Strategy/Composite design |
+| 2026-06-28 | Native Rust `read_text_file` command for file reads; `tauri-plugin-dialog` for the open dialog | Avoid fs-plugin scope config; keep the `FileReader` adapter thin |
+| 2026-06-28 | `mathPlugin` uses local structural types for parser state instead of `@types/markdown-it` deep paths | Those types aren't reachable through `export =`; structural views stay decoupled and assignable |

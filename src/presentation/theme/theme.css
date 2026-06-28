@@ -1,0 +1,252 @@
+/* ---- Design tokens -------------------------------------------------------- */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+
+  --reading-width: 46rem;
+
+  --bg: #ffffff;
+  --bg-elevated: #f6f7f9;
+  --fg: #1a1d21;
+  --fg-muted: #5b6470;
+  --border: #e2e5ea;
+  --accent: #3b6ea5;
+  --accent-fg: #ffffff;
+  --code-bg: #f3f4f6;
+  --error-bg: #fdecec;
+  --error-fg: #b3261e;
+  --error-border: #f2b8b5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1d21;
+    --bg-elevated: #23272d;
+    --fg: #e7eaee;
+    --fg-muted: #9aa3af;
+    --border: #333a43;
+    --accent: #6ea8d8;
+    --accent-fg: #14171a;
+    --code-bg: #23272d;
+    --error-bg: #3a2222;
+    --error-fg: #f2b8b5;
+    --error-border: #6b3a37;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--fg);
+  background: var(--bg);
+}
+
+/* ---- App shell ------------------------------------------------------------ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app__content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.toolbar__btn {
+  font: inherit;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.toolbar__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.toolbar__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.toolbar__title {
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+
+.banner {
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+}
+.banner--error {
+  background: var(--error-bg);
+  color: var(--error-fg);
+  border-bottom: 1px solid var(--error-border);
+}
+
+/* ---- Welcome -------------------------------------------------------------- */
+.welcome {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2rem;
+}
+.welcome__title {
+  margin: 0;
+  font-size: 2rem;
+}
+.welcome__subtitle {
+  margin: 0 0 1rem;
+  color: var(--fg-muted);
+}
+.welcome__cta {
+  font: inherit;
+  padding: 0.6rem 1.4rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+.welcome__hint {
+  margin-top: 1.5rem;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+.welcome code {
+  background: var(--code-bg);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}
+
+/* ---- Reader / rendered markdown ------------------------------------------- */
+.reader {
+  max-width: var(--reading-width);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem;
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  line-height: 1.7;
+}
+
+.reader h1,
+.reader h2,
+.reader h3,
+.reader h4 {
+  font-family: var(--font-sans);
+  line-height: 1.25;
+  margin: 2rem 0 0.75rem;
+}
+.reader h1 {
+  font-size: 1.9rem;
+}
+.reader h2 {
+  font-size: 1.5rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3rem;
+}
+.reader h3 {
+  font-size: 1.25rem;
+}
+
+.reader p {
+  margin: 0 0 1.1rem;
+}
+
+.reader a {
+  color: var(--accent);
+}
+
+.reader code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--code-bg);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+.reader pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.reader pre code {
+  background: none;
+  padding: 0;
+}
+
+.reader blockquote {
+  margin: 0 0 1.1rem;
+  padding-left: 1rem;
+  border-left: 3px solid var(--border);
+  color: var(--fg-muted);
+}
+
+.reader table {
+  border-collapse: collapse;
+  margin: 0 0 1.1rem;
+}
+.reader th,
+.reader td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.7rem;
+}
+
+.reader img {
+  max-width: 100%;
+}
+
+/* Display math: let long equations scroll horizontally instead of clipping. */
+.reader .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+/* ---- Math error chips ----------------------------------------------------- */
+.math-error {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--error-fg);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  cursor: help;
+}
+.math-error--block {
+  display: block;
+  margin: 1rem auto;
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+}
