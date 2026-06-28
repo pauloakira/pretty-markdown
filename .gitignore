@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+dist/
+dist-ssr/
+
+# Tauri / Rust
+src-tauri/target/
+
+# Editor / OS
+.DS_Store
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Env
+.env
+.env.*
+!.env.example
