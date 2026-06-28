@@ -18,15 +18,21 @@ Reader-first build plan. Each milestone is independently shippable.
 - Inline error chips instead of page-breaking failures.
 - Custom `\newcommand` / preamble support.
 
-## M3 — Editor
+## M3 — Multi-tab workspace
+- Tab bar UI; `TabManager` owning open tabs + active tab.
+- Open-in-new-tab, close (with dirty-save prompt), switch, reorder.
+- Per-tab isolated state (scroll, mode, render cache); lazy mount/unmount.
+- Keyboard shortcuts (`⌘T`, `⌘W`, tab switching).
+
+## M4 — Editor
 - CodeMirror 6 edit mode with markdown highlighting.
 - Split pane source ⇆ live preview, incremental rendering.
 - Synced scrolling.
 - Save / save-as, dirty-state indicator.
 
-## M4 — App polish
+## M5 — App polish
 - OS file associations (double-click `.md`).
-- Recent files, restore last session/window state.
+- Recent files, restore last session (open tabs + active tab + scroll).
 - File-watch: reload when the file changes on disk.
 
 ## Post-v1 (deferred)

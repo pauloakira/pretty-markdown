@@ -1,0 +1,46 @@
+@startuml sequence-edit-live-preview
+title pretty-markdown — Edit mode: incremental live preview
+
+actor User
+participant "Editor (CodeMirror)\n(Presentation)" as Editor
+participant "DocumentService\n(Application)" as DocSvc
+participant "MarkdownPipeline\n(markdown-it)" as MD
+participant "Render Cache\n(per tab)" as Cache
+participant "MathRenderer\n(Composite)" as Math
+participant "Preview View\n(Presentation)" as Preview
+
+User -> Editor : type / edit text
+activate Editor
+Editor -> DocSvc : onChange(source, changedRange)
+activate DocSvc
+DocSvc -> DocSvc : mark tab dirty
+DocSvc -> MD : parse(source)
+activate MD
+MD --> DocSvc : AST (blocks)
+deactivate MD
+
+DocSvc -> Cache : diff blocks by hash
+activate Cache
+Cache --> DocSvc : changed blocks only
+deactivate Cache
+
+loop for each changed block
+  alt block contains math
+    DocSvc -> Math : render(tex, {display})
+    activate Math
+    Math --> DocSvc : RenderResult (KaTeX→MathJax fallback)
+    deactivate Math
+  end
+  DocSvc -> Cache : store(blockHash, rendered)
+end
+
+DocSvc --> Editor : updated render set
+deactivate DocSvc
+Editor -> Preview : patch changed blocks
+activate Preview
+Preview -> Preview : sync scroll (source line ↔ block)
+Preview --> User : live updated preview
+deactivate Preview
+deactivate Editor
+
+@enduml

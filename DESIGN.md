@@ -9,7 +9,9 @@ reading experience feels like a code editor rather than a document viewer. We wa
    scroll, find-in-page, clean typography.
 2. **Robust LaTeX** — math that doesn't silently fail on real-world formulas.
 3. **Edit & compile** — edit markdown and see it rendered live.
-4. **Native, offline, fast** — feels like a real app, not a browser tab.
+4. **Multi-tab** — keep several documents open at once and switch between them, like a
+   browser or a tabbed PDF reader.
+5. **Native, offline, fast** — feels like a real app, not a browser tab.
 
 ## 2. Locked decisions
 
@@ -25,26 +27,49 @@ renderer is abstracted behind an interface so it can be added later as an opt-in
 
 ## 3. Architecture
 
+We follow a **layered / clean-architecture** split so the domain logic (documents, tabs,
+math rendering) stays independent of React and Tauri. Dependencies point inward: outer
+layers depend on inner abstractions, never the reverse.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  Tauri core (Rust)                                         │
+│  Tauri core (Rust)  —  Infrastructure (native)            │
 │   • File I/O, watch-for-changes                            │
 │   • OS file associations (double-click .md → open)         │
-│   • Recent files, window state                             │
+│   • Session/window persistence (open tabs restored)        │
 │   • (future) embedded TeX engine, native fast search       │
 ├──────────────────────────────────────────────────────────┤
 │  Frontend (React + TS)                                     │
 │                                                            │
-│   Source ──► markdown-it ──► AST ──► React render          │
-│                  │                                         │
-│                  └─ math tokens ──► MathRenderer            │
-│                                       ├─ KaTeX (sync)       │
-│                                       └─ MathJax (fallback) │
+│  Presentation   TabBar · Reader · Editor · Toolbar · Find  │
+│       │                                                    │
+│  Application    TabManager · DocumentService · Commands    │
+│       │                                                    │
+│  Domain         Document · Tab · MathRenderer (interface)  │
+│       │                                                    │
+│  Infrastructure FsAdapter(Tauri) · KatexRenderer ·         │
+│                 MathJaxRenderer · SessionStore             │
 │                                                            │
-│   Modes:  [Reader]   full-width rendered document          │
-│           [Edit]     split pane: CodeMirror ⇆ live preview │
+│  Render flow:                                              │
+│   Source ─► markdown-it ─► AST ─► React render             │
+│                 └─ math tokens ─► MathRenderer             │
+│                                    ├─ KaTeX (sync)         │
+│                                    └─ MathJax (fallback)   │
+│                                                            │
+│  Modes:  [Reader] full-width document                      │
+│          [Edit]   split pane: CodeMirror ⇆ live preview    │
 └──────────────────────────────────────────────────────────┘
 ```
+
+### Layer responsibilities
+
+- **Presentation** — React components, purely declarative; reads view-state, dispatches commands.
+- **Application** — orchestration. `TabManager` owns the set of open tabs and the active tab;
+  `DocumentService` loads/saves/renders documents; commands encode user intents (open, close,
+  save, switch-tab, toggle-mode).
+- **Domain** — framework-free models and the `MathRenderer` interface. No React, no Tauri imports.
+- **Infrastructure** — adapters that implement domain interfaces: Tauri file system, KaTeX/MathJax
+  renderers, session persistence.
 
 ### 3.1 Rendering pipeline
 
@@ -79,6 +104,38 @@ interface MathRenderer {
 - **Custom macros / preamble:** support a `\newcommand` block (document front-matter or a
   settings file) fed to both renderers so users can define their own commands.
 - Math errors never break the page — they render inline as a clearly-marked error chip.
+
+### 3.4 Multi-tab & workspace model
+
+The window hosts a **tab bar** like a browser/tabbed PDF reader. Each tab is an independent
+document session; only the active tab is rendered to the DOM, inactive tabs keep their state
+in memory (and on disk for session restore).
+
+```
+Workspace
+ ├─ tabs: Tab[]
+ ├─ activeTabId
+ └─ operations: openInNewTab · closeTab · switchTab · reorderTab · next/prevTab
+
+Tab
+ ├─ id
+ ├─ document: Document        // path, content, dirty flag
+ ├─ viewState: { mode: Reader|Edit, scrollPos, fontSize, cursor }
+ └─ renderCache                // memoized rendered blocks + math (per tab)
+```
+
+Design rules:
+- **`TabManager`** (Application layer) is the single source of truth for open tabs and the
+  active tab. Presentation subscribes to it.
+- **Isolation:** each tab owns its own `Document`, `viewState`, undo history, and render
+  cache — switching tabs never recomputes the other tabs.
+- **Lazy mounting:** inactive tabs are unmounted from the DOM but retain scroll position and
+  state, so switching back is instant and large workspaces stay light on memory.
+- **Lifecycle:** closing a dirty tab prompts to save; closing the last tab shows a welcome /
+  recent-files screen rather than quitting.
+- **Session restore:** the open tab set (paths + active tab + scroll) is persisted via the
+  Tauri session store and restored on launch.
+- **Keyboard:** `⌘T` new tab, `⌘W` close tab, `⌘⇧[` / `⌘⇧]` switch tabs (browser-familiar).
 
 ## 4. Performance targets
 

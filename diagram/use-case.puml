@@ -1,0 +1,67 @@
+@startuml use-case
+title pretty-markdown — Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "User" as User
+actor "Operating System" as OS
+actor "Math Renderer" as Math
+
+rectangle "pretty-markdown" {
+
+  package "Documents & Tabs" {
+    usecase "Open document" as UC_Open
+    usecase "Open in new tab" as UC_NewTab
+    usecase "Switch tab" as UC_Switch
+    usecase "Close tab" as UC_Close
+    usecase "Reorder tabs" as UC_Reorder
+    usecase "Restore previous session" as UC_Restore
+  }
+
+  package "Reading" {
+    usecase "Read document\n(reader mode)" as UC_Read
+    usecase "Find in page" as UC_Find
+    usecase "Adjust font size / theme" as UC_Theme
+  }
+
+  package "Editing" {
+    usecase "Edit markdown\n(live preview)" as UC_Edit
+    usecase "Toggle reader/edit mode" as UC_Toggle
+    usecase "Save document" as UC_Save
+    usecase "Define custom macros\n(preamble)" as UC_Macros
+  }
+
+  usecase "Render LaTeX math" as UC_Math
+  usecase "Reload on external change" as UC_Watch
+}
+
+' User interactions
+User --> UC_Open
+User --> UC_NewTab
+User --> UC_Switch
+User --> UC_Close
+User --> UC_Reorder
+User --> UC_Read
+User --> UC_Find
+User --> UC_Theme
+User --> UC_Edit
+User --> UC_Toggle
+User --> UC_Save
+User --> UC_Macros
+
+' Relationships
+UC_Open ..> UC_NewTab : <<include>>
+UC_Read ..> UC_Math : <<include>>
+UC_Edit ..> UC_Math : <<include>>
+UC_Macros ..> UC_Math : <<extend>>
+
+' System actors
+UC_Math --> Math
+UC_Open --> OS
+UC_Save --> OS
+UC_Restore --> OS
+OS --> UC_Watch
+UC_Watch ..> UC_Read : <<extend>>
+
+@enduml
