@@ -44,6 +44,7 @@ rendering.
 
 ## Status
 
-✅ **M0 scaffold** + **M1 reader MVP** — open a `.md` file and read it rendered, with KaTeX
-math, light/dark themes, and inline error chips for bad formulas. Next: M2 (MathJax
-fallback), then M3 (multi-tab). See [ROADMAP.md](ROADMAP.md).
+✅ **M0 scaffold** · **M1 reader MVP** · **M3 multi-tab** — open `.md` files in tabs (like a
+browser), with KaTeX math, light/dark themes, inline error chips, per-tab scroll, drag-reorder,
+and keyboard shortcuts (`⌘T`/`⌘W`/`⌘⇧[`/`⌘⇧]`/`⌘1–9`). Next: M2 (MathJax fallback), then M4
+(editor). See [ROADMAP.md](ROADMAP.md).

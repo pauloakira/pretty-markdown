@@ -166,3 +166,6 @@ Record notable architectural decisions here (lightweight ADR style) as the proje
 | 2026-06-28 | Custom markdown-it math plugin emits tokens; rendering delegated to injected `MathRenderer` | Keep the parser independent of the math engine, per the Strategy/Composite design |
 | 2026-06-28 | Native Rust `read_text_file` command for file reads; `tauri-plugin-dialog` for the open dialog | Avoid fs-plugin scope config; keep the `FileReader` adapter thin |
 | 2026-06-28 | `mathPlugin` uses local structural types for parser state instead of `@types/markdown-it` deep paths | Those types aren't reachable through `export =`; structural views stay decoupled and assignable |
+| 2026-06-28 | Workspace modeled as immutable state + pure ops; `TabManager` holds it and exposes a useSyncExternalStore-shaped store | Single source of truth (Observer); pure ops are trivially testable and return same ref when unchanged |
+| 2026-06-28 | Tabs lazy-mount via React `key={tab.id}`; scroll restored on mount, persisted on unmount | Keeps inactive tabs off the DOM while preserving per-tab scroll; matches DESIGN §3.4 |
+| 2026-06-28 | Per-tab rendered HTML cached by tab id in the presentation hook | Switching back to a tab is instant without re-running the markdown/math pipeline |

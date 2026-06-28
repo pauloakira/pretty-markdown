@@ -19,11 +19,12 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Inline error chips instead of page-breaking failures.
 - [ ] Custom `\newcommand` / preamble support.
 
-## M3 — Multi-tab workspace
-- Tab bar UI; `TabManager` owning open tabs + active tab.
-- Open-in-new-tab, close (with dirty-save prompt), switch, reorder.
-- Per-tab isolated state (scroll, mode, render cache); lazy mount/unmount.
-- Keyboard shortcuts (`⌘T`, `⌘W`, tab switching).
+## M3 — Multi-tab workspace ✅
+- [x] Tab bar UI; `TabManager` owning open tabs + active tab (single source of truth).
+- [x] Open-in-new-tab (dedupe: reopening a path focuses its tab), close, switch, drag-reorder.
+- [x] Per-tab isolated state (scroll position, render cache); lazy mount/unmount via `key`.
+- [x] Keyboard shortcuts (`⌘T`, `⌘W`, `⌘⇧[`/`⌘⇧]`, `Ctrl+Tab`, `⌘1–9`); middle-click to close.
+- [ ] Dirty-save prompt on close. *(deferred to M4 — needs the editor's dirty state)*
 
 ## M4 — Editor
 - CodeMirror 6 edit mode with markdown highlighting.

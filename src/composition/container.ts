@@ -1,4 +1,5 @@
 import { DocumentService } from "../application/services/DocumentService";
+import { TabManager } from "../application/services/TabManager";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
@@ -11,6 +12,7 @@ import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
 export interface Container {
   readonly documentService: DocumentService;
   readonly pipeline: MarkdownPipeline;
+  readonly tabManager: TabManager;
 }
 
 export function createContainer(): Container {
@@ -20,6 +22,7 @@ export function createContainer(): Container {
 
   const fileSystem = new TauriFileSystem();
   const documentService = new DocumentService(fileSystem, fileSystem);
+  const tabManager = new TabManager();
 
-  return { documentService, pipeline };
+  return { documentService, pipeline, tabManager };
 }
