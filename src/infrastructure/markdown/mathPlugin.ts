@@ -1,5 +1,5 @@
 import type MarkdownIt from "markdown-it";
-import type { MathRenderer } from "../../domain/ports/MathRenderer";
+import type { MacroMap, MathRenderer } from "../../domain/ports/MathRenderer";
 
 /**
  * Minimal structural views of markdown-it's parser state — just the fields our rules
@@ -34,6 +34,8 @@ interface StateBlock {
 
 export interface MathPluginOptions {
   readonly renderer: MathRenderer;
+  /** Supplies the document-scoped macros for the current render pass (optional). */
+  readonly getMacros?: () => MacroMap;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface MathPluginOptions {
  * `markdown-it-katex` (MIT).
  */
 export function mathPlugin(md: MarkdownIt, options: MathPluginOptions): void {
-  const { renderer } = options;
+  const { renderer, getMacros } = options;
 
   md.inline.ruler.after("escape", "math_inline", mathInline);
   md.block.ruler.after("blockquote", "math_block", mathBlock, {
@@ -52,19 +54,30 @@ export function mathPlugin(md: MarkdownIt, options: MathPluginOptions): void {
   });
 
   md.renderer.rules.math_inline = (tokens, idx) =>
-    toHtml(renderer, tokens[idx].content, false);
+    toHtml(renderer, tokens[idx].content, false, getMacros?.());
   md.renderer.rules.math_block = (tokens, idx) =>
-    toHtml(renderer, tokens[idx].content, true) + "\n";
+    toHtml(renderer, tokens[idx].content, true, getMacros?.()) + "\n";
 }
 
-function toHtml(renderer: MathRenderer, tex: string, display: boolean): string {
-  const result = renderer.render(tex, { display });
-  if (result.ok) return result.html;
-  // Render errors never break the page — show the source as a clearly-marked chip.
-  const cls = display ? "math-error math-error--block" : "math-error";
-  return `<span class="${cls}" title="${escapeAttr(result.error)}">${escapeHtml(
-    result.source,
-  )}</span>`;
+/**
+ * Render a formula and wrap it in a `.pm-math` element carrying the source LaTeX in
+ * `data-tex`. The wrapper makes the original source available to the copy-as-LaTeX
+ * handler (see presentation/clipboard/latexCopy) and keeps render errors inline.
+ */
+function toHtml(
+  renderer: MathRenderer,
+  tex: string,
+  display: boolean,
+  macros: MacroMap | undefined,
+): string {
+  const result = renderer.render(tex, { display, macros });
+  const inner = result.ok
+    ? result.html
+    : `<span class="math-error" title="${escapeAttr(result.error)}">${escapeHtml(
+        result.source,
+      )}</span>`;
+  const cls = display ? "pm-math pm-math--block" : "pm-math";
+  return `<span class="${cls}" data-tex="${escapeAttr(tex.trim())}">${inner}</span>`;
 }
 
 /** A `$` can open/close inline math depending on surrounding characters. */

@@ -1,9 +1,18 @@
 import { DocumentService } from "../application/services/DocumentService";
 import { TabManager } from "../application/services/TabManager";
+import type { MacroMap } from "../domain/ports/MathRenderer";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
+import { MathJaxRenderer } from "../infrastructure/math/MathJaxRenderer";
 import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
+
+/**
+ * Default math preamble — custom macros available in every document, fed to both
+ * renderers. Authors can also define document-wide macros inline with `\gdef`.
+ * (A settings UI / front-matter source for this is a later milestone.)
+ */
+const DEFAULT_PREAMBLE: MacroMap = {};
 
 /**
  * Composition root: the one place where concrete adapters are wired into services.
@@ -16,9 +25,12 @@ export interface Container {
 }
 
 export function createContainer(): Container {
-  // M1: KaTeX only. M2 inserts MathJax as the next renderer in this list.
-  const mathRenderer = new CompositeMathRenderer([new KatexRenderer()]);
-  const pipeline = new MarkdownPipeline(mathRenderer);
+  // KaTeX first (fast, sync), MathJax as the fallback for what KaTeX rejects.
+  const mathRenderer = new CompositeMathRenderer([
+    new KatexRenderer(),
+    new MathJaxRenderer(DEFAULT_PREAMBLE),
+  ]);
+  const pipeline = new MarkdownPipeline(mathRenderer, DEFAULT_PREAMBLE);
 
   const fileSystem = new TauriFileSystem();
   const documentService = new DocumentService(fileSystem, fileSystem);

@@ -16,6 +16,9 @@ export class KatexRenderer implements MathRenderer {
         // `strict: false` keeps KaTeX permissive (e.g. unknown Unicode) instead of
         // erroring; genuine parse failures still throw and trigger the fallback.
         strict: false,
+        // KaTeX mutates this object on `\gdef`, so document-wide global defs persist
+        // across formulas within a single render pass.
+        macros: opts.macros,
       });
       return rendered(html);
     } catch (error) {

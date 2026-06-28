@@ -14,10 +14,15 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Clean reading typography, light/dark theme.
 - [ ] Adjustable font size, find-in-page, smooth scroll. *(carried forward)*
 
-## M2 — Robust math
-- [ ] MathRenderer abstraction with KaTeX → MathJax fallback. *(KaTeX + Composite done; MathJax adapter pending)*
+## M2 — Robust math ✅
+- [x] MathRenderer abstraction with KaTeX → MathJax fallback (full TeX packages, SVG output).
 - [x] Inline error chips instead of page-breaking failures.
-- [ ] Custom `\newcommand` / preamble support.
+- [x] Custom macro / preamble support (preamble fed to both renderers; in-document `\gdef`
+      persists per document). *(Settings-UI/front-matter source for the preamble: later.)*
+- [x] Copy a formula → its **LaTeX source** goes to the clipboard.
+
+> Perf note: MathJax is eagerly loaded (own chunk). Lazy-loading it on first fallback is a
+> future optimization.
 
 ## M3 — Multi-tab workspace ✅
 - [x] Tab bar UI; `TabManager` owning open tabs + active tab (single source of truth).

@@ -104,6 +104,8 @@ interface MathRenderer {
 - **Custom macros / preamble:** support a `\newcommand` block (document front-matter or a
   settings file) fed to both renderers so users can define their own commands.
 - Math errors never break the page — they render inline as a clearly-marked error chip.
+- **Copy as LaTeX:** each rendered formula carries its source in `data-tex`; copying a
+  selection that lies within one formula puts the **LaTeX source** on the clipboard.
 
 ### 3.4 Multi-tab & workspace model
 

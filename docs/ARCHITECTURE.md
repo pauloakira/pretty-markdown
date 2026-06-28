@@ -169,3 +169,7 @@ Record notable architectural decisions here (lightweight ADR style) as the proje
 | 2026-06-28 | Workspace modeled as immutable state + pure ops; `TabManager` holds it and exposes a useSyncExternalStore-shaped store | Single source of truth (Observer); pure ops are trivially testable and return same ref when unchanged |
 | 2026-06-28 | Tabs lazy-mount via React `key={tab.id}`; scroll restored on mount, persisted on unmount | Keeps inactive tabs off the DOM while preserving per-tab scroll; matches DESIGN §3.4 |
 | 2026-06-28 | Per-tab rendered HTML cached by tab id in the presentation hook | Switching back to a tab is instant without re-running the markdown/math pipeline |
+| 2026-06-28 | MathJax fallback uses `mathjax-full` with SVG output + lite adaptor; `formatError` throws | Self-contained output (no font CSS); synchronous; parse failures become failure values for the error chip |
+| 2026-06-28 | Macros scoped per `render()` pass (fresh copy of preamble); KaTeX persists in-doc `\gdef` | Document-wide defs without leaking across tabs; MathJax gets the static preamble |
+| 2026-06-28 | Copy-as-LaTeX via a global `copy` handler reading `data-tex` off the `.pm-math` wrapper | Source LaTeX on the clipboard when a selection sits within one formula; no change otherwise |
+| 2026-06-28 | MathJax split into its own Vite chunk; still eagerly loaded | Keeps the main app chunk small; lazy-loading on first fallback is deferred (sync renderer interface) |

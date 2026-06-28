@@ -44,7 +44,7 @@ rendering.
 
 ## Status
 
-✅ **M0 scaffold** · **M1 reader MVP** · **M3 multi-tab** — open `.md` files in tabs (like a
-browser), with KaTeX math, light/dark themes, inline error chips, per-tab scroll, drag-reorder,
-and keyboard shortcuts (`⌘T`/`⌘W`/`⌘⇧[`/`⌘⇧]`/`⌘1–9`). Next: M2 (MathJax fallback), then M4
-(editor). See [ROADMAP.md](ROADMAP.md).
+✅ **M0 scaffold** · **M1 reader** · **M2 robust math** · **M3 multi-tab** — open `.md` files in
+tabs (like a browser), with robust LaTeX (KaTeX → MathJax fallback, custom macros), copy-as-LaTeX,
+light/dark themes, inline error chips, per-tab scroll, drag-reorder, and keyboard shortcuts
+(`⌘T`/`⌘W`/`⌘⇧[`/`⌘⇧]`/`⌘1–9`). Next: **M4 — the editor**. See [ROADMAP.md](ROADMAP.md).

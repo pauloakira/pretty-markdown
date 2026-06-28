@@ -24,6 +24,25 @@ $$
 \nabla \times \mathbf{B} = \mu_0 \mathbf{J} + \mu_0 \varepsilon_0 \frac{\partial \mathbf{E}}{\partial t}
 $$
 
+## Custom macros (`\gdef`)
+
+Define a macro once and reuse it across the document:
+
+$$
+\gdef\norm#1{\left\lVert #1 \right\rVert}
+\norm{x} = \sqrt{\langle x, x \rangle}
+$$
+
+Now it works inline too: $\norm{v} \le \norm{u} + \norm{w}$.
+
+## MathJax fallback
+
+Some constructs aren't supported by KaTeX and fall back to MathJax automatically, e.g.
+`\enclose`: $\enclose{circle}{x}$ and $\enclose{updiagonalstrike}{abc}$.
+
+> Tip: select a formula and copy it — the **LaTeX source** lands on your clipboard,
+> not the rendered glyphs.
+
 ## Lists, code, quotes
 
 1. First item

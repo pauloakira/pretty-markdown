@@ -293,6 +293,23 @@ body {
   padding: 0.25rem 0;
 }
 
+/* Math wrapper carrying the source LaTeX (copy-as-LaTeX). A subtle highlight on hover
+   hints that the formula is a copyable unit. */
+.pm-math {
+  border-radius: 4px;
+  transition: background 0.12s ease;
+}
+.pm-math:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.pm-math--block {
+  display: block;
+}
+/* MathJax SVG fallback inherits the current text color. */
+.pm-math mjx-container svg {
+  color: var(--fg);
+}
+
 /* ---- Math error chips ----------------------------------------------------- */
 .math-error {
   font-family: var(--font-mono);

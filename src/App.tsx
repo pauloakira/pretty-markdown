@@ -2,10 +2,13 @@ import { useMemo } from "react";
 import { Reader } from "./presentation/components/Reader";
 import { TabBar } from "./presentation/components/TabBar";
 import { Welcome } from "./presentation/components/Welcome";
+import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
 import { useTabKeyboard } from "./presentation/hooks/useTabKeyboard";
 import { useWorkspace } from "./presentation/hooks/useWorkspace";
 
 export default function App() {
+  useLatexCopy();
+
   const {
     workspace,
     active,

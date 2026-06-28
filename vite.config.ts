@@ -8,6 +8,22 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  build: {
+    // Split the heavy math engines into their own chunks so they don't bloat the main
+    // app chunk. MathJax (all TeX packages) is large but only the fallback renderer;
+    // a future optimization is to load it lazily on first use.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/mathjax-full")) return "mathjax";
+          if (id.includes("node_modules/katex")) return "katex";
+          return undefined;
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1900,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
