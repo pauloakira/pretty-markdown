@@ -1,14 +1,18 @@
 /**
  * Find-in-page over the rendered document. Locates plain-text matches in prose (skipping
- * rendered math), highlights them with the CSS Custom Highlight API (no DOM mutation, so
- * it coexists with React's innerHTML), and tracks a "current" match for navigation.
+ * rendered math) and wraps each in a `<mark>` element, then navigates by scrolling the
+ * scroll container directly.
  *
- * Where the Highlight API is unavailable, matches are still counted and scrolled to; only
- * the visual highlight is absent.
+ * We use real `<mark>` nodes (rather than the CSS Custom Highlight API) because they
+ * render reliably across webviews, and we compute `scrollTop` ourselves (rather than
+ * `scrollIntoView`) because the latter is unreliable for nested overflow containers in
+ * WebKit. The wrapped nodes live inside React's `dangerouslySetInnerHTML` content, which
+ * React only overwrites when the HTML changes — so the marks persist until we clear them
+ * or the tab's document is replaced.
  */
 
-const HL_ALL = "pm-find";
-const HL_CURRENT = "pm-find-current";
+const MARK_CLASS = "pm-find";
+const CURRENT_CLASS = "pm-find-current";
 
 export interface FindState {
   count: number;
@@ -26,8 +30,10 @@ export function findMatches(root: HTMLElement, query: string): Range[] {
     acceptNode(node: Node): number {
       const value = node.nodeValue;
       if (!value || !value.trim()) return NodeFilter.FILTER_REJECT;
-      // Skip rendered math internals (KaTeX/MathJax) — search prose, not glyph spans.
-      if (node.parentElement?.closest(".pm-math")) return NodeFilter.FILTER_REJECT;
+      // Skip rendered math internals (KaTeX/MathJax) and our own marks.
+      const parent = node.parentElement;
+      if (parent?.closest(".pm-math")) return NodeFilter.FILTER_REJECT;
+      if (parent?.classList.contains(MARK_CLASS)) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
     },
   });
@@ -48,20 +54,34 @@ export function findMatches(root: HTMLElement, query: string): Range[] {
   return ranges;
 }
 
-function highlightsSupported(): boolean {
-  return typeof CSS !== "undefined" && "highlights" in CSS && typeof Highlight !== "undefined";
-}
-
 export class FindController {
-  private ranges: Range[] = [];
+  private marks: HTMLElement[] = [];
   private index = -1;
 
   constructor(private readonly root: HTMLElement) {}
 
   search(query: string): FindState {
-    this.ranges = findMatches(this.root, query);
-    this.index = this.ranges.length > 0 ? 0 : -1;
-    this.repaint();
+    this.unwrap();
+    const ranges = findMatches(this.root, query);
+
+    // Wrap in reverse document order so wrapping a later match doesn't invalidate the
+    // offsets of earlier ranges (including multiple matches within one text node).
+    const wrapped: HTMLElement[] = [];
+    for (let i = ranges.length - 1; i >= 0; i -= 1) {
+      const mark = document.createElement("mark");
+      mark.className = MARK_CLASS;
+      try {
+        ranges[i].surroundContents(mark);
+        wrapped.push(mark);
+      } catch {
+        // A range that can't be cleanly wrapped is skipped rather than breaking find.
+      }
+    }
+    wrapped.reverse(); // back to document order
+    this.marks = wrapped;
+
+    this.index = this.marks.length > 0 ? 0 : -1;
+    this.paintCurrent();
     this.revealCurrent();
     return this.state();
   }
@@ -75,41 +95,55 @@ export class FindController {
   }
 
   clear(): void {
-    this.ranges = [];
-    this.index = -1;
-    this.repaint();
+    this.unwrap();
   }
 
   private step(delta: number): FindState {
-    if (this.ranges.length === 0) return this.state();
-    this.index = (this.index + delta + this.ranges.length) % this.ranges.length;
-    this.repaint();
+    if (this.marks.length === 0) return this.state();
+    this.index = (this.index + delta + this.marks.length) % this.marks.length;
+    this.paintCurrent();
     this.revealCurrent();
     return this.state();
   }
 
   private state(): FindState {
-    return { count: this.ranges.length, index: this.index };
+    return { count: this.marks.length, index: this.index };
   }
 
-  private repaint(): void {
-    if (!highlightsSupported()) return;
-    CSS.highlights.delete(HL_ALL);
-    CSS.highlights.delete(HL_CURRENT);
-    if (this.ranges.length === 0) return;
-
-    const others = this.ranges.filter((_, i) => i !== this.index);
-    if (others.length > 0) CSS.highlights.set(HL_ALL, new Highlight(...others));
-    if (this.index >= 0) CSS.highlights.set(HL_CURRENT, new Highlight(this.ranges[this.index]));
+  private paintCurrent(): void {
+    this.marks.forEach((mark, i) => mark.classList.toggle(CURRENT_CLASS, i === this.index));
   }
 
+  /** Scroll the container so the current match sits near the middle. */
   private revealCurrent(): void {
-    const el = this.ranges[this.index]?.startContainer.parentElement;
-    if (!el) return;
+    const mark = this.marks[this.index];
+    if (!mark) return;
+    const container = this.root;
+    const markRect = mark.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const target =
+      container.scrollTop +
+      (markRect.top - containerRect.top) -
+      container.clientHeight / 2 +
+      markRect.height / 2;
     try {
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      container.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
     } catch {
-      // scrollIntoView unsupported (e.g. jsdom) — ignore.
+      container.scrollTop = Math.max(0, target);
     }
+  }
+
+  /** Remove all our marks, restoring the original text. */
+  private unwrap(): void {
+    const existing = this.root.querySelectorAll<HTMLElement>(`mark.${MARK_CLASS}`);
+    existing.forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      parent.removeChild(mark);
+    });
+    if (existing.length > 0) this.root.normalize(); // merge split text nodes back
+    this.marks = [];
+    this.index = -1;
   }
 }

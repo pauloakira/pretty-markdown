@@ -391,11 +391,13 @@ body {
   cursor: default;
 }
 
-/* Match highlights (CSS Custom Highlight API). */
-::highlight(pm-find) {
+/* Match highlights (wrapped <mark> elements). */
+.reader mark.pm-find {
   background-color: rgb(250 204 21 / 0.4);
+  color: inherit;
+  border-radius: 2px;
 }
-::highlight(pm-find-current) {
+.reader mark.pm-find-current {
   background-color: #f59e0b;
   color: #1a1d21;
 }
