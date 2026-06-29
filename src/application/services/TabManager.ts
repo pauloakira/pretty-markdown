@@ -1,5 +1,5 @@
 import type { Document } from "../../domain/entities/Document";
-import type { TabId } from "../../domain/entities/Tab";
+import type { Tab, TabId } from "../../domain/entities/Tab";
 import { createTab } from "../../domain/entities/Tab";
 import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
@@ -78,6 +78,20 @@ export class TabManager {
 
   markSaved(id: TabId, path: string, name: string): void {
     this.commit(W.markSaved(this.workspace, id, { path, name }));
+  }
+
+  /** Replace the whole workspace with restored tabs (used on launch). */
+  restore(
+    entries: ReadonlyArray<{ document: Document; mode: EditorMode; scrollTop: number }>,
+    activeIndex: number,
+  ): void {
+    const tabs: Tab[] = entries.map((entry) => ({
+      id: this.nextId(),
+      document: entry.document,
+      viewState: { mode: entry.mode, scrollTop: entry.scrollTop },
+      savedContent: entry.document.content,
+    }));
+    this.commit(W.restoreWorkspace(tabs, activeIndex));
   }
 
   private nextId(): TabId {

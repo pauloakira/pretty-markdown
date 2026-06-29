@@ -1,3 +1,4 @@
+import type { Session } from "../values/Session";
 import type { EditorMode } from "../values/ViewState";
 import type { Tab, TabId } from "./Tab";
 
@@ -102,6 +103,29 @@ export function updateContent(ws: Workspace, id: TabId, content: string): Worksp
     ...ws,
     tabs: ws.tabs.map((t) => (t.id === id ? { ...t, document } : t)),
   };
+}
+
+/** Build a fresh workspace from restored tabs, activating the one at `activeIndex`. */
+export function restoreWorkspace(tabs: readonly Tab[], activeIndex: number): Workspace {
+  if (tabs.length === 0) return emptyWorkspace;
+  const index = Math.min(Math.max(0, activeIndex), tabs.length - 1);
+  return { tabs: [...tabs], activeTabId: tabs[index].id };
+}
+
+/** Snapshot the open tabs (those backed by a file) into a persistable session. */
+export function toSession(ws: Workspace): Session {
+  const tabs = ws.tabs
+    .filter((t): t is Tab & { document: { path: string } } => t.document.path !== null)
+    .map((t) => ({
+      path: t.document.path as string,
+      mode: t.viewState.mode,
+      scrollTop: t.viewState.scrollTop,
+    }));
+  const activeIndex = Math.max(
+    0,
+    ws.tabs.findIndex((t) => t.id === ws.activeTabId),
+  );
+  return { version: 1, activeIndex, tabs };
 }
 
 /** Mark a tab as saved to `path`: updates the path/name and the dirty baseline. */

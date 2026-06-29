@@ -71,6 +71,17 @@ describe("Workspace", () => {
     expect(W.activeTab(updated)?.viewState.scrollTop).toBe(240);
   });
 
+  it("snapshots to a session and restores into a fresh workspace", () => {
+    const ws = W.activateTab(workspaceOf(tab("a", "/a.md"), tab("b", "/b.md")), "b");
+    const session = W.toSession(ws);
+    expect(session.tabs.map((t) => t.path)).toEqual(["/a.md", "/b.md"]);
+    expect(session.activeIndex).toBe(1);
+
+    const restored = W.restoreWorkspace(ws.tabs, 0);
+    expect(restored.activeTabId).toBe("a");
+    expect(W.restoreWorkspace([], 0)).toEqual(W.emptyWorkspace);
+  });
+
   it("toggles mode, updates content (dirty), and marks saved", () => {
     const ws = workspaceOf(tab("a", "/a.md"));
     const edited = W.updateContent(ws, "a", "# changed");

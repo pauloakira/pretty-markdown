@@ -41,9 +41,11 @@ Reader-first build plan. Each milestone is independently shippable.
 - [ ] Preserve editor undo history across tab switches (editor remounts per tab). *(later)*
 
 ## M5 — App polish
-- OS file associations (double-click `.md`).
-- Recent files, restore last session (open tabs + active tab + scroll).
-- File-watch: reload when the file changes on disk.
+- [x] Restore last session — reopen tabs (paths + active tab + mode + scroll) on launch,
+      with a "reopen tabs?" prompt on close. Stored as JSON in the app config dir.
+- [ ] OS file associations (double-click `.md`).
+- [ ] Recent files menu.
+- [ ] File-watch: reload when the file changes on disk.
 
 ## Post-v1 (deferred)
 - Full TeX engine / TikZ (opt-in renderer).

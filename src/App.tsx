@@ -4,12 +4,15 @@ import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
 import { FindBar } from "./presentation/components/FindBar";
+import { QuitConfirm } from "./presentation/components/QuitConfirm";
 import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
 import { TabBar } from "./presentation/components/TabBar";
 import { Welcome } from "./presentation/components/Welcome";
 import { useFind } from "./presentation/hooks/useFind";
 import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
+import { useQuitGuard } from "./presentation/hooks/useQuitGuard";
+import { useSession } from "./presentation/hooks/useSession";
 import { useSettings } from "./presentation/hooks/useSettings";
 import { useTabKeyboard } from "./presentation/hooks/useTabKeyboard";
 import { useWorkspace } from "./presentation/hooks/useWorkspace";
@@ -38,8 +41,10 @@ export default function App() {
   } = useWorkspace();
 
   const { settings, update: updateSettings, reset: resetSettings } = useSettings();
+  const { persist: persistSession, clear: clearSession, quit } = useSession();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState<TabId | null>(null);
+  const [quitPromptOpen, setQuitPromptOpen] = useState(false);
 
   const readerRef = useRef<HTMLDivElement>(null);
   const find = useFind(readerRef, active?.id ?? null);
@@ -90,6 +95,13 @@ export default function App() {
     [open, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode],
   );
   useTabKeyboard(shortcuts);
+
+  // On window close: prompt to reopen tabs next time (or just quit if nothing is open).
+  const onCloseRequest = useCallback(() => {
+    if (workspace.tabs.length === 0) void quit();
+    else setQuitPromptOpen(true);
+  }, [workspace.tabs.length, quit]);
+  useQuitGuard(onCloseRequest);
 
   const hasTabs = workspace.tabs.length > 0;
   const pendingTab = pendingCloseId
@@ -175,6 +187,21 @@ export default function App() {
             closeTab(id);
           }}
           onCancel={() => setPendingCloseId(null)}
+        />
+      )}
+      {quitPromptOpen && (
+        <QuitConfirm
+          tabCount={workspace.tabs.length}
+          dirtyCount={workspace.tabs.filter(isTabDirty).length}
+          onRemember={async () => {
+            await persistSession();
+            await quit();
+          }}
+          onForget={async () => {
+            await clearSession();
+            await quit();
+          }}
+          onCancel={() => setQuitPromptOpen(false)}
         />
       )}
     </div>

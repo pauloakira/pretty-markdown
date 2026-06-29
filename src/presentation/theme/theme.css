@@ -613,6 +613,11 @@ body {
   margin: 0 0 1.1rem;
   font-size: 0.95rem;
 }
+.confirm__warn {
+  margin: -0.5rem 0 1.1rem;
+  font-size: 0.82rem;
+  color: var(--error-fg);
+}
 .confirm__actions {
   display: flex;
   justify-content: flex-end;
