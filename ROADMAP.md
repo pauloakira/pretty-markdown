@@ -30,7 +30,7 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Open-in-new-tab (dedupe: reopening a path focuses its tab), close, switch, drag-reorder.
 - [x] Per-tab isolated state (scroll position, render cache); lazy mount/unmount via `key`.
 - [x] Keyboard shortcuts (`⌘T`, `⌘W`, `⌘⇧[`/`⌘⇧]`, `Ctrl+Tab`, `⌘1–9`); middle-click to close.
-- [ ] Dirty-save prompt on close. *(deferred to M4 — needs the editor's dirty state)*
+- [x] Dirty-save prompt on close. *(delivered in M4 with the editor's dirty state)*
 
 ## M4 — Editor ✅
 - [x] CodeMirror 6 edit mode with markdown highlighting (per-tab, themed to match the app).
