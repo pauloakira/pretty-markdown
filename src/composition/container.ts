@@ -3,12 +3,14 @@ import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { AppWindow } from "../domain/ports/AppWindow";
 import type { MacroMap } from "../domain/ports/MathRenderer";
+import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepository";
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { MathJaxRenderer } from "../infrastructure/math/MathJaxRenderer";
 import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
+import { LocalStorageRecentFilesRepository } from "../infrastructure/persistence/LocalStorageRecentFilesRepository";
 import { LocalStorageSettingsRepository } from "../infrastructure/persistence/LocalStorageSettingsRepository";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import { TauriAppWindow } from "../infrastructure/shell/TauriAppWindow";
@@ -29,6 +31,7 @@ export interface Container {
   readonly pipeline: MarkdownPipeline;
   readonly tabManager: TabManager;
   readonly settingsRepository: SettingsRepository;
+  readonly recentFilesRepository: RecentFilesRepository;
   readonly sessionService: SessionService;
   readonly appWindow: AppWindow;
 }
@@ -45,6 +48,7 @@ export function createContainer(): Container {
   const documentService = new DocumentService(fileSystem, fileSystem, fileSystem);
   const tabManager = new TabManager();
   const settingsRepository = new LocalStorageSettingsRepository();
+  const recentFilesRepository = new LocalStorageRecentFilesRepository();
   const sessionService = new SessionService(new TauriSessionRepository(), documentService);
   const appWindow = new TauriAppWindow();
 
@@ -53,6 +57,7 @@ export function createContainer(): Container {
     pipeline,
     tabManager,
     settingsRepository,
+    recentFilesRepository,
     sessionService,
     appWindow,
   };

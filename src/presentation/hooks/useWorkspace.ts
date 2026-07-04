@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useContainer } from "../../composition/ContainerContext";
+import type { Document } from "../../domain/entities/Document";
 import type { TabId } from "../../domain/entities/Tab";
 import { activeTab } from "../../domain/entities/Workspace";
 import type { EditorMode } from "../../domain/values/ViewState";
@@ -23,20 +24,35 @@ export function useWorkspace() {
     [container],
   );
 
-  const open = useCallback(async () => {
+  const open = useCallback(async (): Promise<Document | null> => {
     setBusy(true);
     try {
       const outcome = await container.documentService.open();
       if (outcome.kind === "opened") {
         tabManager.openDocument(outcome.document);
         setError(null);
-      } else if (outcome.kind === "error") {
-        setError(outcome.message);
+        return outcome.document;
       }
+      if (outcome.kind === "error") setError(outcome.message);
+      return null;
     } finally {
       setBusy(false);
     }
   }, [container, tabManager]);
+
+  const openPath = useCallback(
+    async (path: string): Promise<Document | null> => {
+      const outcome = await container.documentService.load(path);
+      if (outcome.kind === "opened") {
+        tabManager.openDocument(outcome.document);
+        setError(null);
+        return outcome.document;
+      }
+      if (outcome.kind === "error") setError(outcome.message);
+      return null;
+    },
+    [container, tabManager],
+  );
 
   const closeTab = useCallback((id: TabId) => tabManager.closeTab(id), [tabManager]);
   const activateTab = useCallback((id: TabId) => tabManager.activateTab(id), [tabManager]);
@@ -126,6 +142,7 @@ export function useWorkspace() {
     busy,
     renderMarkdown,
     open,
+    openPath,
     closeTab,
     activateTab,
     focusSibling,

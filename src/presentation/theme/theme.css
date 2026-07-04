@@ -201,6 +201,59 @@ body {
   color: var(--accent-fg);
   cursor: pointer;
 }
+.welcome__recent {
+  margin-top: 1.75rem;
+  width: min(30rem, 90vw);
+  text-align: left;
+}
+.welcome__recent-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin-bottom: 0.4rem;
+  padding-left: 0.2rem;
+}
+.welcome__recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.welcome__recent-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.welcome__recent-list li:last-child .welcome__recent-item {
+  border-bottom: none;
+}
+.welcome__recent-item:hover {
+  background: var(--bg-elevated);
+}
+.welcome__recent-name {
+  font-size: 0.9rem;
+}
+.welcome__recent-path {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the filename end visible when truncating */
+  text-align: left;
+}
+
 .welcome__hint {
   margin-top: 1.5rem;
   color: var(--fg-muted);

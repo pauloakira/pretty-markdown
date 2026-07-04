@@ -12,6 +12,7 @@ import { Welcome } from "./presentation/components/Welcome";
 import { useFind } from "./presentation/hooks/useFind";
 import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
 import { useQuitGuard } from "./presentation/hooks/useQuitGuard";
+import { useRecentFiles } from "./presentation/hooks/useRecentFiles";
 import { useSession } from "./presentation/hooks/useSession";
 import { useSettings } from "./presentation/hooks/useSettings";
 import { useTabKeyboard } from "./presentation/hooks/useTabKeyboard";
@@ -28,6 +29,7 @@ export default function App() {
     busy,
     renderMarkdown,
     open,
+    openPath,
     closeTab,
     activateTab,
     focusSibling,
@@ -41,7 +43,21 @@ export default function App() {
   } = useWorkspace();
 
   const { settings, update: updateSettings, reset: resetSettings } = useSettings();
+  const { recents, remember: rememberRecent } = useRecentFiles();
   const { persist: persistSession, clear: clearSession, quit } = useSession();
+
+  // Open via dialog / by path, recording the result in the recent-files list.
+  const openViaDialog = useCallback(async () => {
+    const doc = await open();
+    if (doc?.path) rememberRecent({ path: doc.path, name: doc.name });
+  }, [open, rememberRecent]);
+  const openRecent = useCallback(
+    async (path: string) => {
+      const doc = await openPath(path);
+      if (doc?.path) rememberRecent({ path: doc.path, name: doc.name });
+    },
+    [openPath, rememberRecent],
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState<TabId | null>(null);
   const [quitPromptOpen, setQuitPromptOpen] = useState(false);
@@ -90,7 +106,7 @@ export default function App() {
 
   const shortcuts = useMemo(
     () => ({
-      newTab: open,
+      newTab: openViaDialog,
       closeActive,
       focusSibling,
       activateIndex,
@@ -101,7 +117,7 @@ export default function App() {
       saveAs: saveActiveAs,
       toggleMode: toggleActiveMode,
     }),
-    [open, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode],
+    [openViaDialog, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode],
   );
   useTabKeyboard(shortcuts);
 
@@ -126,7 +142,7 @@ export default function App() {
           busy={busy}
           onSelect={activateTab}
           onClose={requestClose}
-          onNew={open}
+          onNew={openViaDialog}
           onReorder={moveTab}
           onOpenSettings={() => setSettingsOpen(true)}
         />
@@ -171,7 +187,12 @@ export default function App() {
             />
           )
         ) : (
-          <Welcome onOpen={open} onOpenSettings={() => setSettingsOpen(true)} />
+          <Welcome
+            recents={recents}
+            onOpen={openViaDialog}
+            onOpenRecent={openRecent}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
         )}
       </main>
       {settingsOpen && (
