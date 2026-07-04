@@ -53,6 +53,15 @@ export default function App() {
   const mode = active?.viewState.mode ?? "reader";
   const dirty = active ? isTabDirty(active) : false;
 
+  // The active reader's live scroll lives in the DOM, not yet in view state (that's only
+  // captured on unmount). Flush it before saving the session so the reading position is
+  // restored on the tab you were actually looking at.
+  const flushActiveScroll = useCallback(() => {
+    if (active && mode === "reader" && readerRef.current) {
+      persistScroll(active.id, readerRef.current.scrollTop);
+    }
+  }, [active, mode, persistScroll]);
+
   // Closing a dirty tab routes through a save prompt.
   const requestClose = useCallback(
     (id: TabId) => {
@@ -194,6 +203,7 @@ export default function App() {
           tabCount={workspace.tabs.length}
           dirtyCount={workspace.tabs.filter(isTabDirty).length}
           onRemember={async () => {
+            flushActiveScroll();
             await persistSession();
             await quit();
           }}
