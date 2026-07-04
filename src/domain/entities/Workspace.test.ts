@@ -94,4 +94,15 @@ describe("Workspace", () => {
     expect(W.activeTab(saved)?.document.path).toBe("/b.md");
     expect(W.activeTab(saved)?.savedContent).toBe("# changed");
   });
+
+  it("reloads content from disk (clean baseline, bumped revision)", () => {
+    const ws = workspaceOf(tab("a", "/a.md"));
+    const reloaded = W.reloadContent(ws, "a", "# from disk");
+    const t = W.activeTab(reloaded);
+    expect(t?.document.content).toBe("# from disk");
+    expect(t?.savedContent).toBe("# from disk"); // clean after reload
+    expect(t?.revision).toBe(1); // forces the editor to remount
+    // no-op when content already matches and is clean
+    expect(W.reloadContent(reloaded, "a", "# from disk")).toBe(reloaded);
+  });
 });

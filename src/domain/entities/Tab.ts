@@ -15,10 +15,18 @@ export interface Tab {
   readonly document: Document;
   readonly viewState: ViewState;
   readonly savedContent: string;
+  /** Bumped when content is reloaded from disk, to force the editor to remount. */
+  readonly revision: number;
 }
 
 export function createTab(id: TabId, document: Document): Tab {
-  return { id, document, viewState: initialViewState, savedContent: document.content };
+  return {
+    id,
+    document,
+    viewState: initialViewState,
+    savedContent: document.content,
+    revision: 0,
+  };
 }
 
 /** Whether the tab has edits not yet written to disk. */

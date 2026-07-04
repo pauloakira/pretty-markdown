@@ -1,6 +1,33 @@
-use std::path::PathBuf;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
+
+/// Watches open files and emits `file-changed` when they change on disk.
+struct FileWatcher(Mutex<RecommendedWatcher>);
+
+#[tauri::command]
+fn watch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
+    state
+        .0
+        .lock()
+        .unwrap()
+        .watch(Path::new(&path), RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn unwatch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
+    match state.0.lock().unwrap().unwatch(Path::new(&path)) {
+        Ok(()) => Ok(()),
+        // Unwatching a path that isn't watched is fine.
+        Err(notify::Error {
+            kind: notify::ErrorKind::WatchNotFound,
+            ..
+        }) => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 /// Files requested via the OS (double-click / `open`) that arrived before the frontend
 /// was ready to receive them. Drained by `take_pending_files`.
@@ -96,20 +123,45 @@ pub fn run() {
             read_session,
             write_session,
             clear_session,
-            take_pending_files
+            take_pending_files,
+            watch_file,
+            unwatch_file
         ])
         .setup(|app| {
             // Files passed on the command line (CLI / Windows / Linux file-association launch).
             let args: Vec<String> = std::env::args()
                 .skip(1)
                 .filter(|a| !a.starts_with('-'))
-                .filter(|a| std::path::Path::new(a).exists())
+                .filter(|a| Path::new(a).exists())
                 .collect();
             if !args.is_empty() {
                 if let Some(state) = app.try_state::<PendingFiles>() {
                     state.0.lock().unwrap().extend(args);
                 }
             }
+
+            // A single watcher for all open files; emits changed paths to the frontend.
+            let handle = app.handle().clone();
+            let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                if let Ok(event) = res {
+                    if matches!(
+                        event.kind,
+                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                    ) {
+                        let paths: Vec<String> = event
+                            .paths
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect();
+                        if !paths.is_empty() {
+                            let _ = handle.emit("file-changed", paths);
+                        }
+                    }
+                }
+            })
+            .map_err(|e| e.to_string())?;
+            app.manage(FileWatcher(Mutex::new(watcher)));
+
             Ok(())
         })
         .build(tauri::generate_context!())

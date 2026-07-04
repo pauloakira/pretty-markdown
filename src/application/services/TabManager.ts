@@ -80,6 +80,10 @@ export class TabManager {
     this.commit(W.markSaved(this.workspace, id, { path, name }));
   }
 
+  reloadContent(id: TabId, content: string): void {
+    this.commit(W.reloadContent(this.workspace, id, content));
+  }
+
   /** Replace the whole workspace with restored tabs (used on launch). */
   restore(
     entries: ReadonlyArray<{ document: Document; mode: EditorMode; scrollTop: number }>,
@@ -90,6 +94,7 @@ export class TabManager {
       document: entry.document,
       viewState: { mode: entry.mode, scrollTop: entry.scrollTop },
       savedContent: entry.document.content,
+      revision: 0,
     }));
     this.commit(W.restoreWorkspace(tabs, activeIndex));
   }

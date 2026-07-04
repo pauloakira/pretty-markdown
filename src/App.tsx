@@ -10,6 +10,7 @@ import { SettingsPanel } from "./presentation/components/SettingsPanel";
 import { TabBar } from "./presentation/components/TabBar";
 import { Welcome } from "./presentation/components/Welcome";
 import { useFileOpen } from "./presentation/hooks/useFileOpen";
+import { useFileWatch } from "./presentation/hooks/useFileWatch";
 import { useFind } from "./presentation/hooks/useFind";
 import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
 import { useQuitGuard } from "./presentation/hooks/useQuitGuard";
@@ -61,6 +62,8 @@ export default function App() {
   );
   // Files opened from Finder (double-click / file association).
   useFileOpen(openRecent);
+  // Reload documents that change on disk (or flag a conflict if they have unsaved edits).
+  const fileWatch = useFileWatch(workspace.tabs);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState<TabId | null>(null);
   const [quitPromptOpen, setQuitPromptOpen] = useState(false);
@@ -161,6 +164,19 @@ export default function App() {
       )}
       <main className="app__content">
         {error && <div className="banner banner--error">{error}</div>}
+        {active && fileWatch.conflicts[active.id] !== undefined && (
+          <div className="banner banner--warn">
+            <span>This file changed on disk while you had unsaved edits.</span>
+            <span className="banner__actions">
+              <button className="banner__btn" onClick={() => fileWatch.reloadConflict(active.id)}>
+                Reload from disk
+              </button>
+              <button className="banner__btn" onClick={() => fileWatch.dismissConflict(active.id)}>
+                Keep my edits
+              </button>
+            </span>
+          </div>
+        )}
         {active && find.open && mode === "reader" && (
           <FindBar
             query={find.query}
@@ -175,7 +191,7 @@ export default function App() {
         {active ? (
           mode === "edit" ? (
             <EditMode
-              key={active.id}
+              key={`${active.id}:${active.revision}`}
               doc={active.document}
               renderMarkdown={renderMarkdown}
               onContentChange={(content) => updateContent(active.id, content)}

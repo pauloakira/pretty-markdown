@@ -128,6 +128,23 @@ export function toSession(ws: Workspace): Session {
   return { version: 1, activeIndex, tabs };
 }
 
+/** Reload a tab's content from disk: updates content, resets the dirty baseline, and
+ * bumps the revision so the editor remounts. No-op if content already matches and clean. */
+export function reloadContent(ws: Workspace, id: TabId, content: string): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab) return ws;
+  if (tab.document.content === content && tab.savedContent === content) return ws;
+  const document = { ...tab.document, content };
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) =>
+      t.id === id
+        ? { ...t, document, savedContent: content, revision: t.revision + 1 }
+        : t,
+    ),
+  };
+}
+
 /** Mark a tab as saved to `path`: updates the path/name and the dirty baseline. */
 export function markSaved(
   ws: Workspace,
