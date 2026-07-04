@@ -40,12 +40,12 @@ Reader-first build plan. Each milestone is independently shippable.
 - [ ] True incremental (per-block) rendering — currently a debounced full re-render. *(optimization)*
 - [ ] Preserve editor undo history across tab switches (editor remounts per tab). *(later)*
 
-## M5 — App polish
+## M5 — App polish ✅
 - [x] Restore last session — reopen tabs (paths + active tab + mode + scroll) on launch,
       with a "reopen tabs?" prompt on close. Stored as JSON in the app config dir.
-- [ ] OS file associations (double-click `.md`).
-- [ ] Recent files menu.
-- [ ] File-watch: reload when the file changes on disk.
+- [x] OS file associations — double-click a `.md` in Finder opens it (launch + while running).
+- [x] Recent files list on the welcome screen (persisted, click to reopen).
+- [x] File-watch: reload on external change (silent when clean; Reload/Keep banner when dirty).
 
 ## Post-v1 (deferred)
 - Full TeX engine / TikZ (opt-in renderer).
