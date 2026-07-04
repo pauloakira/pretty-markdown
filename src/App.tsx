@@ -9,6 +9,7 @@ import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
 import { TabBar } from "./presentation/components/TabBar";
 import { Welcome } from "./presentation/components/Welcome";
+import { useFileOpen } from "./presentation/hooks/useFileOpen";
 import { useFind } from "./presentation/hooks/useFind";
 import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
 import { useQuitGuard } from "./presentation/hooks/useQuitGuard";
@@ -58,6 +59,8 @@ export default function App() {
     },
     [openPath, rememberRecent],
   );
+  // Files opened from Finder (double-click / file association).
+  useFileOpen(openRecent);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingCloseId, setPendingCloseId] = useState<TabId | null>(null);
   const [quitPromptOpen, setQuitPromptOpen] = useState(false);
