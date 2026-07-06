@@ -1,10 +1,14 @@
 /**
- * Copy-as-LaTeX: when the user copies a selection that lies entirely within a single
- * rendered formula, replace the clipboard text with the formula's source LaTeX (stored
- * in `data-tex` by the markdown math plugin) instead of the rendered glyphs.
+ * Copy-as-LaTeX. Two cases:
  *
- * If the selection spans more than one formula or mixes math with prose, we leave the
- * default copy behavior untouched.
+ * 1. A selection entirely within one formula → copy that formula's LaTeX source
+ *    (from `data-tex`), with no delimiters.
+ * 2. A selection mixing prose and math → rebuild the text, replacing each rendered
+ *    formula with its LaTeX source wrapped in `$…$` / `$$…$$`. This also fixes KaTeX's
+ *    copy duplication (it renders a hidden MathML copy alongside the visual HTML, so a
+ *    default copy yields "a a", "M M", …); replacing the whole formula drops both.
+ *
+ * A selection with no math is left to the browser's normal copy.
  */
 
 /** The nearest enclosing `.pm-math` element for a node, or null. */
@@ -22,14 +26,43 @@ export function latexForSelection(selection: Selection | null): string | null {
   return null;
 }
 
+/**
+ * Plain text for a mixed selection, with rendered math replaced by its LaTeX source.
+ * Returns null when the selection contains no whole formula (let the browser copy).
+ */
+export function mixedSelectionText(range: Range): string | null {
+  const fragment = range.cloneContents();
+  const maths = fragment.querySelectorAll<HTMLElement>(".pm-math");
+  if (maths.length === 0) return null;
+
+  maths.forEach((el) => {
+    const tex = (el.dataset.tex ?? "").trim();
+    const block = el.classList.contains("pm-math--block");
+    el.replaceWith(document.createTextNode(block ? `\n$$\n${tex}\n$$\n` : `$${tex}$`));
+  });
+  return fragment.textContent ?? "";
+}
+
 /** Install the global copy handler. Returns a disposer that removes it. */
 export function installLatexCopy(target: Document = document): () => void {
   const onCopy = (event: ClipboardEvent) => {
-    const tex = latexForSelection(target.getSelection());
-    if (tex == null) return;
-    event.clipboardData?.setData("text/plain", tex);
-    event.preventDefault();
+    const selection = target.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+
+    const single = latexForSelection(selection);
+    if (single !== null) {
+      event.clipboardData?.setData("text/plain", single);
+      event.preventDefault();
+      return;
+    }
+
+    const text = mixedSelectionText(selection.getRangeAt(0));
+    if (text !== null) {
+      event.clipboardData?.setData("text/plain", text);
+      event.preventDefault();
+    }
   };
+
   target.addEventListener("copy", onCopy);
   return () => target.removeEventListener("copy", onCopy);
 }

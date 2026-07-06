@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { closestMath, latexForSelection } from "./latexCopy";
+import { closestMath, latexForSelection, mixedSelectionText } from "./latexCopy";
 
 /** Render markup into a detached container for querying. */
 function mount(html: string): HTMLElement {
   const root = document.createElement("div");
   root.innerHTML = html;
+  document.body.appendChild(root);
   return root;
+}
+
+function rangeOver(root: Node): Range {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  return range;
 }
 
 /** Build a minimal Selection-like object over two nodes. */
@@ -49,5 +56,36 @@ describe("latexCopy", () => {
   it("ignores collapsed/empty selections", () => {
     expect(latexForSelection(null)).toBeNull();
     expect(latexForSelection(selectionOf(null, null))).toBeNull();
+  });
+});
+
+describe("mixedSelectionText", () => {
+  it("replaces inline formulas with their $LaTeX$ source, once each", () => {
+    const root = mount(
+      '<p>Let <span class="pm-math" data-tex="a">RENDERED</span> be continuous with ' +
+        'constant <span class="pm-math" data-tex="M">RENDERED</span>.</p>',
+    );
+    expect(mixedSelectionText(rangeOver(root))).toBe(
+      "Let $a$ be continuous with constant $M$.",
+    );
+  });
+
+  it("drops KaTeX's duplicated MathML instead of copying it twice", () => {
+    // Mimic KaTeX output: a hidden MathML copy + the visual HTML inside .pm-math.
+    const root = mount(
+      'x <span class="pm-math" data-tex="\\alpha">' +
+        '<span class="katex"><span class="katex-mathml">α</span>' +
+        '<span class="katex-html">α</span></span></span> y',
+    );
+    expect(mixedSelectionText(rangeOver(root))).toBe("x $\\alpha$ y");
+  });
+
+  it("wraps display math in $$…$$", () => {
+    const root = mount('a <span class="pm-math pm-math--block" data-tex="\\int x">R</span> b');
+    expect(mixedSelectionText(rangeOver(root))).toBe("a \n$$\n\\int x\n$$\n b");
+  });
+
+  it("returns null when the selection has no math (browser copies normally)", () => {
+    expect(mixedSelectionText(rangeOver(mount("<p>just prose</p>")))).toBeNull();
   });
 });

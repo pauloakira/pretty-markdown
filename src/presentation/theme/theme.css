@@ -384,6 +384,12 @@ body {
   padding: 0.25rem 0;
 }
 
+/* KaTeX renders a hidden MathML copy for accessibility; keep it out of text selection
+   so a plain copy doesn't duplicate every symbol ("a a", "M M", …). */
+.katex-mathml {
+  user-select: none;
+}
+
 /* Math wrapper carrying the source LaTeX (copy-as-LaTeX). A subtle highlight on hover
    hints that the formula is a copyable unit. */
 .pm-math {
