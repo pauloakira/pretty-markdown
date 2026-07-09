@@ -19,7 +19,6 @@ export function EditMode({ doc, renderMarkdown, onContentChange }: EditModeProps
   const editorScrollRef = useRef<HTMLElement | null>(null);
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
   const renderTimer = useRef<number | null>(null);
-  const syncing = useRef(false);
 
   const handleChange = useCallback(
     (content: string) => {
@@ -41,20 +40,30 @@ export function EditMode({ doc, renderMarkdown, onContentChange }: EditModeProps
 
   // Proportional synced scrolling. Child effects (EditorPane/Preview) run first, so both
   // scroll elements are wired by the time this runs.
+  //
+  // Each programmatic scroll produces an "echo" scroll event on the target pane. We tag
+  // the target so its echo is swallowed, rather than gating on a shared flag — that way
+  // the pane the user is actively scrolling is never suppressed (which previously caused
+  // flicker, dropped frames, and upward drift when stopping).
   useEffect(() => {
     const editor = editorScrollRef.current;
     const preview = previewScrollRef.current;
     if (!editor || !preview) return;
 
+    const echoes = new Set<HTMLElement>();
+
     const link = (from: HTMLElement, to: HTMLElement) => () => {
-      if (syncing.current) return;
-      syncing.current = true;
-      const ratio = from.scrollTop / Math.max(1, from.scrollHeight - from.clientHeight);
-      to.scrollTop = ratio * (to.scrollHeight - to.clientHeight);
-      requestAnimationFrame(() => {
-        syncing.current = false;
-      });
+      if (echoes.has(from)) {
+        echoes.delete(from); // this scroll was one we triggered — don't bounce it back
+        return;
+      }
+      const max = Math.max(1, from.scrollHeight - from.clientHeight);
+      const target = (from.scrollTop / max) * (to.scrollHeight - to.clientHeight);
+      if (Math.abs(to.scrollTop - target) < 1) return; // no move → no echo to suppress
+      echoes.add(to);
+      to.scrollTop = target;
     };
+
     const onEditorScroll = link(editor, preview);
     const onPreviewScroll = link(preview, editor);
     editor.addEventListener("scroll", onEditorScroll, { passive: true });
