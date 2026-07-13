@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { isTabDirty, type Tab, type TabId } from "../../domain/entities/Tab";
 
 interface TabBarProps {
@@ -12,6 +12,20 @@ interface TabBarProps {
   onOpenSettings: () => void;
 }
 
+const DRAG_THRESHOLD = 5;
+
+interface DragState {
+  id: TabId;
+  startX: number;
+  pointerId: number;
+  dragging: boolean;
+}
+
+/**
+ * Tab bar with pointer-based drag-to-reorder. We use pointer events (not HTML5 drag,
+ * which is unreliable in WKWebView): press-and-move past a threshold starts a drag, an
+ * insertion marker follows the cursor, and release commits via `onReorder`.
+ */
 export function TabBar({
   tabs,
   activeTabId,
@@ -22,24 +36,76 @@ export function TabBar({
   onReorder,
   onOpenSettings,
 }: TabBarProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragState | null>(null);
   const [dragId, setDragId] = useState<TabId | null>(null);
-  const [overId, setOverId] = useState<TabId | null>(null);
+  const [gap, setGap] = useState<number | null>(null);
 
-  const handleClose = (e: MouseEvent, id: TabId) => {
-    e.stopPropagation();
-    onClose(id);
+  /** Insertion gap (0..tabs.length) for a pointer x, by tab midpoints. */
+  const gapAt = (clientX: number): number => {
+    const list = listRef.current;
+    if (!list) return tabs.length;
+    const els = Array.from(list.querySelectorAll<HTMLElement>("[data-tab-id]"));
+    for (let i = 0; i < els.length; i += 1) {
+      const r = els[i].getBoundingClientRect();
+      if (clientX < r.left + r.width / 2) return i;
+    }
+    return els.length;
+  };
+
+  const onTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>, id: TabId) => {
+    if (e.button === 1) {
+      onClose(id);
+      return;
+    }
+    if (e.button !== 0) return;
+    onSelect(id); // activate on press, like a browser
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = { id, startX: e.clientX, pointerId: e.pointerId, dragging: false };
+  };
+
+  const onTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (!drag.dragging) {
+      if (Math.abs(e.clientX - drag.startX) < DRAG_THRESHOLD) return;
+      drag.dragging = true;
+      setDragId(drag.id);
+    }
+    setGap(gapAt(e.clientX));
+  };
+
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // capture may already be gone
+    }
+    if (drag?.dragging && gap !== null) {
+      const from = tabs.findIndex((t) => t.id === drag.id);
+      // Removing the dragged tab shifts later slots left by one.
+      const target = gap > from ? gap - 1 : gap;
+      const clamped = Math.max(0, Math.min(target, tabs.length - 1));
+      if (clamped !== from) onReorder(drag.id, clamped);
+    }
+    setDragId(null);
+    setGap(null);
   };
 
   return (
     <div className="tabbar">
-      <div className="tabbar__list">
+      <div className="tabbar__list" ref={listRef}>
         {tabs.map((tab, index) => {
-          const active = tab.id === activeTabId;
           const className = [
             "tab",
-            active ? "tab--active" : "",
+            tab.id === activeTabId ? "tab--active" : "",
             tab.id === dragId ? "tab--dragging" : "",
-            overId === tab.id && dragId !== tab.id ? "tab--dragover" : "",
+            dragId !== null && gap === index ? "tab--insert-before" : "",
+            dragId !== null && gap === tabs.length && index === tabs.length - 1
+              ? "tab--insert-after"
+              : "",
           ]
             .filter(Boolean)
             .join(" ");
@@ -47,41 +113,24 @@ export function TabBar({
           return (
             <div
               key={tab.id}
+              data-tab-id={tab.id}
               className={className}
               title={tab.document.path ?? tab.document.name}
-              onClick={() => onSelect(tab.id)}
-              onAuxClick={(e) => {
-                if (e.button === 1) handleClose(e, tab.id); // middle-click closes
-              }}
-              draggable
-              onDragStart={(e) => {
-                setDragId(tab.id);
-                // WKWebView needs data set on the transfer for the drag to start.
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", tab.id);
-              }}
-              onDragEnd={() => {
-                setDragId(null);
-                setOverId(null);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                if (overId !== tab.id) setOverId(tab.id);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragId && dragId !== tab.id) onReorder(dragId, index);
-                setDragId(null);
-                setOverId(null);
-              }}
+              onPointerDown={(e) => onTabPointerDown(e, tab.id)}
+              onPointerMove={onTabPointerMove}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
             >
               <span className="tab__name">{tab.document.name}</span>
               {isTabDirty(tab) && <span className="tab__dirty" aria-label="Unsaved changes">●</span>}
               <button
                 className="tab__close"
                 aria-label="Close tab"
-                onClick={(e) => handleClose(e, tab.id)}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose(tab.id);
+                }}
               >
                 ×
               </button>
