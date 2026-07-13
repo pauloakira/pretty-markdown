@@ -31,13 +31,14 @@ export function TabBar({
   };
 
   return (
-    <div className="tabbar" data-tauri-drag-region>
+    <div className="tabbar">
       <div className="tabbar__list">
         {tabs.map((tab, index) => {
           const active = tab.id === activeTabId;
           const className = [
             "tab",
             active ? "tab--active" : "",
+            tab.id === dragId ? "tab--dragging" : "",
             overId === tab.id && dragId !== tab.id ? "tab--dragover" : "",
           ]
             .filter(Boolean)
@@ -53,13 +54,19 @@ export function TabBar({
                 if (e.button === 1) handleClose(e, tab.id); // middle-click closes
               }}
               draggable
-              onDragStart={() => setDragId(tab.id)}
+              onDragStart={(e) => {
+                setDragId(tab.id);
+                // WKWebView needs data set on the transfer for the drag to start.
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", tab.id);
+              }}
               onDragEnd={() => {
                 setDragId(null);
                 setOverId(null);
               }}
               onDragOver={(e) => {
                 e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
                 if (overId !== tab.id) setOverId(tab.id);
               }}
               onDrop={(e) => {

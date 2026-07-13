@@ -108,6 +108,9 @@ body {
 .tab--dragover {
   box-shadow: inset 2px 0 0 var(--accent);
 }
+.tab--dragging {
+  opacity: 0.5;
+}
 
 .tab__name {
   flex: 1;
