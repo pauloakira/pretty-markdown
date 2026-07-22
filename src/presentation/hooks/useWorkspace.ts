@@ -24,6 +24,14 @@ export function useWorkspace() {
     [container],
   );
 
+  const exportPdf = useCallback(
+    async (document: Document) => {
+      const html = container.pipeline.render(document.content);
+      await container.documentExporter.exportPdf({ title: document.name, html });
+    },
+    [container],
+  );
+
   const open = useCallback(async (): Promise<Document | null> => {
     setBusy(true);
     try {
@@ -141,6 +149,7 @@ export function useWorkspace() {
     error,
     busy,
     renderMarkdown,
+    exportPdf,
     open,
     openPath,
     closeTab,

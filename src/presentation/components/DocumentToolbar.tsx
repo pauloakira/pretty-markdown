@@ -6,6 +6,7 @@ interface DocumentToolbarProps {
   dirty: boolean;
   onToggleMode: () => void;
   onSave: () => void;
+  onExportPdf: () => void;
 }
 
 export function DocumentToolbar({
@@ -14,6 +15,7 @@ export function DocumentToolbar({
   dirty,
   onToggleMode,
   onSave,
+  onExportPdf,
 }: DocumentToolbarProps) {
   return (
     <div className="doctoolbar">
@@ -26,6 +28,9 @@ export function DocumentToolbar({
         )}
       </span>
       <div className="doctoolbar__actions">
+        <button className="doctoolbar__btn" onClick={onExportPdf} title="Export to PDF (⌘P)">
+          Export PDF
+        </button>
         <button
           className="doctoolbar__btn"
           onClick={onSave}

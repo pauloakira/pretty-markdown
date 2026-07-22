@@ -9,6 +9,7 @@ export interface TabShortcuts {
   save: () => void;
   saveAs: () => void;
   toggleMode: () => void;
+  exportPdf: () => void;
 }
 
 /**
@@ -42,6 +43,10 @@ export function useTabKeyboard(shortcuts: TabShortcuts): void {
       } else if (e.code === "KeyE") {
         e.preventDefault();
         shortcuts.toggleMode();
+      } else if (e.code === "KeyP") {
+        // Our export prints just the document; suppress the webview's print-the-whole-UI.
+        e.preventDefault();
+        shortcuts.exportPdf();
       } else if (e.code === "KeyF") {
         // Let CodeMirror handle its own search when the editor is focused.
         if (document.activeElement?.closest(".cm-editor")) return;

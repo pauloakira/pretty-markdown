@@ -735,3 +735,62 @@ body {
   color: var(--accent-fg);
   border-color: var(--accent);
 }
+
+/* ---- Print / PDF export --------------------------------------------------- */
+/* The exporter injects #print-root with the document HTML; it's hidden on screen
+   and swapped in for the app UI when printing (→ "Save as PDF"). */
+#print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 2cm;
+  }
+  html,
+  body {
+    height: auto;
+    background: #fff;
+  }
+  #root {
+    display: none !important;
+  }
+  #print-root {
+    display: block !important;
+  }
+  #print-root .reader {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    color: #000;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  #print-root a {
+    color: #000;
+    text-decoration: underline;
+  }
+  #print-root img {
+    max-width: 100%;
+  }
+  /* Let wide equations overflow rather than clip (no scrollbars on paper). */
+  #print-root .katex-display {
+    overflow: visible;
+  }
+  /* Keep these blocks whole across page breaks, and don't orphan headings. */
+  #print-root .katex-display,
+  #print-root .pm-math--block,
+  #print-root pre,
+  #print-root table,
+  #print-root blockquote,
+  #print-root figure {
+    break-inside: avoid;
+  }
+  #print-root h1,
+  #print-root h2,
+  #print-root h3,
+  #print-root h4 {
+    break-after: avoid;
+  }
+}

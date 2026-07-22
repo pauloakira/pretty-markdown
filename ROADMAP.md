@@ -47,7 +47,9 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Recent files list on the welcome screen (persisted, click to reopen).
 - [x] File-watch: reload on external change (silent when clean; Reload/Keep banner when dirty).
 
-## Post-v1 (deferred)
-- Full TeX engine / TikZ (opt-in renderer).
-- Export to PDF.
-- Plugin/theme system.
+## Post-v1
+- [x] Export to PDF — print-to-PDF (`⌘P` / toolbar): document-only print layout, vector
+      math (KaTeX fonts / MathJax SVG), page-break rules. *(Phase 1; native dialog-free
+      export with page numbers is a possible Phase 2.)*
+- [ ] Full TeX engine / TikZ (opt-in renderer).
+- [ ] Plugin/theme system.

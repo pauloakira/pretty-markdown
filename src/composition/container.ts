@@ -2,10 +2,12 @@ import { DocumentService } from "../application/services/DocumentService";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { AppWindow } from "../domain/ports/AppWindow";
+import type { DocumentExporter } from "../domain/ports/DocumentExporter";
 import type { MacroMap } from "../domain/ports/MathRenderer";
 import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepository";
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
+import { PrintDocumentExporter } from "../infrastructure/export/PrintDocumentExporter";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { MathJaxRenderer } from "../infrastructure/math/MathJaxRenderer";
@@ -34,6 +36,7 @@ export interface Container {
   readonly recentFilesRepository: RecentFilesRepository;
   readonly sessionService: SessionService;
   readonly appWindow: AppWindow;
+  readonly documentExporter: DocumentExporter;
 }
 
 export function createContainer(): Container {
@@ -51,6 +54,7 @@ export function createContainer(): Container {
   const recentFilesRepository = new LocalStorageRecentFilesRepository();
   const sessionService = new SessionService(new TauriSessionRepository(), documentService);
   const appWindow = new TauriAppWindow();
+  const documentExporter = new PrintDocumentExporter();
 
   return {
     documentService,
@@ -60,5 +64,6 @@ export function createContainer(): Container {
     recentFilesRepository,
     sessionService,
     appWindow,
+    documentExporter,
   };
 }

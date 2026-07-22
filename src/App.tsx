@@ -42,6 +42,7 @@ export default function App() {
     updateContent,
     saveTab,
     saveTabAs,
+    exportPdf,
   } = useWorkspace();
 
   const { settings, update: updateSettings, reset: resetSettings } = useSettings();
@@ -109,6 +110,9 @@ export default function App() {
       closeFind();
     }
   }, [active, toggleMode, closeFind]);
+  const exportActive = useCallback(() => {
+    if (active) void exportPdf(active.document);
+  }, [active, exportPdf]);
 
   const shortcuts = useMemo(
     () => ({
@@ -122,8 +126,9 @@ export default function App() {
       save: saveActive,
       saveAs: saveActiveAs,
       toggleMode: toggleActiveMode,
+      exportPdf: exportActive,
     }),
-    [openViaDialog, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode],
+    [openViaDialog, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
   );
   useTabKeyboard(shortcuts);
 
@@ -160,6 +165,7 @@ export default function App() {
           dirty={dirty}
           onToggleMode={toggleActiveMode}
           onSave={saveActive}
+          onExportPdf={exportActive}
         />
       )}
       <main className="app__content">
