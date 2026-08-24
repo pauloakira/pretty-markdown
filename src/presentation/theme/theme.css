@@ -10,6 +10,25 @@
 
   color-scheme: light;
 
+  /*
+   * Dark palette values — a deep, neutral near-black in the spirit of VS Code's dark
+   * themes, with the chrome darker than the content so the tab bar recedes behind the
+   * document. Defined here (unused until a dark selector below maps them in) so the
+   * colors have exactly one home; tune the theme by editing only this block.
+   */
+  --d-bg: #1a1a1a;
+  --d-bg-elevated: #121212;
+  --d-fg: #e6e6e6;
+  --d-fg-muted: #949494;
+  --d-border: #2b2b2b;
+  --d-accent: #7fb0f2;
+  --d-accent-fg: #14161a;
+  --d-code-bg: #242424;
+  --d-error-bg: #3a2626;
+  --d-error-fg: #f2b8b5;
+  --d-error-border: #6b3a37;
+
+  /* Active tokens — light by default. */
   --bg: #ffffff;
   --bg-elevated: #f6f7f9;
   --fg: #1a1d21;
@@ -24,45 +43,41 @@
 }
 
 /*
- * Dark palette — a neutral near-black (no blue cast), with the chrome darker than the
- * content so the tab bar recedes behind the document.
- *
- * Applied in two cases, and the two blocks must stay in sync:
- *   1. the OS is dark and the user hasn't forced light;
- *   2. the user explicitly chose dark in Settings (`data-theme="dark"`).
+ * Switch the active tokens to the dark palette, either when the OS is dark and the user
+ * hasn't forced light, or when they explicitly chose dark in Settings.
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #212121;
-    --bg-elevated: #171717;
-    --fg: #ececec;
-    --fg-muted: #9b9b9b;
-    --border: #343434;
-    --accent: #8ab4f8;
-    --accent-fg: #1c1c1c;
-    --code-bg: #2f2f2f;
-    --error-bg: #3a2626;
-    --error-fg: #f2b8b5;
-    --error-border: #6b3a37;
+    --bg: var(--d-bg);
+    --bg-elevated: var(--d-bg-elevated);
+    --fg: var(--d-fg);
+    --fg-muted: var(--d-fg-muted);
+    --border: var(--d-border);
+    --accent: var(--d-accent);
+    --accent-fg: var(--d-accent-fg);
+    --code-bg: var(--d-code-bg);
+    --error-bg: var(--d-error-bg);
+    --error-fg: var(--d-error-fg);
+    --error-border: var(--d-error-border);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #212121;
-  --bg-elevated: #171717;
-  --fg: #ececec;
-  --fg-muted: #9b9b9b;
-  --border: #343434;
-  --accent: #8ab4f8;
-  --accent-fg: #1c1c1c;
-  --code-bg: #2f2f2f;
-  --error-bg: #3a2626;
-  --error-fg: #f2b8b5;
-  --error-border: #6b3a37;
+  --bg: var(--d-bg);
+  --bg-elevated: var(--d-bg-elevated);
+  --fg: var(--d-fg);
+  --fg-muted: var(--d-fg-muted);
+  --border: var(--d-border);
+  --accent: var(--d-accent);
+  --accent-fg: var(--d-accent-fg);
+  --code-bg: var(--d-code-bg);
+  --error-bg: var(--d-error-bg);
+  --error-fg: var(--d-error-fg);
+  --error-border: var(--d-error-border);
 }
 
 * {
