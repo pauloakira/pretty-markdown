@@ -8,6 +8,8 @@
   --reading-width: 46rem;
   --reader-font-scale: 1;
 
+  color-scheme: light;
+
   --bg: #ffffff;
   --bg-elevated: #f6f7f9;
   --fg: #1a1d21;
@@ -21,20 +23,46 @@
   --error-border: #f2b8b5;
 }
 
+/*
+ * Dark palette — a neutral near-black (no blue cast), with the chrome darker than the
+ * content so the tab bar recedes behind the document.
+ *
+ * Applied in two cases, and the two blocks must stay in sync:
+ *   1. the OS is dark and the user hasn't forced light;
+ *   2. the user explicitly chose dark in Settings (`data-theme="dark"`).
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1a1d21;
-    --bg-elevated: #23272d;
-    --fg: #e7eaee;
-    --fg-muted: #9aa3af;
-    --border: #333a43;
-    --accent: #6ea8d8;
-    --accent-fg: #14171a;
-    --code-bg: #23272d;
-    --error-bg: #3a2222;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #212121;
+    --bg-elevated: #171717;
+    --fg: #ececec;
+    --fg-muted: #9b9b9b;
+    --border: #343434;
+    --accent: #8ab4f8;
+    --accent-fg: #1c1c1c;
+    --code-bg: #2f2f2f;
+    --error-bg: #3a2626;
     --error-fg: #f2b8b5;
     --error-border: #6b3a37;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #212121;
+  --bg-elevated: #171717;
+  --fg: #ececec;
+  --fg-muted: #9b9b9b;
+  --border: #343434;
+  --accent: #8ab4f8;
+  --accent-fg: #1c1c1c;
+  --code-bg: #2f2f2f;
+  --error-bg: #3a2626;
+  --error-fg: #f2b8b5;
+  --error-border: #6b3a37;
 }
 
 * {
@@ -669,6 +697,14 @@ body {
 .segmented__btn--active {
   background: var(--accent);
   color: var(--accent-fg);
+}
+/* Full-width variant used in the settings panel. */
+.segmented--full {
+  display: flex;
+}
+.segmented--full .segmented__btn {
+  flex: 1;
+  padding: 0.35rem 0;
 }
 
 /* ---- Edit mode (split pane) ----------------------------------------------- */

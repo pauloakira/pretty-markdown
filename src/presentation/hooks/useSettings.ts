@@ -16,6 +16,9 @@ export function useSettings() {
     const root = document.documentElement;
     root.style.setProperty("--reading-width", `${settings.readingWidthRem}rem`);
     root.style.setProperty("--reader-font-scale", String(settings.fontScalePct / 100));
+    // No attribute = follow the OS (the prefers-color-scheme block in theme.css).
+    if (settings.theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", settings.theme);
   }, [settings]);
 
   const update = useCallback(

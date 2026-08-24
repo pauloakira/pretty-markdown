@@ -2,8 +2,15 @@ import { useEffect } from "react";
 import {
   FONT_SCALE,
   READING_WIDTH,
+  THEMES,
   type Settings,
 } from "../../domain/values/Settings";
+
+const THEME_LABELS: Record<string, string> = {
+  system: "System",
+  light: "Light",
+  dark: "Dark",
+};
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -34,6 +41,26 @@ export function SettingsPanel({ settings, onUpdate, onReset, onClose }: Settings
           <button className="settings-panel__close" aria-label="Close settings" onClick={onClose}>
             ×
           </button>
+        </div>
+
+        <div className="settings-field">
+          <span className="settings-field__label">Theme</span>
+          <div className="segmented segmented--full" role="group" aria-label="Theme">
+            {THEMES.map((theme) => (
+              <button
+                key={theme}
+                className={`segmented__btn ${
+                  settings.theme === theme ? "segmented__btn--active" : ""
+                }`}
+                onClick={() => onUpdate({ theme })}
+              >
+                {THEME_LABELS[theme]}
+              </button>
+            ))}
+          </div>
+          <span className="settings-field__hint">
+            System follows your macOS appearance.
+          </span>
         </div>
 
         <label className="settings-field">

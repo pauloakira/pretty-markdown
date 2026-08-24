@@ -13,14 +13,27 @@ describe("Settings", () => {
   });
 
   it("clamps out-of-range values", () => {
-    const clamped = clampSettings({ readingWidthRem: 999, fontScalePct: 5 });
+    const clamped = clampSettings({ readingWidthRem: 999, fontScalePct: 5, theme: "dark" });
     expect(clamped.readingWidthRem).toBe(READING_WIDTH.max);
     expect(clamped.fontScalePct).toBe(FONT_SCALE.min);
   });
 
   it("rounds and coerces invalid numbers", () => {
-    const clamped = clampSettings({ readingWidthRem: 46.7, fontScalePct: Number.NaN });
+    const clamped = clampSettings({
+      readingWidthRem: 46.7,
+      fontScalePct: Number.NaN,
+      theme: "system",
+    });
     expect(clamped.readingWidthRem).toBe(47);
     expect(clamped.fontScalePct).toBe(FONT_SCALE.min);
+  });
+
+  it("keeps a valid theme and falls back on an unknown one", () => {
+    expect(clampSettings({ ...defaultSettings, theme: "dark" }).theme).toBe("dark");
+    // e.g. a value from an older/corrupt stored payload
+    const bogus = { ...defaultSettings, theme: "solarized" } as unknown as Parameters<
+      typeof clampSettings
+    >[0];
+    expect(clampSettings(bogus).theme).toBe("system");
   });
 });

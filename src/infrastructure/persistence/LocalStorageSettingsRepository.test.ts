@@ -12,8 +12,8 @@ describe("LocalStorageSettingsRepository", () => {
   });
 
   it("round-trips saved settings", () => {
-    repo.save({ readingWidthRem: 60, fontScalePct: 120 });
-    expect(repo.load()).toEqual({ readingWidthRem: 60, fontScalePct: 120 });
+    repo.save({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" });
+    expect(repo.load()).toEqual({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" });
   });
 
   it("clamps and backfills partial/out-of-range stored data", () => {
