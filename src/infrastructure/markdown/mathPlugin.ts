@@ -39,19 +39,28 @@ export interface MathPluginOptions {
 }
 
 /**
- * markdown-it plugin that recognises `$...$` (inline) and `$$...$$` (block) math and
- * emits `math_inline` / `math_block` tokens carrying the raw LaTeX. Rendering is then
- * delegated to the injected {@link MathRenderer}, keeping the parser independent of the
- * math engine (see ARCHITECTURE.md §2). Tokenisation adapted from waylonflinn's
- * `markdown-it-katex` (MIT).
+ * markdown-it plugin that recognises math in both common dialects and emits
+ * `math_inline` / `math_block` tokens carrying the raw LaTeX:
+ *
+ *   - `$…$` / `$$…$$`   — the markdown convention;
+ *   - `\(…\)` / `\[…\]` — the LaTeX convention, which Pandoc, LaTeX exports and most AI
+ *     assistants emit. Without this, such documents leak their source as literal text.
+ *
+ * Rendering is delegated to the injected {@link MathRenderer}, keeping the parser
+ * independent of the math engine (see ARCHITECTURE.md §2). Tokenisation adapted from
+ * waylonflinn's `markdown-it-katex` (MIT).
  */
 export function mathPlugin(md: MarkdownIt, options: MathPluginOptions): void {
   const { renderer, getMacros } = options;
 
+  // `\(` and `\[` must be matched *before* markdown-it's `escape` rule, which would
+  // otherwise consume the backslash and leave a literal "(" behind.
+  md.inline.ruler.before("escape", "math_inline_latex", mathInlineLatex);
   md.inline.ruler.after("escape", "math_inline", mathInline);
-  md.block.ruler.after("blockquote", "math_block", mathBlock, {
-    alt: ["paragraph", "reference", "blockquote", "list"],
-  });
+
+  const blockOpts = { alt: ["paragraph", "reference", "blockquote", "list"] };
+  md.block.ruler.after("blockquote", "math_block", dollarMathBlock, blockOpts);
+  md.block.ruler.after("math_block", "math_block_latex", bracketMathBlock, blockOpts);
 
   md.renderer.rules.math_inline = (tokens, idx) =>
     toHtml(renderer, tokens[idx].content, false, getMacros?.());
@@ -158,55 +167,92 @@ function mathInline(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-function mathBlock(
-  state: StateBlock,
-  start: number,
-  end: number,
-  silent: boolean,
-): boolean {
-  let pos = state.bMarks[start] + state.tShift[start];
-  let max = state.eMarks[start];
+/**
+ * LaTeX-style math: `\(…\)` inline and `\[…\]` display. Runs before the `escape` rule, so
+ * an unclosed `\(` falls through and still escapes to a literal "(" as markdown expects.
+ */
+function mathInlineLatex(state: StateInline, silent: boolean): boolean {
+  const src = state.src;
+  const start = state.pos;
+  if (src.charCodeAt(start) !== 0x5c /* \ */) return false;
 
-  if (pos + 2 > max) return false;
-  if (state.src.slice(pos, pos + 2) !== "$$") return false;
+  const opener = src[start + 1];
+  if (opener !== "(" && opener !== "[") return false;
 
-  pos += 2;
-  let firstLine = state.src.slice(pos, max);
-  if (silent) return true;
+  const display = opener === "[";
+  const closer = display ? "\\]" : "\\)";
+  const contentStart = start + 2;
+  const closeAt = src.indexOf(closer, contentStart);
+  if (closeAt === -1) return false; // unclosed — let `escape` handle the backslash
 
-  let found = false;
-  let lastLine = "";
-  if (firstLine.trim().slice(-2) === "$$") {
-    firstLine = firstLine.trim().slice(0, -2); // single-line `$$ ... $$`
-    found = true;
+  if (!silent) {
+    // Display math inside a paragraph still renders as a block-level formula.
+    const token = state.push(display ? "math_block" : "math_inline", "math", 0);
+    token.markup = display ? "\\[" : "\\(";
+    token.content = src.slice(contentStart, closeAt);
   }
-
-  let next = start;
-  while (!found) {
-    next += 1;
-    if (next >= end) break;
-    pos = state.bMarks[next] + state.tShift[next];
-    max = state.eMarks[next];
-    if (pos < max && state.tShift[next] < state.blkIndent) break;
-    if (state.src.slice(pos, max).trim().slice(-2) === "$$") {
-      const lastPos = state.src.slice(0, max).lastIndexOf("$$");
-      lastLine = state.src.slice(pos, lastPos);
-      found = true;
-    }
-  }
-
-  state.line = next + 1;
-
-  const token = state.push("math_block", "math", 0);
-  token.block = true;
-  token.content =
-    (firstLine.trim() ? firstLine + "\n" : "") +
-    state.getLines(start + 1, next, state.tShift[start], true) +
-    (lastLine.trim() ? lastLine : "");
-  token.map = [start, state.line];
-  token.markup = "$$";
+  state.pos = closeAt + closer.length;
   return true;
 }
+
+/**
+ * Builds a block rule for display math delimited by `open`/`close` (`$$…$$` or `\[…\]`),
+ * spanning one or more lines.
+ */
+function makeMathBlockRule(open: string, close: string) {
+  return function mathBlockRule(
+    state: StateBlock,
+    start: number,
+    end: number,
+    silent: boolean,
+  ): boolean {
+    let pos = state.bMarks[start] + state.tShift[start];
+    let max = state.eMarks[start];
+
+    if (pos + open.length > max) return false;
+    if (state.src.slice(pos, pos + open.length) !== open) return false;
+
+    pos += open.length;
+    let firstLine = state.src.slice(pos, max);
+    if (silent) return true;
+
+    let found = false;
+    let lastLine = "";
+    if (firstLine.trim().slice(-close.length) === close) {
+      firstLine = firstLine.trim().slice(0, -close.length); // single-line `$$ … $$`
+      found = true;
+    }
+
+    let next = start;
+    while (!found) {
+      next += 1;
+      if (next >= end) break;
+      pos = state.bMarks[next] + state.tShift[next];
+      max = state.eMarks[next];
+      if (pos < max && state.tShift[next] < state.blkIndent) break;
+      if (state.src.slice(pos, max).trim().slice(-close.length) === close) {
+        const lastPos = state.src.slice(0, max).lastIndexOf(close);
+        lastLine = state.src.slice(pos, lastPos);
+        found = true;
+      }
+    }
+
+    state.line = next + 1;
+
+    const token = state.push("math_block", "math", 0);
+    token.block = true;
+    token.content =
+      (firstLine.trim() ? firstLine + "\n" : "") +
+      state.getLines(start + 1, next, state.tShift[start], true) +
+      (lastLine.trim() ? lastLine : "");
+    token.map = [start, state.line];
+    token.markup = open;
+    return true;
+  };
+}
+
+const dollarMathBlock = makeMathBlockRule("$$", "$$");
+const bracketMathBlock = makeMathBlockRule("\\[", "\\]");
 
 function escapeHtml(s: string): string {
   return s

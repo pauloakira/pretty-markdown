@@ -67,3 +67,40 @@ describe("MarkdownPipeline", () => {
     expect(html).not.toContain("math-error");
   });
 });
+
+describe("MarkdownPipeline — LaTeX-style delimiters", () => {
+  it("renders \\(...\\) inline math instead of escaping the backslash", () => {
+    const html = makePipeline().render("A beam of length \\(L\\) is clamped.");
+    expect(html).toContain("katex");
+    // The old behaviour leaked the source as a literal "(L)".
+    expect(html).not.toContain("(L)");
+    expect(html).toContain('data-tex="L"');
+  });
+
+  it("renders \\[...\\] as display math", () => {
+    const html = makePipeline().render("\\[\nE = mc^2\n\\]");
+    expect(html).toContain("katex-display");
+    expect(html).not.toContain("\\[");
+  });
+
+  it("handles \\(...\\) inside table cells", () => {
+    const html = makePipeline().render(
+      ["| \\(n_{\\mathrm{el}}\\) | \\(k=3\\) |", "|---|---|", "| 1 | 4 |"].join("\n"),
+    );
+    expect(html).toContain("<table>");
+    // Rendered inside the header cell, not leaked as literal text.
+    expect(html).toContain('<th><span class="pm-math"');
+    expect(html).toContain('data-tex="n_{\\mathrm{el}}"');
+  });
+
+  it("still escapes an unclosed \\( to a literal paren", () => {
+    const html = makePipeline().render("cost \\(approx");
+    expect(html).toContain("(approx");
+    expect(html).not.toContain("katex");
+  });
+
+  it("keeps $...$ and \\(...\\) working in the same document", () => {
+    const html = makePipeline().render("Both $a$ and \\(b\\) render.");
+    expect((html.match(/class="pm-math"/g) ?? []).length).toBe(2);
+  });
+});
