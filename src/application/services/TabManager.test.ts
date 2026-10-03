@@ -84,4 +84,53 @@ describe("TabManager", () => {
     manager.openDocument(doc("/a.md"));
     expect(listener).not.toHaveBeenCalled();
   });
+
+  describe("tab groups", () => {
+    it("creates an unnamed group with a fresh color and id", () => {
+      const manager = new TabManager();
+      manager.openDocument(doc("/a.md"));
+      manager.openDocument(doc("/b.md"));
+      const [a, b] = manager.getSnapshot().tabs;
+
+      const first = manager.createGroup(a.id);
+      const second = manager.createGroup(b.id);
+      const { groups } = manager.getSnapshot();
+      expect(first).not.toBe(second);
+      expect(groups.map((g) => [g.name, g.color])).toEqual([["", "blue"], ["", "red"]]);
+      expect(manager.createGroup("nope")).toBeNull();
+    });
+
+    it("counts only visible tabs for ⌘1–9", () => {
+      const manager = new TabManager();
+      ["/a.md", "/b.md", "/c.md"].forEach((p) => manager.openDocument(doc(p)));
+      const [a, b] = manager.getSnapshot().tabs;
+      const group = manager.createGroup(b.id) as string;
+      manager.activateTab(a.id);
+      manager.toggleGroupCollapsed(group);
+
+      manager.activateIndex(1); // a, [b hidden], c
+      expect(activeTab(manager.getSnapshot())?.document.path).toBe("/c.md");
+    });
+
+    it("restores groups from the session, mapping indexes to new ids", () => {
+      const manager = new TabManager();
+      manager.restore(
+        [
+          { document: doc("/a.md"), mode: "reader", scrollTop: 0, group: 0 },
+          { document: doc("/b.md"), mode: "reader", scrollTop: 0, group: null },
+          { document: doc("/c.md"), mode: "reader", scrollTop: 0, group: 0 },
+        ],
+        [
+          { name: "PoliVEM", color: "blue", collapsed: true },
+          { name: "Empty", color: "red", collapsed: false },
+        ],
+        1,
+      );
+      const ws = manager.getSnapshot();
+      expect(ws.groups).toHaveLength(1); // "Empty" lost all its tabs
+      expect(ws.groups[0]).toMatchObject({ name: "PoliVEM", collapsed: true });
+      expect(ws.tabs.map((t) => t.document.path)).toEqual(["/a.md", "/c.md", "/b.md"]);
+      expect(activeTab(ws)?.document.path).toBe("/b.md");
+    });
+  });
 });

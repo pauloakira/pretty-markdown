@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
+import type { GroupId } from "./domain/entities/TabGroup";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
@@ -32,11 +33,13 @@ export default function App() {
     renderMarkdown,
     open,
     openPath,
+    openInGroup,
+    groupActions,
     closeTab,
     activateTab,
     focusSibling,
     activateIndex,
-    moveTab,
+    dropTab,
     persistScroll,
     toggleMode,
     updateContent,
@@ -61,12 +64,21 @@ export default function App() {
     },
     [openPath, rememberRecent],
   );
+  const openIntoGroup = useCallback(
+    async (groupId: GroupId) => {
+      const doc = await openInGroup(groupId);
+      if (doc?.path) rememberRecent({ path: doc.path, name: doc.name });
+    },
+    [openInGroup, rememberRecent],
+  );
   // Files opened from Finder (double-click / file association).
   useFileOpen(openRecent);
   // Reload documents that change on disk (or flag a conflict if they have unsaved edits).
   const fileWatch = useFileWatch(workspace.tabs);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pendingCloseId, setPendingCloseId] = useState<TabId | null>(null);
+  // Dirty tabs waiting for a save prompt, one at a time (closing a group or "other tabs"
+  // can queue several).
+  const [closeQueue, setCloseQueue] = useState<readonly TabId[]>([]);
   const [quitPromptOpen, setQuitPromptOpen] = useState(false);
 
   const readerRef = useRef<HTMLDivElement>(null);
@@ -85,15 +97,22 @@ export default function App() {
     }
   }, [active, mode, persistScroll]);
 
-  // Closing a dirty tab routes through a save prompt.
-  const requestClose = useCallback(
-    (id: TabId) => {
-      const tab = workspace.tabs.find((t) => t.id === id);
-      if (tab && isTabDirty(tab)) setPendingCloseId(id);
-      else closeTab(id);
+  // Closing dirty tabs routes through a save prompt; clean ones close right away.
+  const requestCloseMany = useCallback(
+    (ids: readonly TabId[]) => {
+      const dirty: TabId[] = [];
+      for (const id of ids) {
+        const tab = workspace.tabs.find((t) => t.id === id);
+        if (tab && isTabDirty(tab)) dirty.push(id);
+        else closeTab(id);
+      }
+      if (dirty.length > 0) {
+        setCloseQueue((queue) => [...queue, ...dirty.filter((id) => !queue.includes(id))]);
+      }
     },
     [workspace, closeTab],
   );
+  const requestClose = useCallback((id: TabId) => requestCloseMany([id]), [requestCloseMany]);
 
   const closeActive = useCallback(() => {
     if (active) requestClose(active.id);
@@ -140,21 +159,24 @@ export default function App() {
   useQuitGuard(onCloseRequest);
 
   const hasTabs = workspace.tabs.length > 0;
-  const pendingTab = pendingCloseId
-    ? workspace.tabs.find((t) => t.id === pendingCloseId)
-    : null;
+  const pendingTab = closeQueue
+    .map((id) => workspace.tabs.find((t) => t.id === id))
+    .find((t) => t !== undefined);
+  const settleClose = (id: TabId) => setCloseQueue((queue) => queue.filter((q) => q !== id));
 
   return (
     <div className="app">
       {hasTabs && (
         <TabBar
-          tabs={workspace.tabs}
-          activeTabId={workspace.activeTabId}
+          workspace={workspace}
           busy={busy}
+          groups={groupActions}
           onSelect={activateTab}
           onClose={requestClose}
+          onCloseMany={requestCloseMany}
           onNew={openViaDialog}
-          onReorder={moveTab}
+          onNewInGroup={(groupId) => void openIntoGroup(groupId)}
+          onDrop={dropTab}
           onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
@@ -233,15 +255,15 @@ export default function App() {
           name={pendingTab.document.name}
           onSave={async () => {
             const id = pendingTab.id;
-            setPendingCloseId(null);
+            settleClose(id);
             if (await saveTab(id)) closeTab(id);
           }}
           onDiscard={() => {
             const id = pendingTab.id;
-            setPendingCloseId(null);
+            settleClose(id);
             closeTab(id);
           }}
-          onCancel={() => setPendingCloseId(null)}
+          onCancel={() => setCloseQueue([])}
         />
       )}
       {quitPromptOpen && (

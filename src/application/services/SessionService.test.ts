@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { createDocument } from "../../domain/entities/Document";
 import { createTab } from "../../domain/entities/Tab";
-import { addTab, emptyWorkspace, updateContent } from "../../domain/entities/Workspace";
+import { createGroup } from "../../domain/entities/TabGroup";
+import {
+  addTab,
+  emptyWorkspace,
+  groupTabsInto,
+  updateContent,
+  updateGroup,
+} from "../../domain/entities/Workspace";
 import type {
   FilePicker,
   FileReader,
@@ -57,12 +64,13 @@ function documentsWith(files: Record<string, string>): DocumentService {
 describe("SessionService", () => {
   it("restores only the files that still exist", async () => {
     const repo = new FakeSessionRepository({
-      version: 1,
+      version: 2,
       activeIndex: 0,
       tabs: [
-        { path: "/a.md", mode: "reader", scrollTop: 0 },
-        { path: "/missing.md", mode: "edit", scrollTop: 5 },
+        { path: "/a.md", mode: "reader", scrollTop: 0, group: 0 },
+        { path: "/missing.md", mode: "edit", scrollTop: 5, group: null },
       ],
+      groups: [{ name: "Notes", color: "green", collapsed: false }],
     });
     const service = new SessionService(repo, documentsWith({ "/a.md": "# A" }));
 
@@ -70,6 +78,8 @@ describe("SessionService", () => {
     expect(restored.tabs).toHaveLength(1);
     expect(restored.tabs[0].document.path).toBe("/a.md");
     expect(restored.tabs[0].document.content).toBe("# A");
+    expect(restored.tabs[0].group).toBe(0);
+    expect(restored.groups).toEqual([{ name: "Notes", color: "green", collapsed: false }]);
   });
 
   it("returns nothing when there is no saved session", async () => {
@@ -83,7 +93,7 @@ describe("SessionService", () => {
     const ws = addTab(emptyWorkspace, createTab("t1", createDocument("/doc.md", "# Doc")));
 
     await service.persist(ws);
-    expect(repo.saved?.tabs).toEqual([{ path: "/doc.md", mode: "reader", scrollTop: 0 }]);
+    expect(repo.saved?.tabs).toEqual([{ path: "/doc.md", mode: "reader", scrollTop: 0, group: null }]);
   });
 
   it("clears the saved session", async () => {
@@ -119,9 +129,10 @@ describe("SessionService", () => {
 
     it("treats the restored session as the baseline (no rewrite on launch)", async () => {
       const stored = {
-        version: 1 as const,
+        version: 2 as const,
         activeIndex: 0,
-        tabs: [{ path: "/a.md", mode: "reader" as const, scrollTop: 0 }],
+        tabs: [{ path: "/a.md", mode: "reader" as const, scrollTop: 0, group: null }],
+        groups: [],
       };
       const repo = new FakeSessionRepository(stored);
       const service = new SessionService(repo, documentsWith({ "/a.md": "# A" }));
@@ -129,6 +140,18 @@ describe("SessionService", () => {
 
       expect(await service.autosave(withA)).toBe(false);
       expect(repo.saves).toBe(0);
+    });
+
+    it("writes when tabs are grouped or a group changes", async () => {
+      const repo = new FakeSessionRepository(null);
+      const service = new SessionService(repo, documentsWith({}));
+      await service.autosave(withAB);
+
+      const grouped = groupTabsInto(withAB, ["t1", "t2"], createGroup("g", "", "blue"));
+      expect(await service.autosave(grouped)).toBe(true);
+      expect(await service.autosave(updateGroup(grouped, "g", { name: "PoliVEM" }))).toBe(true);
+      expect(repo.saved?.groups).toEqual([{ name: "PoliVEM", color: "blue", collapsed: false }]);
+      expect(repo.saved?.tabs.map((t) => t.group)).toEqual([0, 0]);
     });
 
     it("stays off after the user opts out, so a late write can't undo 'don't reopen'", async () => {

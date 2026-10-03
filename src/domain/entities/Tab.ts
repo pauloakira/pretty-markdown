@@ -1,5 +1,6 @@
 import { initialViewState, type ViewState } from "../values/ViewState";
 import type { Document } from "./Document";
+import type { GroupId } from "./TabGroup";
 
 export type TabId = string;
 
@@ -17,6 +18,8 @@ export interface Tab {
   readonly savedContent: string;
   /** Bumped when content is reloaded from disk, to force the editor to remount. */
   readonly revision: number;
+  /** The tab group this tab belongs to, or null when ungrouped. */
+  readonly groupId: GroupId | null;
 }
 
 export function createTab(id: TabId, document: Document): Tab {
@@ -26,6 +29,7 @@ export function createTab(id: TabId, document: Document): Tab {
     viewState: initialViewState,
     savedContent: document.content,
     revision: 0,
+    groupId: null,
   };
 }
 

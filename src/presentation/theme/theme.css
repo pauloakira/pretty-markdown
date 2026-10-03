@@ -40,6 +40,22 @@
   --error-bg: #fdecec;
   --error-fg: #b3261e;
   --error-border: #f2b8b5;
+
+  /*
+   * Tab-group palette (Chrome's). light-dark() follows the active color-scheme, which
+   * every theme selector below sets, so each hue has one home for both themes.
+   */
+  --group-grey: light-dark(#5f6368, #bdc1c6);
+  --group-blue: light-dark(#1a73e8, #8ab4f8);
+  --group-red: light-dark(#d93025, #f28b82);
+  --group-yellow: light-dark(#b26c00, #fdd663);
+  --group-green: light-dark(#1e8e3e, #81c995);
+  --group-pink: light-dark(#d01884, #ff8bcb);
+  --group-purple: light-dark(#9334e6, #c58af9);
+  --group-cyan: light-dark(#007b83, #78d9ec);
+  --group-orange: light-dark(#e8710a, #fcad70);
+  /* Text on a group-colored chip. */
+  --group-fg: light-dark(#ffffff, #121212);
 }
 
 /*
@@ -113,6 +129,9 @@ body {
 
 /* ---- Tab bar -------------------------------------------------------------- */
 .tabbar {
+  --tab-min: 64px;
+  --chip-min: 72px; /* below this a group name is unreadable: scroll instead */
+  position: relative; /* anchor for the drag hint */
   display: flex;
   align-items: stretch;
   height: 40px;
@@ -120,39 +139,91 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/*
+ * The tab strip. Tabs shrink to fit (like Chrome) and only scroll once they hit their
+ * minimum width. The scrollbar is hidden — it ate into the tabs' height, and macOS shows
+ * it permanently with "Show scroll bars: Always" — so the strip scrolls by wheel/trackpad
+ * and keeps the active tab in view; faded edges show there's more (see useTabStrip).
+ */
 .tabbar__list {
+  --strip-fade: 32px;
   display: flex;
-  flex: 1;
+  flex: 0 1 auto; /* hug the tabs so "+" sits right after the last one */
+  min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabbar__list::-webkit-scrollbar {
+  display: none;
+}
+.tabbar__list--fade-start {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade));
+}
+.tabbar__list--fade-end {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 var(--strip-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--strip-fade));
+}
+.tabbar__list--fade-start.tabbar__list--fade-end {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--strip-fade),
+    #000 calc(100% - var(--strip-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--strip-fade),
+    #000 calc(100% - var(--strip-fade)),
+    transparent
+  );
 }
 
+/*
+ * A tab's underline (active accent, or its group's color) and the drag insertion marker
+ * are two layers of one box-shadow, set through variables so they can coexist.
+ */
 .tab {
+  --tab-line: transparent;
+  --tab-insert: 0;
+  container-type: inline-size; /* narrow tabs drop their close button, below */
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  min-width: 120px;
-  max-width: 220px;
-  padding: 0 0.35rem 0 0.85rem;
+  gap: 0.3rem;
+  /* An explicit width (not just flex-basis): with size containment the strip measures
+     tabs by it when it hugs its contents. */
+  width: 200px;
+  flex: 0 1 auto;
+  min-width: var(--tab-min);
+  padding: 0 0.35rem 0 0.8rem;
   border-right: 1px solid var(--border);
   color: var(--fg-muted);
   font-size: 0.85rem;
   cursor: pointer;
   user-select: none;
+  box-shadow:
+    inset var(--tab-insert) 0 0 var(--accent),
+    inset 0 -2px 0 var(--tab-line);
 }
 .tab:hover {
   background: color-mix(in srgb, var(--bg) 50%, var(--bg-elevated));
 }
 .tab--active {
+  --tab-line: var(--accent);
   background: var(--bg);
   color: var(--fg);
-  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab--grouped {
+  --tab-line: var(--group-color);
 }
 .tab--insert-before {
-  box-shadow: inset 2px 0 0 var(--accent);
+  --tab-insert: 2px;
 }
 .tab--insert-after {
-  box-shadow: inset -2px 0 0 var(--accent);
+  --tab-insert: -2px;
 }
 .tab--dragging {
   opacity: 0.5;
@@ -184,6 +255,12 @@ body {
   background: var(--border);
   opacity: 1;
 }
+/* Squeezed tabs keep their title; the close button stays only on the active one. */
+@container (max-width: 96px) {
+  .tab:not(.tab--active) .tab__close {
+    display: none;
+  }
+}
 
 .tabbar__new,
 .tabbar__settings {
@@ -198,7 +275,9 @@ body {
 .tabbar__new {
   font-size: 1.2rem;
 }
+/* "+" follows the tabs; the settings button stays pinned to the far right. */
 .tabbar__settings {
+  margin-left: auto;
   border-left: 1px solid var(--border);
 }
 .tabbar__new:hover:not(:disabled),
@@ -636,6 +715,223 @@ body {
 .welcome__settings:hover {
   background: var(--bg-elevated);
   color: var(--fg);
+}
+
+/* ---- Tab groups ----------------------------------------------------------- */
+/* One group as a unit in the bar: chip + its tabs (what a chip drag moves). */
+.tabgroup {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: stretch;
+  /* Shrink in step with loose tabs, but never below its own tabs' minimums (the box
+     would otherwise refuse to shrink at all: its tabs' 200px width sets its min-content). */
+  min-width: calc(var(--group-tabs, 0) * var(--tab-min) + var(--chip-min));
+}
+/* An unnamed group's chip is just a dot. */
+.tabgroup:has(.tabgroup__chip--unnamed) {
+  --chip-min: 34px;
+}
+.tabgroup--dragging {
+  opacity: 0.45;
+}
+.tabgroup--insert-before::before,
+.tabgroup--insert-after::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.tabgroup--insert-before::before {
+  left: 0;
+}
+.tabgroup--insert-after::after {
+  right: 0;
+}
+/* The chip that heads a group; shares the group's underline with its tabs. */
+.tabgroup__head {
+  flex: 0 0.15 auto; /* chips give way far slower than tabs, so names stay readable */
+  min-width: var(--chip-min); /* a long group name gives way before the tabs vanish */
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem 0 0.65rem;
+  box-shadow: inset 0 -2px 0 var(--group-color);
+}
+.tabgroup__head--collapsed {
+  box-shadow: none;
+}
+.tabgroup__chip {
+  touch-action: none; /* the chip is draggable */
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 132px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  padding: 0 0.55rem;
+  background: var(--group-color);
+  color: var(--group-fg);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.tabgroup__chip:hover {
+  filter: brightness(1.08);
+}
+.tabgroup__chip--unnamed {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 999px;
+}
+.tabgroup__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabgroup__count {
+  min-width: 1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.2);
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+/* "Joins X" / "Leaves X" while dragging a tab across a group boundary. */
+.tabbar__drop-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--group-color);
+  color: var(--group-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.3);
+}
+
+/* ---- Popover menus (tab menu, group editor) -------------------------------- */
+.popmenu,
+.groupeditor {
+  z-index: 50;
+  min-width: 13rem;
+  padding: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.3);
+  font-size: 0.83rem;
+}
+.popmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.38rem 0.6rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.popmenu__item:hover:not(:disabled),
+.popmenu__item--open {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.popmenu__item:disabled {
+  color: var(--fg-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.popmenu__item--danger {
+  color: var(--error-fg);
+}
+.popmenu__chevron,
+.popmenu__shortcut {
+  margin-left: auto;
+  color: var(--fg-muted);
+}
+.popmenu__chevron {
+  font-size: 1rem;
+  line-height: 1;
+}
+.popmenu__shortcut {
+  padding-left: 1rem;
+  font-size: 0.75rem;
+}
+.popmenu__swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--group-color);
+}
+.popmenu__muted {
+  color: var(--fg-muted);
+}
+.popmenu__sep {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--border);
+}
+
+.groupeditor {
+  width: 17rem;
+  padding: 0.75rem 0.5rem 0.3rem;
+}
+.groupeditor__label {
+  display: block;
+  margin: 0 0.3rem 0.35rem;
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+.groupeditor__input {
+  width: calc(100% - 0.6rem);
+  margin: 0 0.3rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+}
+.groupeditor__input:focus {
+  border-color: var(--accent);
+}
+.groupeditor__swatches {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.7rem 0.3rem 0.45rem;
+}
+.groupeditor__swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--group-color);
+  cursor: pointer;
+}
+.groupeditor__swatch--on {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--group-color);
 }
 
 /* ---- Tab dirty indicator -------------------------------------------------- */

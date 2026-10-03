@@ -53,9 +53,11 @@ describe("Workspace", () => {
     expect(W.siblingTabId(W.activateTab(ws, "a"), -1)).toBe("c");
   });
 
-  it("reorders tabs by moving one to a new index", () => {
+  it("reorders tabs by dropping one into a gap", () => {
     const ws = workspaceOf(tab("a", "/a.md"), tab("b", "/b.md"), tab("c", "/c.md"));
-    expect(W.moveTab(ws, "a", 2).tabs.map((t) => t.id)).toEqual(["b", "c", "a"]);
+    expect(W.dropTab(ws, "a", 3).tabs.map((t) => t.id)).toEqual(["b", "c", "a"]);
+    expect(W.dropTab(ws, "c", 0).tabs.map((t) => t.id)).toEqual(["c", "a", "b"]);
+    expect(W.dropTab(ws, "b", 1)).toBe(ws); // its own slot
   });
 
   it("returns the same reference when an operation changes nothing", () => {
@@ -77,9 +79,9 @@ describe("Workspace", () => {
     expect(session.tabs.map((t) => t.path)).toEqual(["/a.md", "/b.md"]);
     expect(session.activeIndex).toBe(1);
 
-    const restored = W.restoreWorkspace(ws.tabs, 0);
+    const restored = W.restoreWorkspace(ws.tabs, [], 0);
     expect(restored.activeTabId).toBe("a");
-    expect(W.restoreWorkspace([], 0)).toEqual(W.emptyWorkspace);
+    expect(W.restoreWorkspace([], [], 0)).toEqual(W.emptyWorkspace);
   });
 
   it("toggles mode, updates content (dirty), and marks saved", () => {
@@ -107,7 +109,10 @@ describe("Workspace", () => {
   });
 
   describe("mergeRestored", () => {
-    const restored = [tab("r1", "/a.md"), tab("r2", "/b.md"), tab("r3", "/c.md")];
+    const restored = {
+      tabs: [tab("r1", "/a.md"), tab("r2", "/b.md"), tab("r3", "/c.md")],
+      groups: [],
+    };
 
     it("restores normally into an empty workspace", () => {
       const ws = W.mergeRestored(W.emptyWorkspace, restored, 2);
