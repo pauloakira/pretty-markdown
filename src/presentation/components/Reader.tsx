@@ -1,4 +1,7 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+
+/** Quiet period after the last scroll event before the position is recorded. */
+const SCROLL_SETTLE_MS = 400;
 
 interface ReaderProps {
   html: string;
@@ -38,6 +41,27 @@ export function Reader({ html, initialScrollTop, onScrollPersist, containerRef }
       if (el) onScrollPersist(el.scrollTop);
     };
     // Run once per mount; the parent remounts via `key` when the tab changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Also record the position once scrolling settles, not just on unmount, so the
+  // autosaved session has the current reading position even if the app is quit in a way
+  // that never unmounts this view (Dock → Quit, logout, a crash).
+  const persistRef = useRef(onScrollPersist);
+  persistRef.current = onScrollPersist;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let timer = 0;
+    const onScroll = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => persistRef.current(el.scrollTop), SCROLL_SETTLE_MS);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("scroll", onScroll);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

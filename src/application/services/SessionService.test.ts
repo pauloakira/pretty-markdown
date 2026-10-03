@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDocument } from "../../domain/entities/Document";
 import { createTab } from "../../domain/entities/Tab";
-import { addTab, emptyWorkspace } from "../../domain/entities/Workspace";
+import { addTab, emptyWorkspace, updateContent } from "../../domain/entities/Workspace";
 import type {
   FilePicker,
   FileReader,
@@ -15,6 +15,7 @@ import { SessionService } from "./SessionService";
 
 class FakeSessionRepository implements SessionRepository {
   public saved: Session | null = null;
+  public saves = 0;
   public cleared = false;
   constructor(private readonly toLoad: Session | null) {}
   async load(): Promise<Session | null> {
@@ -22,6 +23,7 @@ class FakeSessionRepository implements SessionRepository {
   }
   async save(session: Session): Promise<void> {
     this.saved = session;
+    this.saves += 1;
   }
   async clear(): Promise<void> {
     this.cleared = true;
@@ -88,5 +90,54 @@ describe("SessionService", () => {
     const repo = new FakeSessionRepository(null);
     await new SessionService(repo, documentsWith({})).clear();
     expect(repo.cleared).toBe(true);
+  });
+
+  describe("autosave", () => {
+    const docA = createDocument("/a.md", "# A");
+    const docB = createDocument("/b.md", "# B");
+    const withA = addTab(emptyWorkspace, createTab("t1", docA));
+    const withAB = addTab(withA, createTab("t2", docB));
+
+    it("writes when the open tabs change — the session tracks the latest state", async () => {
+      const repo = new FakeSessionRepository(null);
+      const service = new SessionService(repo, documentsWith({}));
+
+      expect(await service.autosave(withA)).toBe(true);
+      expect(await service.autosave(withAB)).toBe(true);
+      expect(repo.saved?.tabs.map((t) => t.path)).toEqual(["/a.md", "/b.md"]);
+    });
+
+    it("skips writes when nothing restorable changed (e.g. content edits)", async () => {
+      const repo = new FakeSessionRepository(null);
+      const service = new SessionService(repo, documentsWith({}));
+      await service.autosave(withA);
+
+      const edited = updateContent(withA, "t1", "# A, edited");
+      expect(await service.autosave(edited)).toBe(false);
+      expect(repo.saves).toBe(1);
+    });
+
+    it("treats the restored session as the baseline (no rewrite on launch)", async () => {
+      const stored = {
+        version: 1 as const,
+        activeIndex: 0,
+        tabs: [{ path: "/a.md", mode: "reader" as const, scrollTop: 0 }],
+      };
+      const repo = new FakeSessionRepository(stored);
+      const service = new SessionService(repo, documentsWith({ "/a.md": "# A" }));
+      await service.restore();
+
+      expect(await service.autosave(withA)).toBe(false);
+      expect(repo.saves).toBe(0);
+    });
+
+    it("stays off after the user opts out, so a late write can't undo 'don't reopen'", async () => {
+      const repo = new FakeSessionRepository(null);
+      const service = new SessionService(repo, documentsWith({}));
+      await service.clear();
+
+      expect(await service.autosave(withAB)).toBe(false);
+      expect(repo.saved).toBeNull();
+    });
   });
 });

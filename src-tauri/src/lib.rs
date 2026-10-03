@@ -3,6 +3,49 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
+/// Quit for real. Called by the frontend once the user has answered the quit prompt.
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+/// Menu id of our replacement for the app menu's Quit item.
+const QUIT_MENU_ID: &str = "pm-quit";
+
+/// Install Tauri's default menu with one change: the app menu's built-in Quit item is
+/// swapped for our own ⌘Q item.
+///
+/// The built-in item calls `-[NSApp terminate:]`, and tao doesn't implement the cancellable
+/// `applicationShouldTerminate:`, so that path exits immediately with no chance to show the
+/// "reopen tabs?" prompt. Our item instead emits `quit-requested` to the frontend. Every
+/// other item (notably the Edit menu, which macOS uses to route ⌘C/⌘V/⌘Z into the
+/// webview) is left untouched.
+#[cfg(target_os = "macos")]
+fn install_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+
+    let menu = Menu::default(app)?;
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+        for item in app_menu.items()? {
+            if let MenuItemKind::Predefined(predefined) = &item {
+                if predefined.text()?.starts_with("Quit") {
+                    app_menu.remove(&item)?;
+                }
+            }
+        }
+        let quit = MenuItem::with_id(
+            app,
+            QUIT_MENU_ID,
+            format!("Quit {}", app.package_info().name),
+            true,
+            Some("CmdOrCtrl+Q"),
+        )?;
+        app_menu.append(&quit)?;
+    }
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 /// Watches open files and emits `file-changed` when they change on disk.
 struct FileWatcher(Mutex<RecommendedWatcher>);
 
@@ -117,6 +160,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingFiles::default())
+        .on_menu_event(|app, event| {
+            if event.id() == QUIT_MENU_ID {
+                let _ = app.emit("quit-requested", ());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             write_text_file,
@@ -124,6 +172,7 @@ pub fn run() {
             write_session,
             clear_session,
             take_pending_files,
+            exit_app,
             watch_file,
             unwatch_file
         ])
@@ -162,14 +211,17 @@ pub fn run() {
             .map_err(|e| e.to_string())?;
             app.manage(FileWatcher(Mutex::new(watcher)));
 
+            #[cfg(target_os = "macos")]
+            install_menu(app.handle())?;
+
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app, event| {
+        .run(|app, event| match event {
             // macOS delivers double-clicked files via the Opened event, both at launch
             // and while the app is already running.
-            if let tauri::RunEvent::Opened { urls } = event {
+            tauri::RunEvent::Opened { urls } => {
                 let paths: Vec<String> = urls
                     .iter()
                     .filter_map(|u| u.to_file_path().ok())
@@ -177,5 +229,6 @@ pub fn run() {
                     .collect();
                 dispatch_opened(app, paths);
             }
+            _ => {}
         });
 }

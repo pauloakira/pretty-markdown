@@ -42,7 +42,8 @@ Reader-first build plan. Each milestone is independently shippable.
 
 ## M5 — App polish ✅
 - [x] Restore last session — reopen tabs (paths + active tab + mode + scroll) on launch,
-      with a "reopen tabs?" prompt on close. Stored as JSON in the app config dir.
+      with a "reopen tabs?" prompt on close (window button or ⌘Q). Autosaved as you work, so
+      it's current even after Dock → Quit or a crash. Stored as JSON in the app config dir.
 - [x] OS file associations — double-click a `.md` in Finder opens it (launch + while running).
 - [x] Recent files list on the welcome screen (persisted, click to reopen).
 - [x] File-watch: reload on external change (silent when clean; Reload/Keep banner when dirty).

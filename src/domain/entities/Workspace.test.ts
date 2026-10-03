@@ -105,4 +105,29 @@ describe("Workspace", () => {
     // no-op when content already matches and is clean
     expect(W.reloadContent(reloaded, "a", "# from disk")).toBe(reloaded);
   });
+
+  describe("mergeRestored", () => {
+    const restored = [tab("r1", "/a.md"), tab("r2", "/b.md"), tab("r3", "/c.md")];
+
+    it("restores normally into an empty workspace", () => {
+      const ws = W.mergeRestored(W.emptyWorkspace, restored, 2);
+      expect(ws.tabs.map((t) => t.id)).toEqual(["r1", "r2", "r3"]);
+      expect(ws.activeTabId).toBe("r3");
+    });
+
+    it("keeps previous tabs when a file opened first (cold launch from Finder)", () => {
+      // The double-clicked file beat the restore — previously the session was dropped.
+      const opened = W.addTab(W.emptyWorkspace, tab("new", "/new.md"));
+      const ws = W.mergeRestored(opened, restored, 2);
+      expect(ws.tabs.map((t) => t.document.path)).toEqual(["/a.md", "/b.md", "/c.md", "/new.md"]);
+      expect(W.activeTab(ws)?.document.path).toBe("/new.md"); // what the user just opened
+    });
+
+    it("doesn't duplicate a file that's both opened and in the session", () => {
+      const opened = W.addTab(W.emptyWorkspace, tab("dup", "/b.md"));
+      const ws = W.mergeRestored(opened, restored, 0);
+      expect(ws.tabs.map((t) => t.document.path)).toEqual(["/a.md", "/b.md", "/c.md"]);
+      expect(ws.activeTabId).toBe("r2"); // the restored copy of the opened file
+    });
+  });
 });

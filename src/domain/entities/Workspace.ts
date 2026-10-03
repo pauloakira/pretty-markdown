@@ -112,6 +112,39 @@ export function restoreWorkspace(tabs: readonly Tab[], activeIndex: number): Wor
   return { tabs: [...tabs], activeTabId: tabs[index].id };
 }
 
+/**
+ * Bring a restored session back into a workspace that may already have tabs — e.g. when
+ * the app is launched by double-clicking a file, which can open before the session has
+ * been read back.
+ *
+ * The restored tabs come first, in their saved order; tabs already open are appended
+ * unless the session already has that file. The tab the user just opened stays active
+ * (matched by path, so it points at the restored copy if the session had it). The result
+ * is the same whichever finishes first, the file open or the restore.
+ */
+export function mergeRestored(
+  ws: Workspace,
+  restored: readonly Tab[],
+  activeIndex: number,
+): Workspace {
+  if (ws.tabs.length === 0) return restoreWorkspace(restored, activeIndex);
+
+  const restoredPaths = new Set(
+    restored.map((t) => t.document.path).filter((p): p is string => p !== null),
+  );
+  const extra = ws.tabs.filter(
+    (t) => t.document.path === null || !restoredPaths.has(t.document.path),
+  );
+  const tabs = [...restored, ...extra];
+
+  const current = activeTab(ws);
+  const active =
+    current &&
+    (tabs.find((t) => t.id === current.id) ??
+      tabs.find((t) => t.document.path === current.document.path));
+  return { tabs, activeTabId: active ? active.id : (tabs[0]?.id ?? null) };
+}
+
 /** Snapshot the open tabs (those backed by a file) into a persistable session. */
 export function toSession(ws: Workspace): Session {
   const tabs = ws.tabs

@@ -84,7 +84,7 @@ export class TabManager {
     this.commit(W.reloadContent(this.workspace, id, content));
   }
 
-  /** Replace the whole workspace with restored tabs (used on launch). */
+  /** Bring the saved session back on launch, merged with anything already open. */
   restore(
     entries: ReadonlyArray<{ document: Document; mode: EditorMode; scrollTop: number }>,
     activeIndex: number,
@@ -96,7 +96,7 @@ export class TabManager {
       savedContent: entry.document.content,
       revision: 0,
     }));
-    this.commit(W.restoreWorkspace(tabs, activeIndex));
+    this.commit(W.mergeRestored(this.workspace, tabs, activeIndex));
   }
 
   private nextId(): TabId {
