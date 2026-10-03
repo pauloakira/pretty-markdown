@@ -109,6 +109,17 @@ describe("Workspace tab groups", () => {
       expect(groupOf(next, "b")).toBeNull();
     });
 
+    it("leaves the group when dropped on empty space or a chip, even at the bar's end", () => {
+      const ws = W.groupTabsInto(workspaceOf(tab("a"), tab("b"), tab("c")), ["b", "c"], createGroup("g", "", "blue"));
+      expect(groupOf(W.dropTab(ws, "b", 3), "b")).toBe("g"); // on the last tab's edge: stays
+      const out = W.dropTab(ws, "b", 3, true); // past the last tab
+      expect(ids(out)).toEqual(["a", "c", "b"]);
+      expect(groupOf(out, "b")).toBeNull();
+      const onChip = W.dropTab(ws, "c", 1, true); // over g's chip, before b
+      expect(ids(onChip)).toEqual(["a", "c", "b"]);
+      expect(groupOf(onChip, "c")).toBeNull();
+    });
+
     it("ignores tabs hidden in a collapsed group when resolving the gap", () => {
       const ws = W.setGroupCollapsed(grouped("a"), "g", true);
       // visible: a d e — gap 2 is between d and e
@@ -134,6 +145,18 @@ describe("Workspace tab groups", () => {
       expect(next.groups.map((g) => g.name)).toEqual(["PoliVEM"]); // Sobolev paths differ
       expect(ids(next)).toEqual(["s3", "s4", "n1", "solo", "n2"]);
       expect(groupOf(next, "solo")).toBeNull();
+    });
+
+    it("names groups by the folder segment that tells them apart", () => {
+      const ws = workspaceOf(
+        tab("a1", "/papers/runge/docs/a1.md"),
+        tab("a2", "/papers/runge/docs/a2.md"),
+        tab("b1", "/papers/polivem/docs/b1.md"),
+        tab("b2", "/papers/polivem/docs/b2.md"),
+      );
+      expect(W.groupByFolder(ws, newId).groups.map((g) => g.name)).toEqual(["runge", "polivem"]);
+      expect(W.folderLabel("/x/notes", ["/x/notes", "/y/docs"])).toBe("notes");
+      expect(W.folderLabel("C:\\work\\docs", ["/home/docs"])).toBe("work");
     });
 
     it("adds tabs to an existing group that holds only their folder", () => {

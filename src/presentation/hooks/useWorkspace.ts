@@ -100,7 +100,7 @@ export function useWorkspace() {
     [tabManager],
   );
   const dropTab = useCallback(
-    (id: TabId, gap: number) => tabManager.dropTab(id, gap),
+    (id: TabId, gap: number, outside: boolean) => tabManager.dropTab(id, gap, outside),
     [tabManager],
   );
   const persistScroll = useCallback(

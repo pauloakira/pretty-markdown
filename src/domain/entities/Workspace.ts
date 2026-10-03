@@ -1,6 +1,5 @@
 import type { Session, SessionGroup } from "../values/Session";
 import type { EditorMode } from "../values/ViewState";
-import { fileName } from "./Document";
 import type { Tab, TabId } from "./Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId, type TabGroup } from "./TabGroup";
 
@@ -145,9 +144,16 @@ export interface DropTarget {
  *
  * The group follows the neighbors: between two tabs of one group joins that group; next
  * to the tab's own group keeps it (so reordering at a group's edge doesn't eject it);
- * anywhere else leaves the tab ungrouped.
+ * anywhere else leaves the tab ungrouped. `outside` marks a drop on empty tab-bar space
+ * or on a group's chip rather than on a tab — that always leaves the tab ungrouped, so a
+ * group at either end of the bar can still be dragged out of.
  */
-export function resolveDrop(ws: Workspace, id: TabId, gap: number): DropTarget | null {
+export function resolveDrop(
+  ws: Workspace,
+  id: TabId,
+  gap: number,
+  outside = false,
+): DropTarget | null {
   const tab = ws.tabs.find((t) => t.id === id);
   if (!tab) return null;
   const visible = visibleTabs(ws);
@@ -159,7 +165,9 @@ export function resolveDrop(ws: Workspace, id: TabId, gap: number): DropTarget |
   const right = others[at] ?? null;
 
   let groupId: GroupId | null = null;
-  if (left && right && left.groupId !== null && left.groupId === right.groupId) {
+  if (outside) {
+    groupId = null;
+  } else if (left && right && left.groupId !== null && left.groupId === right.groupId) {
     groupId = left.groupId;
   } else if (
     tab.groupId !== null &&
@@ -171,8 +179,8 @@ export function resolveDrop(ws: Workspace, id: TabId, gap: number): DropTarget |
 }
 
 /** Drop a dragged tab into a gap of the visible tab bar (see `resolveDrop`). */
-export function dropTab(ws: Workspace, id: TabId, gap: number): Workspace {
-  const target = resolveDrop(ws, id, gap);
+export function dropTab(ws: Workspace, id: TabId, gap: number, outside = false): Workspace {
+  const target = resolveDrop(ws, id, gap, outside);
   if (!target) return ws;
   const tab = ws.tabs.find((t) => t.id === id) as Tab;
 
@@ -322,9 +330,26 @@ function folderOf(path: string): string {
 }
 
 /**
+ * Name a folder by its nearest segment that tells it apart from the other `folders`, so
+ * `…/paper_a/docs` and `…/paper_b/docs` become "paper_a" and "paper_b" rather than two
+ * groups both called "docs".
+ */
+export function folderLabel(folder: string, folders: readonly string[]): string {
+  const segments = (f: string) => f.split(/[/\\]/).filter(Boolean);
+  const own = segments(folder);
+  const others = [...new Set(folders)].filter((f) => f !== folder).map(segments);
+  for (let depth = 1; depth <= own.length; depth += 1) {
+    const suffix = own.slice(-depth).join("/");
+    if (!others.some((o) => o.slice(-depth).join("/") === suffix)) return own[own.length - depth];
+  }
+  return own[own.length - 1] ?? folder;
+}
+
+/**
  * Group ungrouped tabs by the folder their file lives in. A tab joins an existing group
  * whose tabs all come from its folder; otherwise two or more tabs from one folder form a
- * new group named after it. Tabs already in a group, and untitled tabs, are left alone.
+ * new group named after it (see `folderLabel`). Tabs already in a group, and untitled
+ * tabs, are left alone.
  */
 export function groupByFolder(ws: Workspace, newGroupId: () => GroupId): Workspace {
   const folderGroups = new Map<string, GroupId>();
@@ -343,13 +368,17 @@ export function groupByFolder(ws: Workspace, newGroupId: () => GroupId): Workspa
     buckets.set(folder, [...(buckets.get(folder) ?? []), t.id]);
   }
 
+  const allFolders = ws.tabs
+    .map((t) => t.document.path)
+    .filter((p): p is string => p !== null)
+    .map(folderOf);
   let next = ws;
   for (const [folder, ids] of buckets) {
     const existing = folderGroups.get(folder);
     if (existing) {
       for (const id of ids) next = addToGroup(next, id, existing);
     } else if (ids.length >= 2) {
-      const group = createGroup(newGroupId(), fileName(folder), nextGroupColor(next.groups));
+      const group = createGroup(newGroupId(), folderLabel(folder, allFolders), nextGroupColor(next.groups));
       next = groupTabsInto(next, ids, group);
     }
   }

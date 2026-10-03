@@ -35,7 +35,8 @@ interface TabBarProps {
   onCloseMany: (ids: readonly TabId[]) => void;
   onNew: () => void;
   onNewInGroup: (groupId: GroupId) => void;
-  onDrop: (id: TabId, gap: number) => void;
+  /** `outside`: dropped on empty bar space or a group chip rather than on a tab. */
+  onDrop: (id: TabId, gap: number, outside: boolean) => void;
   onOpenSettings: () => void;
 }
 
@@ -47,6 +48,15 @@ interface DragState {
   pointerId: number;
   dragging: boolean;
 }
+
+/** Where the pointer is during a drag: the insertion gap, and whether it's off the tabs. */
+interface DropSpot {
+  gap: number;
+  outside: boolean;
+}
+
+/** Past the last tab by this much counts as empty bar space. */
+const OUTSIDE_MARGIN = 12;
 
 interface DropHint {
   x: number;
@@ -92,7 +102,8 @@ export function TabBar({
   const listRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [dragId, setDragId] = useState<TabId | null>(null);
-  const [gap, setGap] = useState<number | null>(null);
+  const [spot, setSpot] = useState<DropSpot | null>(null);
+  const gap = spot?.gap ?? null;
   const [hint, setHint] = useState<DropHint | null>(null);
   const [menu, setMenu] = useState<{ tabId: TabId; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<GroupId | null>(null);
@@ -117,22 +128,30 @@ export function TabBar({
     );
   }, [editingId, workspace]);
 
-  /** Insertion gap (0..visible tabs) for a pointer x, by tab midpoints. */
-  const gapAt = (clientX: number): number => {
+  /**
+   * Insertion gap (0..visible tabs) for a pointer x, by tab midpoints. The pointer is
+   * `outside` when it's over a group chip (between two tabs' boxes) or past the last tab.
+   */
+  const spotAt = (clientX: number): DropSpot => {
     const list = listRef.current;
-    if (!list) return 0;
-    const els = Array.from(list.querySelectorAll<HTMLElement>("[data-tab-id]"));
-    for (let i = 0; i < els.length; i += 1) {
-      const r = els[i].getBoundingClientRect();
-      if (clientX < r.left + r.width / 2) return i;
+    if (!list) return { gap: 0, outside: false };
+    const rects = Array.from(list.querySelectorAll<HTMLElement>("[data-tab-id]")).map((el) =>
+      el.getBoundingClientRect(),
+    );
+    for (let i = 0; i < rects.length; i += 1) {
+      if (clientX < rects[i].left + rects[i].width / 2) {
+        const prevRight = i > 0 ? rects[i - 1].right : -Infinity;
+        return { gap: i, outside: clientX < rects[i].left - 1 && clientX > prevRight + 1 };
+      }
     }
-    return els.length;
+    const last = rects[rects.length - 1];
+    return { gap: rects.length, outside: last !== undefined && clientX > last.right + OUTSIDE_MARGIN };
   };
 
-  /** "Joins X" / "Leaves X" when dropping at `nextGap` would change the tab's group. */
-  const hintFor = (id: TabId, nextGap: number, clientX: number): DropHint | null => {
+  /** "Joins X" / "Leaves X" when dropping at `next` would change the tab's group. */
+  const hintFor = (id: TabId, next: DropSpot, clientX: number): DropHint | null => {
     const tab = tabs.find((t) => t.id === id);
-    const target = resolveDrop(workspace, id, nextGap);
+    const target = resolveDrop(workspace, id, next.gap, next.outside);
     if (!tab || !target || target.groupId === tab.groupId) return null;
     const joining = findGroup(workspace, target.groupId);
     const leaving = findGroup(workspace, tab.groupId);
@@ -165,9 +184,9 @@ export function TabBar({
       drag.dragging = true;
       setDragId(drag.id);
     }
-    const nextGap = gapAt(e.clientX);
-    setGap(nextGap);
-    setHint(hintFor(drag.id, nextGap, e.clientX));
+    const next = spotAt(e.clientX);
+    setSpot(next);
+    setHint(hintFor(drag.id, next, e.clientX));
   };
 
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -178,9 +197,9 @@ export function TabBar({
     } catch {
       // capture may already be gone
     }
-    if (drag?.dragging && gap !== null) onDrop(drag.id, gap);
+    if (drag?.dragging && spot) onDrop(drag.id, spot.gap, spot.outside);
     setDragId(null);
-    setGap(null);
+    setSpot(null);
     setHint(null);
   };
 

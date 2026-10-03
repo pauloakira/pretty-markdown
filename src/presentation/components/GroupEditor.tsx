@@ -43,9 +43,14 @@ export function GroupEditor({
     setPosition(clampToViewport(anchor.left, anchor.bottom + 6, el.offsetWidth, el.offsetHeight));
   }, [anchor]);
 
+  // Focus on the next frame: when opened by a right-click, the press that opened us
+  // focuses the chip *after* this mounts, which would steal the caret.
   useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    const frame = requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const run = (action: () => void) => () => {

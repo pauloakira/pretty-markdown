@@ -58,8 +58,8 @@ export class TabManager {
   }
 
   /** Drop a dragged tab into a gap of the visible tab bar; may join or leave a group. */
-  dropTab(id: TabId, gap: number): void {
-    this.commit(W.dropTab(this.workspace, id, gap));
+  dropTab(id: TabId, gap: number, outside = false): void {
+    this.commit(W.dropTab(this.workspace, id, gap, outside));
   }
 
   /** Put a tab in a new, unnamed group with the next free color. Returns the group's id. */
