@@ -36,7 +36,7 @@ export default function App() {
     activateTab,
     focusSibling,
     activateIndex,
-    moveTab,
+    dropTab,
     persistScroll,
     toggleMode,
     updateContent,
@@ -154,7 +154,7 @@ export default function App() {
           onSelect={activateTab}
           onClose={requestClose}
           onNew={openViaDialog}
-          onReorder={moveTab}
+          onDrop={dropTab}
           onOpenSettings={() => setSettingsOpen(true)}
         />
       )}

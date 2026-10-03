@@ -23,10 +23,10 @@ export function useSession() {
     restoredRef.current = true;
     void (async () => {
       try {
-        const { tabs, activeIndex } = await sessionService.restore();
+        const { tabs, groups, activeIndex } = await sessionService.restore();
         // Merge rather than skip if a file opened first (app launched from Finder):
         // skipping used to drop the previous tabs, which autosave would then persist.
-        if (tabs.length > 0) tabManager.restore(tabs, activeIndex);
+        if (tabs.length > 0) tabManager.restore(tabs, groups, activeIndex);
       } finally {
         readyRef.current = true;
         // Prune anything that failed to restore (moved/deleted files) right away.

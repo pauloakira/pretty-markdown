@@ -72,8 +72,8 @@ export function useWorkspace() {
     (index: number) => tabManager.activateIndex(index),
     [tabManager],
   );
-  const moveTab = useCallback(
-    (id: TabId, toIndex: number) => tabManager.moveTab(id, toIndex),
+  const dropTab = useCallback(
+    (id: TabId, gap: number) => tabManager.dropTab(id, gap),
     [tabManager],
   );
   const persistScroll = useCallback(
@@ -156,7 +156,7 @@ export function useWorkspace() {
     activateTab,
     focusSibling,
     activateIndex,
-    moveTab,
+    dropTab,
     persistScroll,
     setMode,
     toggleMode,

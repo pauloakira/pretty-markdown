@@ -8,7 +8,7 @@ interface TabBarProps {
   onSelect: (id: TabId) => void;
   onClose: (id: TabId) => void;
   onNew: () => void;
-  onReorder: (id: TabId, toIndex: number) => void;
+  onDrop: (id: TabId, gap: number) => void;
   onOpenSettings: () => void;
 }
 
@@ -33,7 +33,7 @@ export function TabBar({
   onSelect,
   onClose,
   onNew,
-  onReorder,
+  onDrop,
   onOpenSettings,
 }: TabBarProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -83,13 +83,7 @@ export function TabBar({
     } catch {
       // capture may already be gone
     }
-    if (drag?.dragging && gap !== null) {
-      const from = tabs.findIndex((t) => t.id === drag.id);
-      // Removing the dragged tab shifts later slots left by one.
-      const target = gap > from ? gap - 1 : gap;
-      const clamped = Math.max(0, Math.min(target, tabs.length - 1));
-      if (clamped !== from) onReorder(drag.id, clamped);
-    }
+    if (drag?.dragging && gap !== null) onDrop(drag.id, gap);
     setDragId(null);
     setGap(null);
   };

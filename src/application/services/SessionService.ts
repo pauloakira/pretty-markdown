@@ -1,6 +1,7 @@
 import type { Document } from "../../domain/entities/Document";
 import { toSession, type Workspace } from "../../domain/entities/Workspace";
 import type { SessionRepository } from "../../domain/ports/SessionRepository";
+import type { SessionGroup } from "../../domain/values/Session";
 import type { EditorMode } from "../../domain/values/ViewState";
 import type { DocumentService } from "./DocumentService";
 
@@ -9,10 +10,13 @@ export interface RestoredTab {
   readonly document: Document;
   readonly mode: EditorMode;
   readonly scrollTop: number;
+  /** Index into `RestoredSession.groups`, or null when ungrouped. */
+  readonly group: number | null;
 }
 
 export interface RestoredSession {
   readonly tabs: readonly RestoredTab[];
+  readonly groups: readonly SessionGroup[];
   readonly activeIndex: number;
 }
 
@@ -68,15 +72,20 @@ export class SessionService {
     const session = await this.repository.load();
     // What's on disk is the baseline: autosave rewrites only when the workspace differs.
     this.lastSaved = session ? JSON.stringify(session) : null;
-    if (!session || session.tabs.length === 0) return { tabs: [], activeIndex: 0 };
+    if (!session || session.tabs.length === 0) return { tabs: [], groups: [], activeIndex: 0 };
 
     const tabs: RestoredTab[] = [];
     for (const entry of session.tabs) {
       const outcome = await this.documents.load(entry.path);
       if (outcome.kind === "opened") {
-        tabs.push({ document: outcome.document, mode: entry.mode, scrollTop: entry.scrollTop });
+        tabs.push({
+          document: outcome.document,
+          mode: entry.mode,
+          scrollTop: entry.scrollTop,
+          group: entry.group,
+        });
       }
     }
-    return { tabs, activeIndex: session.activeIndex };
+    return { tabs, groups: session.groups, activeIndex: session.activeIndex };
   }
 }

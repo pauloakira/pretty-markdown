@@ -1,6 +1,7 @@
 import type { Document } from "../../domain/entities/Document";
 import type { Tab, TabId } from "../../domain/entities/Tab";
 import { createTab } from "../../domain/entities/Tab";
+import { createGroup, nextGroupColor, type GroupColor, type GroupId } from "../../domain/entities/TabGroup";
 import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
 import type { EditorMode } from "../../domain/values/ViewState";
@@ -8,7 +9,7 @@ import type { EditorMode } from "../../domain/values/ViewState";
 type Listener = () => void;
 
 /**
- * Single source of truth for open tabs and the active tab (DESIGN.md §3.4).
+ * Single source of truth for open tabs, tab groups and the active tab (DESIGN.md §3.4).
  * Holds the current Workspace, applies the pure domain operations, and notifies
  * subscribers (Observer) — exposed in a shape ready for React's useSyncExternalStore.
  */
@@ -16,6 +17,7 @@ export class TabManager {
   private workspace: Workspace = W.emptyWorkspace;
   private readonly listeners = new Set<Listener>();
   private counter = 0;
+  private groupCounter = 0;
 
   /** Stable snapshot for useSyncExternalStore — same ref until something changes. */
   readonly getSnapshot = (): Workspace => this.workspace;
@@ -49,13 +51,52 @@ export class TabManager {
     if (id) this.commit(W.activateTab(this.workspace, id));
   }
 
+  /** Activate the n-th tab shown in the tab bar (tabs in collapsed groups don't count). */
   activateIndex(index: number): void {
-    const tab = this.workspace.tabs[index];
+    const tab = W.visibleTabs(this.workspace)[index];
     if (tab) this.commit(W.activateTab(this.workspace, tab.id));
   }
 
-  moveTab(id: TabId, toIndex: number): void {
-    this.commit(W.moveTab(this.workspace, id, toIndex));
+  /** Drop a dragged tab into a gap of the visible tab bar; may join or leave a group. */
+  dropTab(id: TabId, gap: number): void {
+    this.commit(W.dropTab(this.workspace, id, gap));
+  }
+
+  /** Put a tab in a new, unnamed group with the next free color. Returns the group's id. */
+  createGroup(tabId: TabId): GroupId | null {
+    if (!this.workspace.tabs.some((t) => t.id === tabId)) return null;
+    const group = createGroup(this.nextGroupId(), "", nextGroupColor(this.workspace.groups));
+    this.commit(W.groupTabsInto(this.workspace, [tabId], group));
+    return group.id;
+  }
+
+  addToGroup(tabId: TabId, groupId: GroupId): void {
+    this.commit(W.addToGroup(this.workspace, tabId, groupId));
+  }
+
+  removeFromGroup(tabId: TabId): void {
+    this.commit(W.removeFromGroup(this.workspace, tabId));
+  }
+
+  renameGroup(groupId: GroupId, name: string): void {
+    this.commit(W.updateGroup(this.workspace, groupId, { name }));
+  }
+
+  recolorGroup(groupId: GroupId, color: GroupColor): void {
+    this.commit(W.updateGroup(this.workspace, groupId, { color }));
+  }
+
+  toggleGroupCollapsed(groupId: GroupId): void {
+    const group = W.findGroup(this.workspace, groupId);
+    if (group) this.commit(W.setGroupCollapsed(this.workspace, groupId, !group.collapsed));
+  }
+
+  ungroup(groupId: GroupId): void {
+    this.commit(W.ungroup(this.workspace, groupId));
+  }
+
+  groupByFolder(): void {
+    this.commit(W.groupByFolder(this.workspace, () => this.nextGroupId()));
   }
 
   /** Persist a tab's scroll position. Notifies only if it changed. */
@@ -84,24 +125,43 @@ export class TabManager {
     this.commit(W.reloadContent(this.workspace, id, content));
   }
 
-  /** Bring the saved session back on launch, merged with anything already open. */
+  /**
+   * Bring the saved session back on launch, merged with anything already open. Each
+   * entry's `group` indexes into `groups`; groups left without tabs are dropped.
+   */
   restore(
-    entries: ReadonlyArray<{ document: Document; mode: EditorMode; scrollTop: number }>,
+    entries: ReadonlyArray<{
+      document: Document;
+      mode: EditorMode;
+      scrollTop: number;
+      group: number | null;
+    }>,
+    groups: ReadonlyArray<{ name: string; color: GroupColor; collapsed: boolean }>,
     activeIndex: number,
   ): void {
+    const restoredGroups = groups.map((g) => ({
+      ...createGroup(this.nextGroupId(), g.name, g.color),
+      collapsed: g.collapsed,
+    }));
     const tabs: Tab[] = entries.map((entry) => ({
       id: this.nextId(),
       document: entry.document,
       viewState: { mode: entry.mode, scrollTop: entry.scrollTop },
       savedContent: entry.document.content,
       revision: 0,
+      groupId: entry.group === null ? null : (restoredGroups[entry.group]?.id ?? null),
     }));
-    this.commit(W.mergeRestored(this.workspace, tabs, activeIndex));
+    this.commit(W.mergeRestored(this.workspace, { tabs, groups: restoredGroups }, activeIndex));
   }
 
   private nextId(): TabId {
     this.counter += 1;
     return `tab-${this.counter}`;
+  }
+
+  private nextGroupId(): GroupId {
+    this.groupCounter += 1;
+    return `group-${this.groupCounter}`;
   }
 
   private commit(next: Workspace): void {
