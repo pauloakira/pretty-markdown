@@ -193,6 +193,47 @@ export function dropTab(ws: Workspace, id: TabId, gap: number, outside = false):
   return normalize({ ...ws, tabs });
 }
 
+/** A slot in the tab bar: an ungrouped tab, or a whole group (collapsed or not). */
+export type TabUnit =
+  | { readonly kind: "tab"; readonly tabId: TabId }
+  | { readonly kind: "group"; readonly groupId: GroupId };
+
+/** The tab bar as units, in order — what a dragged group can be placed between. */
+export function tabUnits(ws: Workspace): TabUnit[] {
+  const units: TabUnit[] = [];
+  const seen = new Set<GroupId>();
+  for (const t of ws.tabs) {
+    if (t.groupId === null) {
+      units.push({ kind: "tab", tabId: t.id });
+    } else if (!seen.has(t.groupId)) {
+      seen.add(t.groupId);
+      units.push({ kind: "group", groupId: t.groupId });
+    }
+  }
+  return units;
+}
+
+/**
+ * Move a whole group (dragged by its chip) to just before unit `toUnit` of the *other*
+ * units — `tabUnits` without this group — or to the end when `toUnit` is past the last.
+ * Groups only land between units, never inside another group.
+ */
+export function moveGroup(ws: Workspace, id: GroupId, toUnit: number): Workspace {
+  if (!findGroup(ws, id)) return ws;
+  const members = ws.tabs.filter((t) => t.groupId === id);
+  const rest = ws.tabs.filter((t) => t.groupId !== id);
+  const others = tabUnits({ ...ws, tabs: rest });
+  const target = others[Math.max(0, Math.min(toUnit, others.length))];
+  const index =
+    target === undefined
+      ? rest.length
+      : rest.findIndex((t) => (target.kind === "tab" ? t.id === target.tabId : t.groupId === target.groupId));
+  const tabs = [...rest.slice(0, index), ...members, ...rest.slice(index)];
+
+  if (tabs.every((t, i) => t === ws.tabs[i])) return ws;
+  return normalize({ ...ws, tabs });
+}
+
 /** Save a tab's scroll position (preserving the rest of its view state). No-op if unchanged. */
 export function setScrollTop(ws: Workspace, id: TabId, scrollTop: number): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);

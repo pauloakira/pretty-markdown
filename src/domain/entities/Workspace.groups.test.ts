@@ -129,6 +129,40 @@ describe("Workspace tab groups", () => {
     });
   });
 
+  describe("moving a whole group", () => {
+    /** a [g: b c] d [h: e] — units: a, g, d, h */
+    function two(): W.Workspace {
+      return W.groupTabsInto(grouped("a"), ["e"], createGroup("h", "H", "red"));
+    }
+
+    it("lists the tab bar as units", () => {
+      expect(W.tabUnits(two())).toEqual([
+        { kind: "tab", tabId: "a" },
+        { kind: "group", groupId: "g" },
+        { kind: "tab", tabId: "d" },
+        { kind: "group", groupId: "h" },
+      ]);
+    });
+
+    it("moves a group before another unit, to the front, or to the end", () => {
+      // other units (without g): a, d, h
+      expect(ids(W.moveGroup(two(), "g", 0))).toEqual(["b", "c", "a", "d", "e"]);
+      expect(ids(W.moveGroup(two(), "g", 2))).toEqual(["a", "d", "b", "c", "e"]); // before h
+      expect(ids(W.moveGroup(two(), "g", 3))).toEqual(["a", "d", "e", "b", "c"]); // the end
+      expect(ids(W.moveGroup(two(), "h", 1))).toEqual(["a", "e", "b", "c", "d"]); // before g
+    });
+
+    it("keeps the group intact (members, order, collapsed) and is a no-op in place", () => {
+      const ws = W.setGroupCollapsed(two(), "g", true);
+      const moved = W.moveGroup(ws, "g", 3);
+      expect(W.groupTabs(moved, "g").map((t) => t.id)).toEqual(["b", "c"]);
+      expect(W.findGroup(moved, "g")?.collapsed).toBe(true);
+      expect(moved.groups.map((g) => g.id)).toEqual(["h", "g"]); // groups follow bar order
+      expect(W.moveGroup(ws, "g", 1)).toBe(ws); // already before d
+      expect(W.moveGroup(ws, "nope", 0)).toBe(ws);
+    });
+  });
+
   describe("groupByFolder", () => {
     let n = 0;
     const newId = () => `auto-${++n}`;

@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useLayoutEffect,
   useRef,
   useState,
@@ -9,7 +8,7 @@ import {
 } from "react";
 import { isTabDirty, type Tab, type TabId } from "../../domain/entities/Tab";
 import type { GroupColor, GroupId, TabGroup } from "../../domain/entities/TabGroup";
-import { findGroup, resolveDrop, type Workspace } from "../../domain/entities/Workspace";
+import { findGroup, resolveDrop, tabUnits, type Workspace } from "../../domain/entities/Workspace";
 import { GroupEditor } from "./GroupEditor";
 import { TabContextMenu } from "./TabContextMenu";
 
@@ -21,6 +20,8 @@ export interface TabGroupActions {
   rename: (groupId: GroupId, name: string) => void;
   recolor: (groupId: GroupId, color: GroupColor) => void;
   toggleCollapsed: (groupId: GroupId) => void;
+  /** Move a whole group before unit `toUnit` of the other tab-bar units. */
+  move: (groupId: GroupId, toUnit: number) => void;
   ungroup: (groupId: GroupId) => void;
   byFolder: () => void;
 }
@@ -46,6 +47,13 @@ interface DragState {
   id: TabId;
   startX: number;
   pointerId: number;
+  dragging: boolean;
+}
+
+/** A group being dragged by its chip; `gap` is a slot among the other units. */
+interface GroupDragState {
+  groupId: GroupId;
+  startX: number;
   dragging: boolean;
 }
 
@@ -78,7 +86,8 @@ export function groupLabel(group: TabGroup): string {
  * Tab bar with Chrome-style tab groups and pointer-based drag-to-reorder.
  *
  * Each group renders as a colored chip followed by its tabs (underlined in the group's
- * color); clicking the chip collapses/expands it, right-clicking opens the group editor.
+ * color); clicking the chip collapses/expands it, right-clicking opens the group editor,
+ * and dragging it moves the whole group between the other tabs and groups.
  * Right-clicking a tab opens the tab menu (add to / remove from a group, close).
  *
  * Drag uses pointer events (not HTML5 drag, which is unreliable in WKWebView): press-and-
@@ -108,6 +117,10 @@ export function TabBar({
   const [menu, setMenu] = useState<{ tabId: TabId; x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<GroupId | null>(null);
   const [editorAnchor, setEditorAnchor] = useState<DOMRect | null>(null);
+  const groupDragRef = useRef<GroupDragState | null>(null);
+  const [groupDrag, setGroupDrag] = useState<{ groupId: GroupId; gap: number } | null>(null);
+  // A chip drag ends in a click on the chip; this swallows it so it doesn't also collapse.
+  const swallowClickRef = useRef(false);
 
   const editing = findGroup(workspace, editingId);
 
@@ -203,6 +216,49 @@ export function TabBar({
     setHint(null);
   };
 
+  /** Slot among the units other than `groupId` for a pointer x, by unit midpoints. */
+  const unitGapAt = (clientX: number, groupId: GroupId): number => {
+    const list = listRef.current;
+    if (!list) return 0;
+    const rects = Array.from(list.querySelectorAll<HTMLElement>(":scope > [data-unit]"))
+      .filter((el) => el.dataset.unit !== groupId)
+      .map((el) => el.getBoundingClientRect());
+    const index = rects.findIndex((r) => clientX < r.left + r.width / 2);
+    return index === -1 ? rects.length : index;
+  };
+
+  const onChipPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, groupId: GroupId) => {
+    swallowClickRef.current = false;
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    groupDragRef.current = { groupId, startX: e.clientX, dragging: false };
+  };
+
+  const onChipPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = groupDragRef.current;
+    if (!drag) return;
+    if (!drag.dragging) {
+      if (Math.abs(e.clientX - drag.startX) < DRAG_THRESHOLD) return;
+      drag.dragging = true;
+    }
+    setGroupDrag({ groupId: drag.groupId, gap: unitGapAt(e.clientX, drag.groupId) });
+  };
+
+  const endChipDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = groupDragRef.current;
+    groupDragRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // capture may already be gone
+    }
+    if (drag?.dragging) {
+      swallowClickRef.current = true;
+      if (groupDrag) groups.move(drag.groupId, groupDrag.gap);
+    }
+    setGroupDrag(null);
+  };
+
   const startGroup = (tabId: TabId) => {
     const id = groups.create(tabId);
     if (id) setEditingId(id); // name it right away, as Chrome does
@@ -212,7 +268,22 @@ export function TabBar({
   // tabs of collapsed groups. `visibleIndex` counts rendered tabs (drag gaps use it).
   const visibleCount = tabs.filter((t) => !findGroup(workspace, t.groupId)?.collapsed).length;
   let visibleIndex = 0;
-  const renderTab = (tab: Tab, group: TabGroup | null) => {
+  // While a group is dragged: its insertion marker sits before unit `gap` of the others.
+  const otherUnits = groupDrag
+    ? tabUnits(workspace).filter((u) => u.kind !== "group" || u.groupId !== groupDrag.groupId)
+    : [];
+  let unitIndex = 0;
+  /** Marker suffix ("insert-before"/"insert-after") for the next non-dragged unit. */
+  const nextUnitMarker = (): string | null => {
+    const index = unitIndex;
+    unitIndex += 1;
+    if (!groupDrag) return null;
+    if (groupDrag.gap === index) return "insert-before";
+    if (groupDrag.gap === otherUnits.length && index === otherUnits.length - 1) return "insert-after";
+    return null;
+  };
+
+  const renderTab = (tab: Tab, group: TabGroup | null, unitMarker: string | null = null) => {
     const index = visibleIndex;
     visibleIndex += 1;
     const className = [
@@ -224,6 +295,7 @@ export function TabBar({
       dragId !== null && gap === visibleCount && index === visibleCount - 1
         ? "tab--insert-after"
         : "",
+      unitMarker ? `tab--${unitMarker}` : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -232,6 +304,7 @@ export function TabBar({
       <div
         key={tab.id}
         data-tab-id={tab.id}
+        data-unit={group ? undefined : tab.id}
         className={className}
         style={group ? groupColorStyle(group.color) : undefined}
         title={tab.document.path ?? tab.document.name}
@@ -266,14 +339,26 @@ export function TabBar({
   for (const tab of tabs) {
     const group = findGroup(workspace, tab.groupId);
     if (!group) {
-      items.push(renderTab(tab, null));
+      items.push(renderTab(tab, null, nextUnitMarker()));
       continue;
     }
     if (seen.has(group.id)) continue;
     seen.add(group.id);
     const members = tabs.filter((t) => t.groupId === group.id);
+    const dragged = groupDrag?.groupId === group.id;
+    const marker = dragged ? null : nextUnitMarker();
     items.push(
-      <Fragment key={group.id}>
+      <div
+        key={group.id}
+        data-unit={group.id}
+        className={[
+          "tabgroup",
+          dragged ? "tabgroup--dragging" : "",
+          marker ? `tabgroup--${marker}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <div
           className={`tabgroup__head${group.collapsed ? " tabgroup__head--collapsed" : ""}`}
           style={groupColorStyle(group.color)}
@@ -283,8 +368,18 @@ export function TabBar({
             data-group-id={group.id}
             aria-expanded={!group.collapsed}
             aria-label={`${groupLabel(group)}, ${members.length} tab${members.length === 1 ? "" : "s"}`}
-            title={`${groupLabel(group)} — click to ${group.collapsed ? "expand" : "collapse"}, right-click to edit`}
-            onClick={() => groups.toggleCollapsed(group.id)}
+            title={`${groupLabel(group)} — click to ${group.collapsed ? "expand" : "collapse"}, drag to move, right-click to edit`}
+            onPointerDown={(e) => onChipPointerDown(e, group.id)}
+            onPointerMove={onChipPointerMove}
+            onPointerUp={endChipDrag}
+            onPointerCancel={endChipDrag}
+            onClick={() => {
+              if (swallowClickRef.current) {
+                swallowClickRef.current = false;
+                return;
+              }
+              groups.toggleCollapsed(group.id);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               setEditingId(group.id);
@@ -295,7 +390,7 @@ export function TabBar({
           </button>
         </div>
         {!group.collapsed && members.map((t) => renderTab(t, group))}
-      </Fragment>,
+      </div>,
     );
   }
 

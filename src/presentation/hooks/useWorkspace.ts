@@ -83,6 +83,7 @@ export function useWorkspace() {
       rename: (groupId, name) => tabManager.renameGroup(groupId, name),
       recolor: (groupId, color) => tabManager.recolorGroup(groupId, color),
       toggleCollapsed: (groupId) => tabManager.toggleGroupCollapsed(groupId),
+      move: (groupId, toUnit) => tabManager.moveGroup(groupId, toUnit),
       ungroup: (groupId) => tabManager.ungroup(groupId),
       byFolder: () => tabManager.groupByFolder(),
     }),

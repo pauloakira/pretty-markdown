@@ -119,7 +119,7 @@ Workspace
  ├─ activeTabId
  ├─ groups: TabGroup[]        // Chrome-style tab groups, in tab-bar order
  └─ operations: openInNewTab · closeTab · switchTab · dropTab · next/prevTab
-                groupTabsInto · addToGroup · removeFromGroup · updateGroup
+                moveGroup · groupTabsInto · addToGroup · removeFromGroup · updateGroup
                 setGroupCollapsed · ungroup · groupByFolder
 
 Tab
@@ -143,7 +143,8 @@ Design rules:
   Tauri session store and restored on launch.
 - **Keyboard:** `⌘T` new tab, `⌘W` close tab, `⌘⇧[` / `⌘⇧]` switch tabs (browser-familiar).
 - **Tab groups** (like Chrome): a named, colored run of adjacent tabs, headed by a chip.
-  Click the chip to collapse/expand, right-click it to rename, recolor (Chrome's nine
+  Click the chip to collapse/expand, drag it to move the whole group (it lands only between
+  other tabs/groups, never inside one), right-click it to rename, recolor (Chrome's nine
   colors), open a document into the group, ungroup, or close the group. Right-click a tab
   to add it to a new/existing group, remove it, or *Group tabs by folder* (≥2 tabs from one
   folder form a group named after the folder segment that tells it apart). Dragging a tab

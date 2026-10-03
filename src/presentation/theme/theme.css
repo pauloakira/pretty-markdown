@@ -668,6 +668,32 @@ body {
 }
 
 /* ---- Tab groups ----------------------------------------------------------- */
+/* One group as a unit in the bar: chip + its tabs (what a chip drag moves). */
+.tabgroup {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.tabgroup--dragging {
+  opacity: 0.45;
+}
+.tabgroup--insert-before::before,
+.tabgroup--insert-after::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.tabgroup--insert-before::before {
+  left: 0;
+}
+.tabgroup--insert-after::after {
+  right: 0;
+}
 /* The chip that heads a group; shares the group's underline with its tabs. */
 .tabgroup__head {
   flex: none;
@@ -680,6 +706,7 @@ body {
   box-shadow: none;
 }
 .tabgroup__chip {
+  touch-action: none; /* the chip is draggable */
   display: flex;
   align-items: center;
   gap: 0.35rem;

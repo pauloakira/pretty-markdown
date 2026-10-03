@@ -62,6 +62,11 @@ export class TabManager {
     this.commit(W.dropTab(this.workspace, id, gap, outside));
   }
 
+  /** Move a whole group before unit `toUnit` of the other tab-bar units (see `W.moveGroup`). */
+  moveGroup(groupId: GroupId, toUnit: number): void {
+    this.commit(W.moveGroup(this.workspace, groupId, toUnit));
+  }
+
   /** Put a tab in a new, unnamed group with the next free color. Returns the group's id. */
   createGroup(tabId: TabId): GroupId | null {
     if (!this.workspace.tabs.some((t) => t.id === tabId)) return null;
