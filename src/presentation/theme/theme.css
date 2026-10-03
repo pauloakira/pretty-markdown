@@ -129,6 +129,8 @@ body {
 
 /* ---- Tab bar -------------------------------------------------------------- */
 .tabbar {
+  --tab-min: 64px;
+  --chip-min: 72px; /* below this a group name is unreadable: scroll instead */
   position: relative; /* anchor for the drag hint */
   display: flex;
   align-items: stretch;
@@ -137,11 +139,47 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/*
+ * The tab strip. Tabs shrink to fit (like Chrome) and only scroll once they hit their
+ * minimum width. The scrollbar is hidden — it ate into the tabs' height, and macOS shows
+ * it permanently with "Show scroll bars: Always" — so the strip scrolls by wheel/trackpad
+ * and keeps the active tab in view; faded edges show there's more (see useTabStrip).
+ */
 .tabbar__list {
+  --strip-fade: 32px;
   display: flex;
-  flex: 1;
+  flex: 0 1 auto; /* hug the tabs so "+" sits right after the last one */
+  min-width: 0;
   overflow-x: auto;
-  scrollbar-width: thin;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabbar__list::-webkit-scrollbar {
+  display: none;
+}
+.tabbar__list--fade-start {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade));
+}
+.tabbar__list--fade-end {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 var(--strip-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--strip-fade));
+}
+.tabbar__list--fade-start.tabbar__list--fade-end {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--strip-fade),
+    #000 calc(100% - var(--strip-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--strip-fade),
+    #000 calc(100% - var(--strip-fade)),
+    transparent
+  );
 }
 
 /*
@@ -151,12 +189,16 @@ body {
 .tab {
   --tab-line: transparent;
   --tab-insert: 0;
+  container-type: inline-size; /* narrow tabs drop their close button, below */
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  min-width: 120px;
-  max-width: 220px;
-  padding: 0 0.35rem 0 0.85rem;
+  gap: 0.3rem;
+  /* An explicit width (not just flex-basis): with size containment the strip measures
+     tabs by it when it hugs its contents. */
+  width: 200px;
+  flex: 0 1 auto;
+  min-width: var(--tab-min);
+  padding: 0 0.35rem 0 0.8rem;
   border-right: 1px solid var(--border);
   color: var(--fg-muted);
   font-size: 0.85rem;
@@ -213,6 +255,12 @@ body {
   background: var(--border);
   opacity: 1;
 }
+/* Squeezed tabs keep their title; the close button stays only on the active one. */
+@container (max-width: 96px) {
+  .tab:not(.tab--active) .tab__close {
+    display: none;
+  }
+}
 
 .tabbar__new,
 .tabbar__settings {
@@ -227,7 +275,9 @@ body {
 .tabbar__new {
   font-size: 1.2rem;
 }
+/* "+" follows the tabs; the settings button stays pinned to the far right. */
 .tabbar__settings {
+  margin-left: auto;
   border-left: 1px solid var(--border);
 }
 .tabbar__new:hover:not(:disabled),
@@ -672,7 +722,15 @@ body {
 .tabgroup {
   position: relative;
   display: flex;
+  flex: 0 1 auto;
   align-items: stretch;
+  /* Shrink in step with loose tabs, but never below its own tabs' minimums (the box
+     would otherwise refuse to shrink at all: its tabs' 200px width sets its min-content). */
+  min-width: calc(var(--group-tabs, 0) * var(--tab-min) + var(--chip-min));
+}
+/* An unnamed group's chip is just a dot. */
+.tabgroup:has(.tabgroup__chip--unnamed) {
+  --chip-min: 34px;
 }
 .tabgroup--dragging {
   opacity: 0.45;
@@ -696,10 +754,11 @@ body {
 }
 /* The chip that heads a group; shares the group's underline with its tabs. */
 .tabgroup__head {
-  flex: none;
+  flex: 0 0.15 auto; /* chips give way far slower than tabs, so names stay readable */
+  min-width: var(--chip-min); /* a long group name gives way before the tabs vanish */
   display: flex;
   align-items: center;
-  padding: 0 0.45rem 0 0.6rem;
+  padding: 0 0.5rem 0 0.65rem;
   box-shadow: inset 0 -2px 0 var(--group-color);
 }
 .tabgroup__head--collapsed {
@@ -710,24 +769,27 @@ body {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  max-width: 160px;
+  min-width: 0;
+  max-width: 132px;
+  height: 22px;
   border: none;
   border-radius: 6px;
-  padding: 0.22rem 0.55rem;
+  padding: 0 0.55rem;
   background: var(--group-color);
   color: var(--group-fg);
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
 }
 .tabgroup__chip:hover {
   filter: brightness(1.08);
 }
 .tabgroup__chip--unnamed {
-  min-width: 14px;
-  min-height: 14px;
-  padding: 0.22rem;
+  width: 14px;
+  height: 14px;
+  padding: 0;
   border-radius: 999px;
 }
 .tabgroup__name {

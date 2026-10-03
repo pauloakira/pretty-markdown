@@ -142,13 +142,23 @@ function arrange(manager: TabManager) {
   return { runge, quad };
 }
 
+// Browser APIs the webview has but jsdom lacks (used by the tab strip).
+class NoopResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+  vi.stubGlobal("CSS", { escape: (value: string) => value });
   disk.session = null;
 });
 
 afterEach(async () => {
   await quit();
+  vi.unstubAllGlobals();
 });
 
 describe("quit prompt × tab groups", () => {

@@ -9,6 +9,7 @@ import {
 import { isTabDirty, type Tab, type TabId } from "../../domain/entities/Tab";
 import type { GroupColor, GroupId, TabGroup } from "../../domain/entities/TabGroup";
 import { findGroup, resolveDrop, tabUnits, type Workspace } from "../../domain/entities/Workspace";
+import { useTabStrip } from "../hooks/useTabStrip";
 import { GroupEditor } from "./GroupEditor";
 import { TabContextMenu } from "./TabContextMenu";
 
@@ -123,6 +124,7 @@ export function TabBar({
   const swallowClickRef = useRef(false);
 
   const editing = findGroup(workspace, editingId);
+  const overflow = useTabStrip(listRef, activeTabId, workspace);
 
   // Anchor the editor under its chip. Measured after render so a just-created group's
   // chip exists; re-measured as tabs change so it follows the chip.
@@ -351,6 +353,7 @@ export function TabBar({
       <div
         key={group.id}
         data-unit={group.id}
+        style={{ "--group-tabs": group.collapsed ? 0 : members.length } as CSSProperties}
         className={[
           "tabgroup",
           dragged ? "tabgroup--dragging" : "",
@@ -398,7 +401,16 @@ export function TabBar({
 
   return (
     <div className="tabbar" ref={barRef}>
-      <div className="tabbar__list" ref={listRef}>
+      <div
+        className={[
+          "tabbar__list",
+          overflow.start ? "tabbar__list--fade-start" : "",
+          overflow.end ? "tabbar__list--fade-end" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        ref={listRef}
+      >
         {items}
       </div>
       <button
