@@ -2,7 +2,9 @@ import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "re
 import { useContainer } from "../../composition/ContainerContext";
 import type { Document } from "../../domain/entities/Document";
 import type { TabId } from "../../domain/entities/Tab";
-import { activeTab } from "../../domain/entities/Workspace";
+import type { GroupId } from "../../domain/entities/TabGroup";
+import { activeTab, findTabByPath } from "../../domain/entities/Workspace";
+import type { TabGroupActions } from "../components/TabBar";
 import type { EditorMode } from "../../domain/values/ViewState";
 
 /**
@@ -60,6 +62,31 @@ export function useWorkspace() {
       return null;
     },
     [container, tabManager],
+  );
+
+  /** Open a document via the dialog and put its tab in `groupId`. */
+  const openInGroup = useCallback(
+    async (groupId: GroupId): Promise<Document | null> => {
+      const doc = await open();
+      const tab = doc ? findTabByPath(tabManager.getSnapshot(), doc.path) : null;
+      if (tab) tabManager.addToGroup(tab.id, groupId);
+      return doc;
+    },
+    [open, tabManager],
+  );
+
+  const groupActions = useMemo<TabGroupActions>(
+    () => ({
+      create: (tabId) => tabManager.createGroup(tabId),
+      addTo: (tabId, groupId) => tabManager.addToGroup(tabId, groupId),
+      removeFrom: (tabId) => tabManager.removeFromGroup(tabId),
+      rename: (groupId, name) => tabManager.renameGroup(groupId, name),
+      recolor: (groupId, color) => tabManager.recolorGroup(groupId, color),
+      toggleCollapsed: (groupId) => tabManager.toggleGroupCollapsed(groupId),
+      ungroup: (groupId) => tabManager.ungroup(groupId),
+      byFolder: () => tabManager.groupByFolder(),
+    }),
+    [tabManager],
   );
 
   const closeTab = useCallback((id: TabId) => tabManager.closeTab(id), [tabManager]);
@@ -152,6 +179,8 @@ export function useWorkspace() {
     exportPdf,
     open,
     openPath,
+    openInGroup,
+    groupActions,
     closeTab,
     activateTab,
     focusSibling,

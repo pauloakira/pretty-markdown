@@ -40,6 +40,22 @@
   --error-bg: #fdecec;
   --error-fg: #b3261e;
   --error-border: #f2b8b5;
+
+  /*
+   * Tab-group palette (Chrome's). light-dark() follows the active color-scheme, which
+   * every theme selector below sets, so each hue has one home for both themes.
+   */
+  --group-grey: light-dark(#5f6368, #bdc1c6);
+  --group-blue: light-dark(#1a73e8, #8ab4f8);
+  --group-red: light-dark(#d93025, #f28b82);
+  --group-yellow: light-dark(#b26c00, #fdd663);
+  --group-green: light-dark(#1e8e3e, #81c995);
+  --group-pink: light-dark(#d01884, #ff8bcb);
+  --group-purple: light-dark(#9334e6, #c58af9);
+  --group-cyan: light-dark(#007b83, #78d9ec);
+  --group-orange: light-dark(#e8710a, #fcad70);
+  /* Text on a group-colored chip. */
+  --group-fg: light-dark(#ffffff, #121212);
 }
 
 /*
@@ -113,6 +129,7 @@ body {
 
 /* ---- Tab bar -------------------------------------------------------------- */
 .tabbar {
+  position: relative; /* anchor for the drag hint */
   display: flex;
   align-items: stretch;
   height: 40px;
@@ -127,7 +144,13 @@ body {
   scrollbar-width: thin;
 }
 
+/*
+ * A tab's underline (active accent, or its group's color) and the drag insertion marker
+ * are two layers of one box-shadow, set through variables so they can coexist.
+ */
 .tab {
+  --tab-line: transparent;
+  --tab-insert: 0;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -139,20 +162,26 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
   user-select: none;
+  box-shadow:
+    inset var(--tab-insert) 0 0 var(--accent),
+    inset 0 -2px 0 var(--tab-line);
 }
 .tab:hover {
   background: color-mix(in srgb, var(--bg) 50%, var(--bg-elevated));
 }
 .tab--active {
+  --tab-line: var(--accent);
   background: var(--bg);
   color: var(--fg);
-  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tab--grouped {
+  --tab-line: var(--group-color);
 }
 .tab--insert-before {
-  box-shadow: inset 2px 0 0 var(--accent);
+  --tab-insert: 2px;
 }
 .tab--insert-after {
-  box-shadow: inset -2px 0 0 var(--accent);
+  --tab-insert: -2px;
 }
 .tab--dragging {
   opacity: 0.5;
@@ -636,6 +665,184 @@ body {
 .welcome__settings:hover {
   background: var(--bg-elevated);
   color: var(--fg);
+}
+
+/* ---- Tab groups ----------------------------------------------------------- */
+/* The chip that heads a group; shares the group's underline with its tabs. */
+.tabgroup__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 0.45rem 0 0.6rem;
+  box-shadow: inset 0 -2px 0 var(--group-color);
+}
+.tabgroup__head--collapsed {
+  box-shadow: none;
+}
+.tabgroup__chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 160px;
+  border: none;
+  border-radius: 6px;
+  padding: 0.22rem 0.55rem;
+  background: var(--group-color);
+  color: var(--group-fg);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabgroup__chip:hover {
+  filter: brightness(1.08);
+}
+.tabgroup__chip--unnamed {
+  min-width: 14px;
+  min-height: 14px;
+  padding: 0.22rem;
+  border-radius: 999px;
+}
+.tabgroup__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabgroup__count {
+  min-width: 1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.2);
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+/* "Joins X" / "Leaves X" while dragging a tab across a group boundary. */
+.tabbar__drop-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--group-color);
+  color: var(--group-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.3);
+}
+
+/* ---- Popover menus (tab menu, group editor) -------------------------------- */
+.popmenu,
+.groupeditor {
+  z-index: 50;
+  min-width: 13rem;
+  padding: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.3);
+  font-size: 0.83rem;
+}
+.popmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.38rem 0.6rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.popmenu__item:hover:not(:disabled),
+.popmenu__item--open {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.popmenu__item:disabled {
+  color: var(--fg-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.popmenu__item--danger {
+  color: var(--error-fg);
+}
+.popmenu__chevron,
+.popmenu__shortcut {
+  margin-left: auto;
+  color: var(--fg-muted);
+}
+.popmenu__chevron {
+  font-size: 1rem;
+  line-height: 1;
+}
+.popmenu__shortcut {
+  padding-left: 1rem;
+  font-size: 0.75rem;
+}
+.popmenu__swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--group-color);
+}
+.popmenu__muted {
+  color: var(--fg-muted);
+}
+.popmenu__sep {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--border);
+}
+
+.groupeditor {
+  width: 17rem;
+  padding: 0.75rem 0.5rem 0.3rem;
+}
+.groupeditor__label {
+  display: block;
+  margin: 0 0.3rem 0.35rem;
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+.groupeditor__input {
+  width: calc(100% - 0.6rem);
+  margin: 0 0.3rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+}
+.groupeditor__input:focus {
+  border-color: var(--accent);
+}
+.groupeditor__swatches {
+  display: flex;
+  justify-content: space-between;
+  margin: 0.7rem 0.3rem 0.45rem;
+}
+.groupeditor__swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--group-color);
+  cursor: pointer;
+}
+.groupeditor__swatch--on {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--group-color);
 }
 
 /* ---- Tab dirty indicator -------------------------------------------------- */
