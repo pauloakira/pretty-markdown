@@ -117,10 +117,14 @@ in memory (and on disk for session restore).
 Workspace
  ├─ tabs: Tab[]
  ├─ activeTabId
- └─ operations: openInNewTab · closeTab · switchTab · reorderTab · next/prevTab
+ ├─ groups: TabGroup[]        // Chrome-style tab groups, in tab-bar order
+ └─ operations: openInNewTab · closeTab · switchTab · dropTab · next/prevTab
+                groupTabsInto · addToGroup · removeFromGroup · updateGroup
+                setGroupCollapsed · ungroup · groupByFolder
 
 Tab
  ├─ id
+ ├─ groupId: GroupId | null   // membership lives on the tab
  ├─ document: Document        // path, content, dirty flag
  ├─ viewState: { mode: Reader|Edit, scrollPos, fontSize, cursor }
  └─ renderCache                // memoized rendered blocks + math (per tab)
@@ -138,6 +142,16 @@ Design rules:
 - **Session restore:** the open tab set (paths + active tab + scroll) is persisted via the
   Tauri session store and restored on launch.
 - **Keyboard:** `⌘T` new tab, `⌘W` close tab, `⌘⇧[` / `⌘⇧]` switch tabs (browser-familiar).
+- **Tab groups** (like Chrome): a named, colored run of adjacent tabs, headed by a chip.
+  Click the chip to collapse/expand, right-click it to rename, recolor (Chrome's nine
+  colors), open a document into the group, ungroup, or close the group. Right-click a tab
+  to add it to a new/existing group, remove it, or *Group tabs by folder* (≥2 tabs from one
+  folder form a group named after the folder segment that tells it apart). Dragging a tab
+  between two tabs of a group joins it; dropping on empty bar space or a chip leaves it.
+  Invariants, kept by the domain's `normalize`: a group's tabs are contiguous, empty groups
+  vanish, and the active tab is never hidden in a collapsed group (collapsing moves focus
+  out; activating a hidden tab expands its group). Tab cycling and `⌘1–9` skip collapsed
+  tabs. Groups (name, color, collapsed) are saved in the session (format v2; v1 still reads).
 
 ## 4. Performance targets
 

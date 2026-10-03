@@ -52,5 +52,8 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Export to PDF — print-to-PDF (`⌘P` / toolbar): document-only print layout, vector
       math (KaTeX fonts / MathJax SVG), page-break rules. *(Phase 1; native dialog-free
       export with page numbers is a possible Phase 2.)*
+- [x] Tab groups (Chrome-style): named/colored groups, collapse, tab & chip menus, drag
+      into/out of groups, *Group tabs by folder*, persisted in the session.
+      *(Not yet: dragging a whole group by its chip; keyboard shortcuts for groups.)*
 - [ ] Full TeX engine / TikZ (opt-in renderer).
 - [ ] Plugin/theme system.
