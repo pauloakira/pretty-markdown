@@ -99,3 +99,7 @@ The code follows a layered, ports-and-adapters architecture. Start with
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (patterns, conventions, decision log), then
 [DESIGN.md](DESIGN.md) (product design and render pipeline), [ROADMAP.md](ROADMAP.md)
 (milestones), and [diagram/](diagram/) (UML).
+
+## License
+
+[MIT](LICENSE) © 2026 Paulo Akira
