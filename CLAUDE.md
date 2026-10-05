@@ -25,6 +25,7 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [DESIGN.md](DESIGN.md) | Product design, locked decisions, render pipeline, multi-tab model, perf targets |
 | [ROADMAP.md](ROADMAP.md) | Milestone build plan |
 | [diagram/](diagram/) | Mermaid UML — use-case and sequence diagrams |
+| [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | Plan for PDF reading (planned, not started) — engine choice, layer-by-layer changes, phases |
 
 ## Architecture in one breath
 

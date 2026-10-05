@@ -55,5 +55,7 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Tab groups (Chrome-style): named/colored groups, collapse, tab & chip menus, drag
       tabs into/out of groups, drag a whole group by its chip, *Group tabs by folder*,
       persisted in the session. *(Not yet: keyboard shortcuts for groups.)*
+- [ ] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
+      restore, file watching. Planned in phases; see [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
 - [ ] Full TeX engine / TikZ (opt-in renderer).
 - [ ] Plugin/theme system.
