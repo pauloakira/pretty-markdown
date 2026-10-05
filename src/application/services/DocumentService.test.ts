@@ -124,3 +124,49 @@ describe("DocumentService — save", () => {
     if (outcome.kind === "error") expect(outcome.message).toBe("disk full");
   });
 });
+
+describe("DocumentService — PDFs", () => {
+  const pdfBytes = new TextEncoder().encode("%PDF-1.7\n%âãÏÓ\n1 0 obj");
+
+  it("loads a .pdf as a PDF document, reading only its header", async () => {
+    const fake = new FakeReader(err("text read must not be used for a PDF"), ok(pdfBytes));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    const outcome = await service.load("/papers/Paper.PDF");
+    expect(outcome).toEqual({
+      kind: "opened",
+      document: { kind: "pdf", path: "/papers/Paper.PDF", name: "Paper.PDF" },
+    });
+    expect(fake.bytesRequested).toEqual({ path: "/papers/Paper.PDF", maxBytes: 1024 });
+  });
+
+  it("rejects a .pdf that isn't really a PDF", async () => {
+    const fake = new FakeReader(ok(""), ok(new TextEncoder().encode("<html>not a pdf</html>")));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    const outcome = await service.load("/downloads/paper.pdf");
+    expect(outcome).toEqual({ kind: "error", message: "'paper.pdf' isn't a valid PDF file." });
+  });
+
+  it("reports a missing PDF as an error (so restore drops it)", async () => {
+    const fake = new FakeReader(ok(""), err("Failed to read '/gone.pdf': No such file"));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    expect(await service.load("/gone.pdf")).toEqual({
+      kind: "error",
+      message: "Failed to read '/gone.pdf': No such file",
+    });
+  });
+
+  it("still reads markdown as text", async () => {
+    const fake = new FakeReader(ok("# Notes"), err("byte read must not be used for markdown"));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    const outcome = await service.load("/notes/a.md");
+    expect(outcome.kind === "opened" && outcome.document).toMatchObject({
+      kind: "markdown",
+      content: "# Notes",
+    });
+    expect(fake.bytesRequested).toBeNull();
+  });
+});

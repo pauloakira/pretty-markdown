@@ -77,9 +77,14 @@ export class SessionService {
     if (!session || session.tabs.length === 0) return { tabs: [], groups: [], activeIndex: 0 };
 
     const tabs: RestoredTab[] = [];
-    for (const entry of session.tabs) {
+    // The saved index counts every saved tab; each one dropped before it (moved, deleted,
+    // or not a valid PDF any more) shifts the active tab one place left.
+    let activeIndex = session.activeIndex;
+    for (const [index, entry] of session.tabs.entries()) {
       const outcome = await this.documents.load(entry.path);
-      if (outcome.kind === "opened") {
+      if (outcome.kind !== "opened") {
+        if (index < session.activeIndex) activeIndex -= 1;
+      } else {
         tabs.push({
           document: outcome.document,
           mode: entry.mode,
@@ -89,6 +94,6 @@ export class SessionService {
         });
       }
     }
-    return { tabs, groups: session.groups, activeIndex: session.activeIndex };
+    return { tabs, groups: session.groups, activeIndex };
   }
 }

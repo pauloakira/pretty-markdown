@@ -87,6 +87,21 @@ describe("SessionService", () => {
     expect(restored.groups).toEqual([{ name: "Notes", color: "green", collapsed: false }]);
   });
 
+  it("keeps the same tab active when tabs before it are dropped", async () => {
+    const tab = (path: string) => ({ path, mode: "reader" as const, scrollTop: 0, group: null });
+    const repo = new FakeSessionRepository({
+      version: 3,
+      activeIndex: 3, // /d.md
+      tabs: [tab("/a.md"), tab("/gone.md"), tab("/c.md"), tab("/d.md"), tab("/e.md")],
+      groups: [],
+    });
+    const files = { "/a.md": "", "/c.md": "", "/d.md": "", "/e.md": "" };
+    const restored = await new SessionService(repo, documentsWith(files)).restore();
+
+    expect(restored.tabs.map((t) => t.document.path)).toEqual(["/a.md", "/c.md", "/d.md", "/e.md"]);
+    expect(restored.tabs[restored.activeIndex].document.path).toBe("/d.md");
+  });
+
   it("returns nothing when there is no saved session", async () => {
     const service = new SessionService(new FakeSessionRepository(null), documentsWith({}));
     expect((await service.restore()).tabs).toHaveLength(0);
@@ -157,6 +172,30 @@ describe("SessionService", () => {
       expect(await service.autosave(updateGroup(grouped, "g", { name: "PoliVEM" }))).toBe(true);
       expect(repo.saved?.groups).toEqual([{ name: "PoliVEM", color: "blue", collapsed: false }]);
       expect(repo.saved?.tabs.map((t) => t.group)).toEqual([0, 0]);
+    });
+
+    it("restores PDF tabs with their page/zoom, and drops missing or invalid ones", async () => {
+      const stored = {
+        version: 3 as const,
+        activeIndex: 0,
+        tabs: [
+          { path: "/p/paper.pdf", mode: "reader" as const, scrollTop: 0, group: null, pdf: { page: 7, pageOffset: 0.5, zoom: 1.25 } },
+          { path: "/p/old.pdf", mode: "reader" as const, scrollTop: 0, group: null },
+          { path: "/p/gone.pdf", mode: "reader" as const, scrollTop: 0, group: null },
+          { path: "/p/fake.pdf", mode: "reader" as const, scrollTop: 0, group: null },
+        ],
+        groups: [],
+      };
+      const service = new SessionService(
+        new FakeSessionRepository(stored),
+        documentsWith({ "/p/paper.pdf": "%PDF-1.7 ...", "/p/old.pdf": "%PDF-1.4 ...", "/p/fake.pdf": "<html>" }),
+      );
+
+      const restored = await service.restore();
+      expect(restored.tabs.map((t) => t.document.path)).toEqual(["/p/paper.pdf", "/p/old.pdf"]);
+      expect(restored.tabs[0].document.kind).toBe("pdf");
+      expect(restored.tabs[0].pdf).toEqual({ page: 7, pageOffset: 0.5, zoom: 1.25 });
+      expect(restored.tabs[1].pdf).toBeUndefined(); // saved before PDF view state existed
     });
 
     it("stays off after the user opts out, so a late write can't undo 'don't reopen'", async () => {
