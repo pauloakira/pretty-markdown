@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDocument } from "../../domain/entities/Document";
+import { createMarkdownDocument } from "../../domain/entities/Document";
 import { createTab } from "../../domain/entities/Tab";
 import { createGroup } from "../../domain/entities/TabGroup";
 import {
@@ -42,6 +42,11 @@ class FakeReader implements FileReader {
   async readTextFile(path: string): Promise<Result<string>> {
     return path in this.files ? ok(this.files[path]) : err("missing");
   }
+  async readBytes(path: string, maxBytes?: number): Promise<Result<Uint8Array>> {
+    if (!(path in this.files)) return err("missing");
+    const bytes = new TextEncoder().encode(this.files[path]);
+    return ok(maxBytes === undefined ? bytes : bytes.slice(0, maxBytes));
+  }
 }
 const nullPicker: FilePicker = {
   async pickMarkdownFile() {
@@ -64,7 +69,7 @@ function documentsWith(files: Record<string, string>): DocumentService {
 describe("SessionService", () => {
   it("restores only the files that still exist", async () => {
     const repo = new FakeSessionRepository({
-      version: 2,
+      version: 3,
       activeIndex: 0,
       tabs: [
         { path: "/a.md", mode: "reader", scrollTop: 0, group: 0 },
@@ -77,7 +82,7 @@ describe("SessionService", () => {
     const restored = await service.restore();
     expect(restored.tabs).toHaveLength(1);
     expect(restored.tabs[0].document.path).toBe("/a.md");
-    expect(restored.tabs[0].document.content).toBe("# A");
+    expect(restored.tabs[0].document).toMatchObject({ kind: "markdown", content: "# A" });
     expect(restored.tabs[0].group).toBe(0);
     expect(restored.groups).toEqual([{ name: "Notes", color: "green", collapsed: false }]);
   });
@@ -90,7 +95,7 @@ describe("SessionService", () => {
   it("persists the workspace as a session (paths only)", async () => {
     const repo = new FakeSessionRepository(null);
     const service = new SessionService(repo, documentsWith({}));
-    const ws = addTab(emptyWorkspace, createTab("t1", createDocument("/doc.md", "# Doc")));
+    const ws = addTab(emptyWorkspace, createTab("t1", createMarkdownDocument("/doc.md", "# Doc")));
 
     await service.persist(ws);
     expect(repo.saved?.tabs).toEqual([{ path: "/doc.md", mode: "reader", scrollTop: 0, group: null }]);
@@ -103,8 +108,8 @@ describe("SessionService", () => {
   });
 
   describe("autosave", () => {
-    const docA = createDocument("/a.md", "# A");
-    const docB = createDocument("/b.md", "# B");
+    const docA = createMarkdownDocument("/a.md", "# A");
+    const docB = createMarkdownDocument("/b.md", "# B");
     const withA = addTab(emptyWorkspace, createTab("t1", docA));
     const withAB = addTab(withA, createTab("t2", docB));
 
@@ -129,7 +134,7 @@ describe("SessionService", () => {
 
     it("treats the restored session as the baseline (no rewrite on launch)", async () => {
       const stored = {
-        version: 2 as const,
+        version: 3 as const,
         activeIndex: 0,
         tabs: [{ path: "/a.md", mode: "reader" as const, scrollTop: 0, group: null }],
         groups: [],

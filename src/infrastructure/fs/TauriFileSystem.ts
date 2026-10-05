@@ -38,6 +38,16 @@ export class TauriFileSystem implements FilePicker, FileReader, FileWriter {
     }
   }
 
+  async readBytes(path: string, maxBytes?: number): Promise<Result<Uint8Array>> {
+    try {
+      // The command returns a raw IPC response, which arrives as an ArrayBuffer (no JSON).
+      const buffer = await invoke<ArrayBuffer>("read_file_bytes", { path, maxBytes });
+      return ok(new Uint8Array(buffer));
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async writeTextFile(path: string, contents: string): Promise<Result<void>> {
     try {
       await invoke("write_text_file", { path, contents });

@@ -7,7 +7,7 @@ import { SessionService } from "./application/services/SessionService";
 import { TabManager } from "./application/services/TabManager";
 import type { Container } from "./composition/container";
 import { ContainerProvider } from "./composition/ContainerContext";
-import { createDocument } from "./domain/entities/Document";
+import { createMarkdownDocument } from "./domain/entities/Document";
 import type { AppWindow } from "./domain/ports/AppWindow";
 import type { FilePicker, FileReader, FileWriter } from "./domain/ports/FileSystem";
 import { err, ok } from "./domain/values/Result";
@@ -58,6 +58,11 @@ function makeContainer(): Container & { appWindow: FakeAppWindow } {
   const reader: FileReader = {
     async readTextFile(path) {
       return path in FILES ? ok(FILES[path]) : err("missing");
+    },
+    async readBytes(path, maxBytes) {
+      if (!(path in FILES)) return err("missing");
+      const bytes = new TextEncoder().encode(FILES[path]);
+      return ok(maxBytes === undefined ? bytes : bytes.slice(0, maxBytes));
     },
   };
   const picker: FilePicker = {
@@ -129,7 +134,7 @@ function button(label: string): HTMLButtonElement {
 
 /** Open the four files and arrange: [Runge: skeleton, intro] [Quad (collapsed): method] loose. */
 function arrange(manager: TabManager) {
-  Object.keys(FILES).forEach((path) => manager.openDocument(createDocument(path, FILES[path])));
+  Object.keys(FILES).forEach((path) => manager.openDocument(createMarkdownDocument(path, FILES[path])));
   const [skeleton, intro, method, loose] = manager.getSnapshot().tabs;
   const runge = manager.createGroup(skeleton.id) as string;
   manager.addToGroup(intro.id, runge);
@@ -176,7 +181,7 @@ describe("quit prompt × tab groups", () => {
 
     expect(first.appWindow.closed).toBe(1);
     const saved = JSON.parse(disk.session ?? "null");
-    expect(saved.version).toBe(2);
+    expect(saved.version).toBe(3);
     expect(saved.groups).toEqual([
       { name: "Runge v2", color: "blue", collapsed: false },
       { name: "Quad", color: "orange", collapsed: true },

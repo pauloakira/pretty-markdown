@@ -46,9 +46,10 @@ export function useFileWatch(tabs: readonly Tab[]) {
       const un = await listen<string[]>("file-changed", async (event) => {
         for (const path of event.payload) {
           const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
-          if (!tab) continue;
+          // PDF tabs aren't reloaded yet (docs/PDF_PLAN.md, Phase 3).
+          if (!tab || tab.document.kind !== "markdown") continue;
           const outcome = await documentService.load(path);
-          if (outcome.kind !== "opened") continue;
+          if (outcome.kind !== "opened" || outcome.document.kind !== "markdown") continue;
           const disk = outcome.document.content;
           if (disk === tab.document.content) continue; // no real change / our own save
 

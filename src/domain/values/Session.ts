@@ -1,5 +1,5 @@
 import { isGroupColor, type GroupColor } from "../entities/TabGroup";
-import type { EditorMode } from "./ViewState";
+import { parsePdfView, type EditorMode, type PdfView } from "./ViewState";
 
 /** A single restorable tab: which file, how it was being viewed, and its group. */
 export interface SessionTab {
@@ -8,6 +8,8 @@ export interface SessionTab {
   readonly scrollTop: number;
   /** Index into `Session.groups`, or null when ungrouped. */
   readonly group: number | null;
+  /** Where a PDF tab was (page, offset, zoom); absent for markdown tabs. */
+  readonly pdf?: PdfView;
 }
 
 /** A restorable tab group. Its identity is its position in `Session.groups`. */
@@ -19,10 +21,10 @@ export interface SessionGroup {
 
 /**
  * Persisted workspace session — the open files, which one was active, and the tab
- * groups. Version 1 (before groups) is still read; it simply has no groups.
+ * groups. Older versions are still read: v1 has no groups, v2 no PDF view state.
  */
 export interface Session {
-  readonly version: 2;
+  readonly version: 3;
   readonly activeIndex: number;
   readonly tabs: readonly SessionTab[];
   readonly groups: readonly SessionGroup[];
@@ -56,14 +58,17 @@ export function parseSession(raw: unknown): Session | null {
       typeof t.group === "number" && Number.isInteger(t.group) && t.group >= 0 && t.group < groups.length
         ? t.group
         : null;
+    const pdf = parsePdfView(t.pdf);
+    // Same key order as `toSession` writes, so a restored session serializes identically.
     tabs.push({
       path: t.path,
       mode: t.mode === "edit" ? "edit" : "reader",
       scrollTop: typeof t.scrollTop === "number" ? t.scrollTop : 0,
       group,
+      ...(pdf ? { pdf } : {}),
     });
   }
 
   const activeIndex = typeof obj.activeIndex === "number" ? obj.activeIndex : 0;
-  return { version: 2, activeIndex, tabs, groups };
+  return { version: 3, activeIndex, tabs, groups };
 }

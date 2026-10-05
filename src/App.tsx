@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
 import type { GroupId } from "./domain/entities/TabGroup";
+import { isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
 import { FindBar } from "./presentation/components/FindBar";
+import { PdfPending } from "./presentation/components/PdfPending";
 import { QuitConfirm } from "./presentation/components/QuitConfirm";
 import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
@@ -86,6 +88,9 @@ export default function App() {
   const { openFind, closeFind } = find;
 
   const mode = active?.viewState.mode ?? "reader";
+  // The markdown document on screen, if any. PDF tabs have no viewer yet (Phase 2 of
+  // docs/PDF_PLAN.md), so editing, saving, exporting and find don't apply to them.
+  const activeMarkdown = active && isMarkdown(active.document) ? active.document : null;
   const dirty = active ? isTabDirty(active) : false;
 
   // The active reader's live scroll lives in the DOM, not yet in view state (that's only
@@ -130,8 +135,8 @@ export default function App() {
     }
   }, [active, toggleMode, closeFind]);
   const exportActive = useCallback(() => {
-    if (active) void exportPdf(active.document);
-  }, [active, exportPdf]);
+    if (activeMarkdown) void exportPdf(activeMarkdown);
+  }, [activeMarkdown, exportPdf]);
 
   const shortcuts = useMemo(
     () => ({
@@ -140,14 +145,14 @@ export default function App() {
       focusSibling,
       activateIndex,
       openFind: () => {
-        if (active && active.viewState.mode === "reader") openFind();
+        if (activeMarkdown && mode === "reader") openFind();
       },
       save: saveActive,
       saveAs: saveActiveAs,
       toggleMode: toggleActiveMode,
       exportPdf: exportActive,
     }),
-    [openViaDialog, closeActive, focusSibling, activateIndex, active, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
+    [openViaDialog, closeActive, focusSibling, activateIndex, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
   );
   useTabKeyboard(shortcuts);
 
@@ -180,9 +185,9 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
       )}
-      {active && (
+      {activeMarkdown && (
         <DocumentToolbar
-          name={active.document.name}
+          name={activeMarkdown.name}
           mode={mode}
           dirty={dirty}
           onToggleMode={toggleActiveMode}
@@ -205,7 +210,7 @@ export default function App() {
             </span>
           </div>
         )}
-        {active && find.open && mode === "reader" && (
+        {activeMarkdown && find.open && mode === "reader" && (
           <FindBar
             query={find.query}
             count={find.result.count}
@@ -216,11 +221,13 @@ export default function App() {
             onClose={find.closeFind}
           />
         )}
-        {active ? (
+        {active && !activeMarkdown ? (
+          <PdfPending key={active.id} name={active.document.name} />
+        ) : active && activeMarkdown ? (
           mode === "edit" ? (
             <EditMode
               key={`${active.id}:${active.revision}`}
-              doc={active.document}
+              doc={activeMarkdown}
               renderMarkdown={renderMarkdown}
               onContentChange={(content) => updateContent(active.id, content)}
             />

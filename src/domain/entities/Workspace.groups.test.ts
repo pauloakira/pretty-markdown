@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createDocument } from "./Document";
+import { createMarkdownDocument } from "./Document";
 import { createTab, type Tab } from "./Tab";
 import { createGroup, nextGroupColor } from "./TabGroup";
 import * as W from "./Workspace";
 
 function tab(id: string, path = `/docs/${id}.md`): Tab {
-  return createTab(id, createDocument(path, `# ${id}`));
+  return createTab(id, createMarkdownDocument(path, `# ${id}`));
 }
 
 function workspaceOf(...tabs: Tab[]): W.Workspace {

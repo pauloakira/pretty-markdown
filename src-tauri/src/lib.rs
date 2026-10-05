@@ -1,4 +1,5 @@
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -147,6 +148,24 @@ fn read_text_file(path: String) -> Result<String, String> {
         .map_err(|e| format!("Failed to read '{path}': {e}"))
 }
 
+/// Read a file's raw bytes — all of them, or only the first `max_bytes` (enough to check a
+/// signature without reading a large file). Native side of `FileReader.readBytes`.
+///
+/// Returns a raw IPC response, which reaches the frontend as an `ArrayBuffer`: no JSON
+/// array of numbers or base64, so even large PDFs cross the bridge cheaply.
+#[tauri::command]
+fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::Response, String> {
+    let mut file = std::fs::File::open(PathBuf::from(&path))
+        .map_err(|e| format!("Failed to read '{path}': {e}"))?;
+    let mut bytes = Vec::new();
+    match max_bytes {
+        Some(limit) => file.take(limit).read_to_end(&mut bytes),
+        None => file.read_to_end(&mut bytes),
+    }
+    .map_err(|e| format!("Failed to read '{path}': {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Write UTF-8 text to a file on disk (overwriting). Native side of the `FileWriter` port.
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> Result<(), String> {
@@ -167,6 +186,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             read_text_file,
+            read_file_bytes,
             write_text_file,
             read_session,
             write_session,

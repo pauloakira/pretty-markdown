@@ -4,7 +4,12 @@ import { createTab } from "../../domain/entities/Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId } from "../../domain/entities/TabGroup";
 import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
-import type { EditorMode } from "../../domain/values/ViewState";
+import {
+  initialPdfView,
+  normalizePdfView,
+  type EditorMode,
+  type PdfView,
+} from "../../domain/values/ViewState";
 
 type Listener = () => void;
 
@@ -104,6 +109,11 @@ export class TabManager {
     this.commit(W.groupByFolder(this.workspace, () => this.nextGroupId()));
   }
 
+  /** Persist where a PDF tab is (page, offset, zoom). Notifies only if it changed. */
+  setPdfView(id: TabId, view: PdfView): void {
+    this.commit(W.setPdfView(this.workspace, id, view));
+  }
+
   /** Persist a tab's scroll position. Notifies only if it changed. */
   persistScroll(id: TabId, scrollTop: number): void {
     this.commit(W.setScrollTop(this.workspace, id, scrollTop));
@@ -140,6 +150,7 @@ export class TabManager {
       mode: EditorMode;
       scrollTop: number;
       group: number | null;
+      pdf?: PdfView;
     }>,
     groups: ReadonlyArray<{ name: string; color: GroupColor; collapsed: boolean }>,
     activeIndex: number,
@@ -148,14 +159,18 @@ export class TabManager {
       ...createGroup(this.nextGroupId(), g.name, g.color),
       collapsed: g.collapsed,
     }));
-    const tabs: Tab[] = entries.map((entry) => ({
-      id: this.nextId(),
-      document: entry.document,
-      viewState: { mode: entry.mode, scrollTop: entry.scrollTop },
-      savedContent: entry.document.content,
-      revision: 0,
-      groupId: entry.group === null ? null : (restoredGroups[entry.group]?.id ?? null),
-    }));
+    const tabs: Tab[] = entries.map((entry) => {
+      const base = createTab(this.nextId(), entry.document);
+      const viewState =
+        entry.document.kind === "pdf"
+          ? { ...base.viewState, pdf: normalizePdfView(entry.pdf ?? initialPdfView) }
+          : { ...base.viewState, mode: entry.mode, scrollTop: entry.scrollTop };
+      return {
+        ...base,
+        viewState,
+        groupId: entry.group === null ? null : (restoredGroups[entry.group]?.id ?? null),
+      };
+    });
     this.commit(W.mergeRestored(this.workspace, { tabs, groups: restoredGroups }, activeIndex));
   }
 

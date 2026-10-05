@@ -1141,3 +1141,25 @@ body {
     break-after: avoid;
   }
 }
+
+/* ---- PDF placeholder (until the PDF viewer lands) ------------------------- */
+.pdf-pending {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 2rem;
+  color: var(--fg-muted);
+  text-align: center;
+}
+.pdf-pending__name {
+  margin: 0;
+  color: var(--fg);
+  font-weight: 600;
+}
+.pdf-pending__msg {
+  margin: 0;
+  font-size: 0.9rem;
+}

@@ -21,9 +21,17 @@ class FakePicker implements FilePicker {
 }
 
 class FakeReader implements FileReader {
-  constructor(private readonly result: Result<string>) {}
+  public bytesRequested: { path: string; maxBytes?: number } | null = null;
+  constructor(
+    private readonly result: Result<string>,
+    private readonly bytes: Result<Uint8Array> = err("no bytes"),
+  ) {}
   async readTextFile(): Promise<Result<string>> {
     return this.result;
+  }
+  async readBytes(path: string, maxBytes?: number): Promise<Result<Uint8Array>> {
+    this.bytesRequested = { path, maxBytes };
+    return this.bytes;
   }
 }
 
@@ -49,7 +57,8 @@ describe("DocumentService — open", () => {
     expect(outcome.kind).toBe("opened");
     if (outcome.kind === "opened") {
       expect(outcome.document.name).toBe("paper.md");
-      expect(outcome.document.content).toContain("x^2");
+      expect(outcome.document).toMatchObject({ kind: "markdown" });
+      expect(outcome.document.kind === "markdown" && outcome.document.content).toContain("x^2");
     }
   });
 

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDocument, type Document } from "../../domain/entities/Document";
+import { createMarkdownDocument, type Document } from "../../domain/entities/Document";
 import { activeTab } from "../../domain/entities/Workspace";
 import { TabManager } from "./TabManager";
 
-const doc = (path: string): Document => createDocument(path, `# ${path}`);
+const doc = (path: string): Document => createMarkdownDocument(path, `# ${path}`);
 
 describe("TabManager", () => {
   it("opens a document into a new active tab and notifies subscribers", () => {
@@ -67,7 +67,7 @@ describe("TabManager", () => {
     const id = manager.getSnapshot().tabs[0].id;
 
     manager.updateContent(id, "edited");
-    expect(activeTab(manager.getSnapshot())?.document.content).toBe("edited");
+    expect(activeTab(manager.getSnapshot())?.document).toMatchObject({ content: "edited" });
 
     manager.toggleMode(id);
     expect(activeTab(manager.getSnapshot())?.viewState.mode).toBe("edit");

@@ -1,5 +1,5 @@
 import type { Session, SessionGroup } from "../values/Session";
-import type { EditorMode } from "../values/ViewState";
+import { normalizePdfView, type EditorMode, type PdfView } from "../values/ViewState";
 import type { Tab, TabId } from "./Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId, type TabGroup } from "./TabGroup";
 
@@ -246,10 +246,10 @@ export function setScrollTop(ws: Workspace, id: TabId, scrollTop: number): Works
   };
 }
 
-/** Switch a tab between reader and edit mode. No-op if unchanged. */
+/** Switch a markdown tab between reader and edit mode. No-op if unchanged, or for a PDF. */
 export function setMode(ws: Workspace, id: TabId, mode: EditorMode): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
-  if (!tab || tab.viewState.mode === mode) return ws;
+  if (!tab || tab.document.kind !== "markdown" || tab.viewState.mode === mode) return ws;
   return {
     ...ws,
     tabs: ws.tabs.map((t) =>
@@ -258,10 +258,26 @@ export function setMode(ws: Workspace, id: TabId, mode: EditorMode): Workspace {
   };
 }
 
-/** Update a tab's document content (an edit). No-op if unchanged. */
+/** Save where a PDF tab is (page, offset, zoom), clamped into range. No-op if unchanged
+ * or for a markdown tab. */
+export function setPdfView(ws: Workspace, id: TabId, view: PdfView): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.document.kind !== "pdf") return ws;
+  const next = normalizePdfView(view);
+  const prev = tab.viewState.pdf;
+  if (prev && prev.page === next.page && prev.pageOffset === next.pageOffset && prev.zoom === next.zoom) {
+    return ws;
+  }
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, viewState: { ...t.viewState, pdf: next } } : t)),
+  };
+}
+
+/** Update a markdown tab's content (an edit). No-op if unchanged, or for a PDF. */
 export function updateContent(ws: Workspace, id: TabId, content: string): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
-  if (!tab || tab.document.content === content) return ws;
+  if (!tab || tab.document.kind !== "markdown" || tab.document.content === content) return ws;
   const document = { ...tab.document, content };
   return {
     ...ws,
@@ -490,24 +506,29 @@ export function toSession(ws: Workspace): Session {
     }
   }
 
-  const tabs = saved.map((t) => ({
-    path: t.document.path as string,
-    mode: t.viewState.mode,
-    scrollTop: t.viewState.scrollTop,
-    group: t.groupId === null ? null : (slot.get(t.groupId) ?? null),
-  }));
+  const tabs = saved.map((t) => {
+    const pdf = t.document.kind === "pdf" ? t.viewState.pdf : undefined;
+    return {
+      path: t.document.path as string,
+      mode: t.viewState.mode,
+      scrollTop: t.viewState.scrollTop,
+      group: t.groupId === null ? null : (slot.get(t.groupId) ?? null),
+      ...(pdf ? { pdf } : {}),
+    };
+  });
   const activeIndex = Math.max(
     0,
     saved.findIndex((t) => t.id === ws.activeTabId),
   );
-  return { version: 2, activeIndex, tabs, groups };
+  return { version: 3, activeIndex, tabs, groups };
 }
 
-/** Reload a tab's content from disk: updates content, resets the dirty baseline, and
- * bumps the revision so the editor remounts. No-op if content already matches and clean. */
+/** Reload a markdown tab's content from disk: updates content, resets the dirty baseline,
+ * and bumps the revision so the editor remounts. No-op if content already matches and
+ * clean, or for a PDF. */
 export function reloadContent(ws: Workspace, id: TabId, content: string): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
-  if (!tab) return ws;
+  if (!tab || tab.document.kind !== "markdown") return ws;
   if (tab.document.content === content && tab.savedContent === content) return ws;
   const document = { ...tab.document, content };
   return {
@@ -520,14 +541,15 @@ export function reloadContent(ws: Workspace, id: TabId, content: string): Worksp
   };
 }
 
-/** Mark a tab as saved to `path`: updates the path/name and the dirty baseline. */
+/** Mark a markdown tab as saved to `path`: updates the path/name and the dirty baseline.
+ * No-op for a PDF (PDFs are never written). */
 export function markSaved(
   ws: Workspace,
   id: TabId,
   saved: { path: string; name: string },
 ): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
-  if (!tab) return ws;
+  if (!tab || tab.document.kind !== "markdown") return ws;
   const document = { ...tab.document, path: saved.path, name: saved.name };
   return {
     ...ws,

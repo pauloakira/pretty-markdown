@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useContainer } from "../../composition/ContainerContext";
-import type { Document } from "../../domain/entities/Document";
+import type { Document, MarkdownDocument } from "../../domain/entities/Document";
 import type { TabId } from "../../domain/entities/Tab";
 import type { GroupId } from "../../domain/entities/TabGroup";
 import { activeTab, findTabByPath } from "../../domain/entities/Workspace";
@@ -27,7 +27,7 @@ export function useWorkspace() {
   );
 
   const exportPdf = useCallback(
-    async (document: Document) => {
+    async (document: MarkdownDocument) => {
       const html = container.pipeline.render(document.content);
       await container.documentExporter.exportPdf({ title: document.name, html });
     },
@@ -121,7 +121,7 @@ export function useWorkspace() {
   const saveTab = useCallback(
     async (id: TabId): Promise<boolean> => {
       const tab = tabManager.getSnapshot().tabs.find((t) => t.id === id);
-      if (!tab) return false;
+      if (!tab || tab.document.kind !== "markdown") return false; // PDFs are never written
       const outcome = await container.documentService.save(
         tab.document.content,
         tab.document.path,
@@ -140,7 +140,7 @@ export function useWorkspace() {
   const saveTabAs = useCallback(
     async (id: TabId): Promise<boolean> => {
       const tab = tabManager.getSnapshot().tabs.find((t) => t.id === id);
-      if (!tab) return false;
+      if (!tab || tab.document.kind !== "markdown") return false; // PDFs are never written
       const outcome = await container.documentService.saveAs(
         tab.document.content,
         tab.document.name,
@@ -159,7 +159,9 @@ export function useWorkspace() {
   const active = activeTab(workspace);
 
   const html = useMemo(() => {
-    if (!active || active.viewState.mode !== "reader") return "";
+    if (!active || active.document.kind !== "markdown" || active.viewState.mode !== "reader") {
+      return "";
+    }
     const content = active.document.content;
     const cache = htmlCache.current;
     const cached = cache.get(content);
