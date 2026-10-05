@@ -125,8 +125,9 @@ Workspace
 Tab
  ├─ id
  ├─ groupId: GroupId | null   // membership lives on the tab
- ├─ document: Document        // path, content, dirty flag
- ├─ viewState: { mode: Reader|Edit, scrollPos, fontSize, cursor }
+ ├─ document: Document        // markdown (path, content) | pdf (path; bytes loaded by the viewer)
+ ├─ savedContent              // markdown: last saved content (dirty = differs); pdf: null
+ ├─ viewState: { mode: Reader|Edit, scrollTop, pdf?: { page, pageOffset, zoom } }
  └─ renderCache                // memoized rendered blocks + math (per tab)
 ```
 

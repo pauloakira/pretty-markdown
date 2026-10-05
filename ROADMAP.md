@@ -57,5 +57,7 @@ Reader-first build plan. Each milestone is independently shippable.
       persisted in the session. *(Not yet: keyboard shortcuts for groups.)*
 - [ ] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
       restore, file watching. Planned in phases; see [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
+      - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
+      - [ ] Phase 2 — viewer · [ ] Phase 3 — integration · [ ] Phase 4 — polish.
 - [ ] Full TeX engine / TikZ (opt-in renderer).
 - [ ] Plugin/theme system.

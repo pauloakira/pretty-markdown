@@ -1,7 +1,7 @@
 # PDF reading — implementation plan
 
-> Status: **planned, not started** (2026-10-04). This is a design plan. When work starts,
-> record the decisions in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) and update
+> Status: **Phase 1 done** (2026-10-05); Phases 2–4 not started. Decisions are recorded in
+> [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log). Update
 > [DESIGN.md](../DESIGN.md) and [ROADMAP.md](../ROADMAP.md) as each phase lands.
 
 ## 1. Goal
@@ -199,14 +199,35 @@ framework imports, pdf.js stays in infrastructure, and adapters are wired up onl
 Each phase is its own PR, with checkpoint commits inside it (see the repo's
 commit-at-checkpoints convention).
 
-### Phase 1: Foundation (no UI)
+### Phase 1: Foundation (no UI) ✅ (2026-10-05)
 - The two document kinds, `ViewState.pdf`, `setPdfView`, markdown-only ops doing nothing
   on PDFs, session v3.
-- `read_file_bytes` command, `FileReader.readBytes`, `DocumentService` choosing by kind,
-  picker filter.
+- `read_file_bytes(path, maxBytes?)` command, `FileReader.readBytes`, `DocumentService`
+  choosing by kind. A PDF is validated by reading only its first 1 KB (the `%PDF-` header),
+  so restore drops missing or invalid PDFs cheaply.
 - **Done when:** all domain and application tests pass, and v2 sessions still restore.
 
+**As built, versus the plan:**
+- **Picker filter and `pickMarkdownFile` → `pickDocument` rename moved to Phase 2.** With
+  no viewer yet, letting the open dialog pick PDFs would ship a dead end, and `main` must
+  stay releasable.
+- **PDF tabs show a placeholder** (`PdfPending`), and the toolbar, find, edit, save and
+  export are off for them. A PDF can still reach a tab (Finder → Open With → Other…, or a
+  restored session), and this keeps it from being treated as markdown. Phase 2 replaces
+  the placeholder with the viewer.
+- **`Tab.savedContent` is `string | null`** (null for PDFs). That was the smallest change
+  that keeps `markSaved`/`updateContent` simple.
+- **Fixed along the way:** restore kept the saved `activeIndex` unchanged even when tabs
+  before the active one were dropped, so the wrong tab could come back active. It now
+  shifts left for each dropped tab.
+- **Verified in the real app:** an isolated dev build (separate app identifier, so it can't
+  touch the real session) restored a v3 session with two real PDFs from iCloud Drive
+  (paths with spaces and `~`), a fake `.pdf`, and a markdown note. The PDFs came through
+  the raw-bytes IPC, the fake was dropped, and the saved page and zoom round-tripped.
+
 ### Phase 2: Viewer
+- Open-dialog filter includes `.pdf` (and `pickMarkdownFile` → `pickDocument`), moved here
+  from Phase 1. The `PdfPending` placeholder is removed.
 - `pdfjs-dist` dependency, worker + `cmaps` + `standard_fonts` assets, lazy chunk.
 - `PdfJsViewer` adapter, `PdfViewer` interface, `PdfReader` component, toolbar branch,
   zoom controls and shortcuts, page indicator, go-to-page, text selection/copy, links.
