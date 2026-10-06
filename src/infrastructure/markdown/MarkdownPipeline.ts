@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { MacroMap, MathRenderer } from "../../domain/ports/MathRenderer";
+import { headingIds } from "./headingIds";
 import { mathPlugin } from "./mathPlugin";
 
 /**
@@ -28,6 +29,7 @@ export class MarkdownPipeline {
       renderer: mathRenderer,
       getMacros: () => this.activeMacros,
     });
+    this.md.use(headingIds);
   }
 
   render(source: string): string {
