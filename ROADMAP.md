@@ -55,6 +55,9 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Tab groups (Chrome-style): named/colored groups, collapse, tab & chip menus, drag
       tabs into/out of groups, drag a whole group by its chip, *Group tabs by folder*,
       persisted in the session. *(Not yet: keyboard shortcuts for groups.)*
+- [x] Links in markdown: web/mail links open in the default browser (never navigate the
+      app), `#heading` links scroll within the document (GitHub-style heading ids).
+      *(Not yet: open relative `.md` links as a new tab.)*
 - [ ] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
       restore, file watching. Planned in phases; see [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
       - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
