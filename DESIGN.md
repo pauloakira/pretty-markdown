@@ -143,6 +143,10 @@ Design rules:
 - **Session restore:** the open tab set (paths + active tab + scroll) is persisted via the
   Tauri session store and restored on launch.
 - **Keyboard:** `⌘T` new tab, `⌘W` close tab, `⌘⇧[` / `⌘⇧]` switch tabs (browser-familiar).
+- **PDF tabs** sit in the same tab bar, groups and session as markdown. They're read-only
+  and use the pdf.js viewer (loaded on demand) instead of the markdown pipeline. Each
+  remembers its page, the offset within the page, and zoom; the toolbar shows page /
+  zoom / fit-width instead of read/edit/save. See [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
 - **Tab groups** (like Chrome): a named, colored run of adjacent tabs, headed by a chip.
   Click the chip to collapse/expand, drag it to move the whole group (it lands only between
   other tabs/groups, never inside one), right-click it to rename, recolor (Chrome's nine

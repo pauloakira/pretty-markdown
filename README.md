@@ -46,6 +46,8 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
   the page. Copying a formula copies its LaTeX source.
 - **Edit with live preview.** A CodeMirror source pane sits next to a live preview with
   synced scrolling. Save / Save As is available, and unsaved changes are marked on the tab.
+- **Reads PDFs too.** Open PDFs in the same tabs as your notes, with zoom, fit to width,
+  page navigation, and working links. Search inside PDFs is coming next.
 - **Tabs and tab groups.** Open several documents like browser tabs. Organize them into
   Chrome-style named, colored groups that you can collapse and drag, or group them by folder
   with one click.
@@ -67,6 +69,7 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
 | Save / Save as | `⌘S` / `⌘⇧S` | `Ctrl+S` / `Ctrl+Shift+S` |
 | Find in page | `⌘F` | `Ctrl+F` |
 | Export to PDF | `⌘P` | `Ctrl+P` |
+| PDF: zoom in / out / fit width | `⌘+` / `⌘−` / `⌘0` | `Ctrl++` / `Ctrl+−` / `Ctrl+0` |
 
 **Tab groups:** right-click a tab to add it to a group or *Group tabs by folder*. Click a
 group's chip to collapse it, drag the chip to move the group, and right-click the chip to
