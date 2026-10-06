@@ -5,7 +5,7 @@ import type { TabId } from "../../domain/entities/Tab";
 import type { GroupId } from "../../domain/entities/TabGroup";
 import { activeTab, findTabByPath } from "../../domain/entities/Workspace";
 import type { TabGroupActions } from "../components/TabBar";
-import type { EditorMode } from "../../domain/values/ViewState";
+import type { EditorMode, PdfView } from "../../domain/values/ViewState";
 
 /**
  * Presentation-facing hook over the multi-tab workspace. Subscribes to the TabManager
@@ -108,6 +108,10 @@ export function useWorkspace() {
     (id: TabId, scrollTop: number) => tabManager.persistScroll(id, scrollTop),
     [tabManager],
   );
+  const setPdfView = useCallback(
+    (id: TabId, view: PdfView) => tabManager.setPdfView(id, view),
+    [tabManager],
+  );
   const setMode = useCallback(
     (id: TabId, mode: EditorMode) => tabManager.setMode(id, mode),
     [tabManager],
@@ -190,6 +194,7 @@ export function useWorkspace() {
     activateIndex,
     dropTab,
     persistScroll,
+    setPdfView,
     setMode,
     toggleMode,
     updateContent,

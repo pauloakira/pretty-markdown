@@ -1,0 +1,210 @@
+/*
+ * pdf.js adapter for the PdfViewer contract (src/presentation/pdf/PdfViewer.ts).
+ *
+ * Loaded on demand — only LazyPdfViewerFactory imports this module, dynamically — so
+ * pdf.js and its CSS stay out of the main bundle. Uses the *legacy* build, which
+ * transpiles newer JavaScript features: WKWebView's engine is the user's macOS Safari
+ * version, which can lag behind what the modern build expects.
+ */
+import {
+  AnnotationMode,
+  getDocument,
+  GlobalWorkerOptions,
+  InvalidPDFException,
+  PasswordException,
+  type PDFDocumentProxy,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
+import "pdfjs-dist/legacy/web/pdf_viewer.css";
+import { err, ok, type Result } from "../../domain/values/Result";
+import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import type { PdfMountOptions, PdfViewerHandle } from "../../presentation/pdf/PdfViewer";
+
+GlobalWorkerOptions.workerSrc = workerUrl;
+
+/** Where the pdfjs-assets Vite plugin serves pdf.js's data files (see vite.config.ts). */
+const assetUrl = (dir: string) => new URL(`/pdfjs/${dir}/`, window.location.href).href;
+
+/** Room for the border/margin pdf.js leaves between pages (9px border + margins). */
+const PAGE_GAP_PX = 20;
+
+/** How often scroll/zoom changes are reported, at most (about one frame). */
+const REPORT_INTERVAL_MS = 16;
+
+/** Outside-document links the app may open in the user's browser. */
+const EXTERNAL_LINK = /^(https?|mailto):/i;
+
+function describeLoadError(error: unknown): string {
+  if (error instanceof PasswordException) {
+    return "This PDF is password-protected. Opening protected PDFs isn't supported yet.";
+  }
+  if (error instanceof InvalidPDFException) {
+    return "This file is damaged or isn't a valid PDF.";
+  }
+  return `Couldn't open this PDF: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+/** Load `data` and show it in `container` (an empty, absolutely positioned scroller). */
+export async function mountPdfJs(
+  container: HTMLDivElement,
+  data: Uint8Array,
+  options: PdfMountOptions,
+): Promise<Result<PdfViewerHandle>> {
+  const loadingTask = getDocument({
+    data,
+    cMapUrl: assetUrl("cmaps"),
+    cMapPacked: true,
+    standardFontDataUrl: assetUrl("standard_fonts"),
+    wasmUrl: assetUrl("wasm"),
+    iccUrl: assetUrl("iccs"),
+    // No `isEvalSupported` switch needed: pdf.js 6 never compiles PDF functions with eval,
+    // and PDF JavaScript stays off because the viewer has no scripting manager.
+  });
+
+  let pdf: PDFDocumentProxy;
+  try {
+    pdf = await loadingTask.promise;
+  } catch (error) {
+    void loadingTask.destroy();
+    return err(describeLoadError(error));
+  }
+
+  const viewerEl = document.createElement("div");
+  viewerEl.className = "pdfViewer";
+  container.replaceChildren(viewerEl);
+
+  const eventBus = new EventBus();
+  const linkService = new PDFLinkService({ eventBus });
+  const viewer = new PDFViewer({
+    container,
+    viewer: viewerEl,
+    eventBus,
+    linkService,
+    annotationMode: AnnotationMode.ENABLE, // links, but no form filling or editing
+  });
+  linkService.setViewer(viewer);
+
+  const pagesInit = new Promise<void>((resolve) => eventBus.on("pagesinit", () => resolve(), { once: true }));
+  viewer.setDocument(pdf);
+  linkService.setDocument(pdf, null);
+  await pagesInit;
+
+  let zoom: PdfZoom = options.initialView.zoom;
+
+  /** Top and height of page `index` (0-based) in the container's scroll coordinates. */
+  const pageBox = (index: number) => {
+    const div = viewer.getPageView(index)?.div as HTMLElement | undefined;
+    if (!div) return null;
+    const top = div.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    return { top, height: div.offsetHeight };
+  };
+
+  // The last position measured. Used when the container can't be measured: once React
+  // has detached it (a tab switch records the final view after the DOM is gone) or while
+  // it has no size, every page measures 0 and the walk below would land on the last page.
+  let lastView = normalizePdfView(options.initialView);
+
+  const view = (): PdfView => {
+    if (!container.isConnected || container.clientHeight === 0) return lastView;
+    const count = viewer.pagesCount;
+    const scrollTop = container.scrollTop;
+    // The page at the top of the viewport. Probe a little below the edge so the gap above a
+    // page (where "go to page" parks the viewport) counts as that page, not the one before.
+    const probe = scrollTop + PAGE_GAP_PX;
+    // Start from pdf.js's idea of the current page and walk to the one under the probe.
+    let index = Math.min(Math.max(viewer.currentPageNumber - 1, 0), count - 1);
+    let box = pageBox(index);
+    while (box && index > 0 && probe < box.top) box = pageBox(--index);
+    while (box && index < count - 1 && probe >= box.top + box.height) box = pageBox(++index);
+    const pageOffset = box && box.height > 0 ? (scrollTop - box.top) / box.height : 0;
+    lastView = normalizePdfView({ page: index + 1, pageOffset, zoom });
+    return lastView;
+  };
+
+  const applyScale = () => {
+    viewer.currentScaleValue = zoom === "page-width" ? "page-width" : String(zoom);
+  };
+
+  // Restore the initial view: zoom first (it changes page sizes), then the position. Both
+  // need a laid-out container (fit-width divides by its width), so if it has no size yet
+  // (a hidden window), wait for the first real size instead of fitting to zero.
+  const applyInitialView = () => {
+    applyScale();
+    const initial = normalizePdfView(options.initialView);
+    const target = pageBox(Math.min(initial.page, viewer.pagesCount) - 1);
+    if (target) container.scrollTop = target.top + initial.pageOffset * target.height;
+  };
+  let initialPending = container.clientWidth === 0;
+  if (!initialPending) applyInitialView();
+
+  // Report the view as the reader scrolls/zooms, coalesced to at most one report per
+  // tick. A timer rather than requestAnimationFrame: rAF stops in a hidden or minimized
+  // window, which left the toolbar and the saved position stale.
+  let timer = 0;
+  const reportView = () => {
+    if (timer) return;
+    timer = window.setTimeout(() => {
+      timer = 0;
+      options.onViewChange(view());
+    }, REPORT_INTERVAL_MS);
+  };
+  eventBus.on("updateviewarea", reportView);
+  eventBus.on("scalechanging", reportView);
+  // Our own scroll listener too: pdf.js tracks scrolling with requestAnimationFrame, which
+  // stops in a hidden window, and the last scroll before a tab switch must be recorded.
+  container.addEventListener("scroll", reportView, { passive: true });
+
+  // "Fit width" has to be re-fitted when the window (so the container) resizes.
+  const resizeObserver = new ResizeObserver(() => {
+    if (container.clientWidth === 0) return;
+    if (initialPending) {
+      initialPending = false;
+      applyInitialView();
+    } else if (zoom === "page-width") {
+      viewer.currentScaleValue = "page-width";
+    }
+  });
+  resizeObserver.observe(container);
+
+  // Links that leave the document go to the app (to open in the browser); never let one
+  // navigate the app's own web view. In-document links ("#...") are left to pdf.js.
+  const onClick = (event: MouseEvent) => {
+    const anchor = (event.target as Element | null)?.closest?.("a[href]");
+    const href = anchor?.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (EXTERNAL_LINK.test(href)) options.onExternalLink(href);
+  };
+  container.addEventListener("click", onClick, true);
+
+  const metadata = await pdf.getMetadata().catch(() => null);
+  const rawTitle = (metadata?.info as { Title?: unknown } | undefined)?.Title;
+  const title = typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim() : null;
+
+  return ok({
+    info: { pageCount: pdf.numPages, title },
+    view,
+    currentScale: () => viewer.currentScale,
+    setZoom(next) {
+      zoom = next;
+      applyScale();
+    },
+    goToPage(page) {
+      viewer.currentPageNumber = Math.min(Math.max(1, Math.round(page)), viewer.pagesCount);
+    },
+    destroy() {
+      window.clearTimeout(timer);
+      resizeObserver.disconnect();
+      container.removeEventListener("click", onClick, true);
+      container.removeEventListener("scroll", reportView);
+      eventBus.off("updateviewarea", reportView);
+      eventBus.off("scalechanging", reportView);
+      viewer.setDocument(null as unknown as PDFDocumentProxy);
+      linkService.setDocument(null);
+      void loadingTask.destroy();
+      container.replaceChildren();
+    },
+  });
+}

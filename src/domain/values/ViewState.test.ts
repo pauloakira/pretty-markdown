@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialPdfView, normalizePdfView, parsePdfView, type PdfView } from "./ViewState";
+import { initialPdfView, normalizePdfView, parsePdfView, stepPdfZoom, type PdfView } from "./ViewState";
 
 describe("PdfView", () => {
   it("leaves a valid view untouched (same reference)", () => {
@@ -35,5 +35,29 @@ describe("PdfView", () => {
     expect(parsePdfView({ pageOffset: 0.5 })).toBeNull();
     expect(parsePdfView("page 3")).toBeNull();
     expect(parsePdfView(undefined)).toBeNull();
+  });
+});
+
+describe("stepPdfZoom", () => {
+  it("steps through the zoom levels from an exact level", () => {
+    expect(stepPdfZoom(1, 1)).toBe(1.1);
+    expect(stepPdfZoom(1, -1)).toBe(0.9);
+  });
+
+  it("moves to the nearest level on that side from an in-between scale", () => {
+    expect(stepPdfZoom(1.18, 1)).toBe(1.25);
+    expect(stepPdfZoom(1.18, -1)).toBe(1.1);
+  });
+
+  it("never steps to a level that's visually the same as the current scale", () => {
+    // Fit-width often lands just off a step (here 150.4%): one press must visibly change it.
+    expect(stepPdfZoom(1.504, -1)).toBe(1.25);
+    expect(stepPdfZoom(1.496, 1)).toBe(1.75);
+  });
+
+  it("stays within range at the ends", () => {
+    expect(stepPdfZoom(4, 1)).toBe(4);
+    expect(stepPdfZoom(0.25, -1)).toBe(0.25);
+    expect(stepPdfZoom(9, -1)).toBe(4);
   });
 });

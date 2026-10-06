@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
+import { initialPdfView, type PdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
 import { isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
 import { FindBar } from "./presentation/components/FindBar";
-import { PdfPending } from "./presentation/components/PdfPending";
+import { PdfReader } from "./presentation/components/PdfReader";
 import { QuitConfirm } from "./presentation/components/QuitConfirm";
 import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
@@ -43,6 +44,7 @@ export default function App() {
     activateIndex,
     dropTab,
     persistScroll,
+    setPdfView,
     toggleMode,
     updateContent,
     saveTab,
@@ -93,14 +95,20 @@ export default function App() {
   const activeMarkdown = active && isMarkdown(active.document) ? active.document : null;
   const dirty = active ? isTabDirty(active) : false;
 
+  // The active PDF viewer's live position, for flushing before the session is saved.
+  const pdfViewRef = useRef<(() => PdfView) | null>(null);
+
   // The active reader's live scroll lives in the DOM, not yet in view state (that's only
   // captured on unmount). Flush it before saving the session so the reading position is
-  // restored on the tab you were actually looking at.
+  // restored on the tab you were actually looking at. Same for a PDF's page and zoom.
   const flushActiveScroll = useCallback(() => {
-    if (active && mode === "reader" && readerRef.current) {
+    if (!active) return;
+    if (active.document.kind === "pdf") {
+      if (pdfViewRef.current) setPdfView(active.id, pdfViewRef.current());
+    } else if (mode === "reader" && readerRef.current) {
       persistScroll(active.id, readerRef.current.scrollTop);
     }
-  }, [active, mode, persistScroll]);
+  }, [active, mode, persistScroll, setPdfView]);
 
   // Closing dirty tabs routes through a save prompt; clean ones close right away.
   const requestCloseMany = useCallback(
@@ -221,8 +229,15 @@ export default function App() {
             onClose={find.closeFind}
           />
         )}
-        {active && !activeMarkdown ? (
-          <PdfPending key={active.id} name={active.document.name} />
+        {active && active.document.kind === "pdf" ? (
+          <PdfReader
+            key={`${active.id}:${active.revision}`}
+            path={active.document.path}
+            name={active.document.name}
+            initialView={active.viewState.pdf ?? initialPdfView}
+            onViewPersist={(view) => setPdfView(active.id, view)}
+            viewRef={pdfViewRef}
+          />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (
             <EditMode

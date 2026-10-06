@@ -49,7 +49,7 @@ class FakeReader implements FileReader {
   }
 }
 const nullPicker: FilePicker = {
-  async pickMarkdownFile() {
+  async pickDocument() {
     return null;
   },
   async pickSavePath() {

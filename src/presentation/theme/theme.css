@@ -8,8 +8,6 @@
   --reading-width: 46rem;
   --reader-font-scale: 1;
 
-  color-scheme: light;
-
   /*
    * Dark palette values — a deep, neutral near-black in the spirit of VS Code's dark
    * themes, with the chrome darker than the content so the tab bar recedes behind the
@@ -56,6 +54,19 @@
   --group-orange: light-dark(#e8710a, #fcad70);
   /* Text on a group-colored chip. */
   --group-fg: light-dark(#ffffff, #121212);
+
+  /* Behind PDF pages: a neutral grey so white pages stand out in both themes. */
+  --pdf-backdrop: light-dark(#d9dce1, #0b0b0b);
+}
+
+/*
+ * Light unless dark is chosen. The extra :not() lifts this above a bare `:root`, so a
+ * third-party stylesheet loaded later can't override it — pdf.js's viewer CSS sets
+ * `:root { color-scheme: light dark }`, which would otherwise flip every light-dark()
+ * colour to dark under the Light theme on a dark-mode Mac once a PDF has been opened.
+ */
+:root:not([data-theme="dark"]) {
+  color-scheme: light;
 }
 
 /*
@@ -1018,6 +1029,83 @@ body {
   padding: 0.35rem 0;
 }
 
+/* ---- PDF reader ------------------------------------------------------------ */
+.pdf-reader {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-reader__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--pdf-backdrop);
+}
+.pdf-reader__host,
+/* pdf.js requires its scroll container to be absolutely positioned. */
+.pdf-reader__scroll {
+  position: absolute;
+  inset: 0;
+}
+.pdf-reader__scroll {
+  overflow: auto;
+}
+.pdf-reader__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.pdf-reader__status--error {
+  color: var(--error-fg);
+}
+
+.pdftoolbar__page {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+}
+.pdftoolbar__page-input {
+  width: 3.2em;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pdftoolbar__page-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.pdftoolbar__page-count {
+  font-variant-numeric: tabular-nums;
+}
+.pdftoolbar__zoom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.6em;
+  padding: 0 0.2rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.doctoolbar__btn--on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- Edit mode (split pane) ----------------------------------------------- */
 .editmode {
   display: flex;
@@ -1140,26 +1228,4 @@ body {
   #print-root h4 {
     break-after: avoid;
   }
-}
-
-/* ---- PDF placeholder (until the PDF viewer lands) ------------------------- */
-.pdf-pending {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  padding: 2rem;
-  color: var(--fg-muted);
-  text-align: center;
-}
-.pdf-pending__name {
-  margin: 0;
-  color: var(--fg);
-  font-weight: 600;
-}
-.pdf-pending__msg {
-  margin: 0;
-  font-size: 0.9rem;
 }

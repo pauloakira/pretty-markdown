@@ -60,3 +60,27 @@ export function parsePdfView(raw: unknown): PdfView | null {
     zoom: typeof v.zoom === "number" ? v.zoom : "page-width",
   });
 }
+
+/** Zoom levels the zoom in/out controls step through (like a PDF reader's menu). */
+export const PDF_ZOOM_STEPS: readonly number[] = [
+  0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4,
+];
+
+/** A step this close to the current scale (relative) counts as "already there". */
+const ZOOM_STEP_TOLERANCE = 0.03;
+
+/**
+ * The next zoom step above (direction 1) or below (-1) the current scale. From an
+ * in-between scale (e.g. 1.18 from "page-width"), it moves to the nearest step on that
+ * side, so one press never skips a level — but never to a step within 3% of the current
+ * scale (fit-width at 150.4% must zoom out to 125%, not to an invisible 150%). Steps are
+ * at least ~6% apart, so the tolerance can't skip one. Stays put at the ends of the range.
+ */
+export function stepPdfZoom(currentScale: number, direction: 1 | -1): number {
+  if (direction === 1) {
+    const above = currentScale * (1 + ZOOM_STEP_TOLERANCE);
+    return PDF_ZOOM_STEPS.find((s) => s > above) ?? PDF_ZOOM_MAX;
+  }
+  const below = currentScale * (1 - ZOOM_STEP_TOLERANCE);
+  return [...PDF_ZOOM_STEPS].reverse().find((s) => s < below) ?? PDF_ZOOM_MIN;
+}
