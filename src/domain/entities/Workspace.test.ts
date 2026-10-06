@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createDocument } from "./Document";
+import { createMarkdownDocument } from "./Document";
 import { createTab, type Tab } from "./Tab";
 import * as W from "./Workspace";
 
 function tab(id: string, path: string): Tab {
-  return createTab(id, createDocument(path, `# ${id}`));
+  return createTab(id, createMarkdownDocument(path, `# ${id}`));
 }
 
 function workspaceOf(...tabs: Tab[]): W.Workspace {
@@ -87,7 +87,7 @@ describe("Workspace", () => {
   it("toggles mode, updates content (dirty), and marks saved", () => {
     const ws = workspaceOf(tab("a", "/a.md"));
     const edited = W.updateContent(ws, "a", "# changed");
-    expect(W.activeTab(edited)?.document.content).toBe("# changed");
+    expect(W.activeTab(edited)?.document).toMatchObject({ content: "# changed" });
 
     const inEdit = W.setMode(edited, "a", "edit");
     expect(W.activeTab(inEdit)?.viewState.mode).toBe("edit");
@@ -101,7 +101,7 @@ describe("Workspace", () => {
     const ws = workspaceOf(tab("a", "/a.md"));
     const reloaded = W.reloadContent(ws, "a", "# from disk");
     const t = W.activeTab(reloaded);
-    expect(t?.document.content).toBe("# from disk");
+    expect(t?.document).toMatchObject({ content: "# from disk" });
     expect(t?.savedContent).toBe("# from disk"); // clean after reload
     expect(t?.revision).toBe(1); // forces the editor to remount
     // no-op when content already matches and is clean

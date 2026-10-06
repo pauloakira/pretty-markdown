@@ -7,7 +7,7 @@ import { SessionService } from "./application/services/SessionService";
 import { TabManager } from "./application/services/TabManager";
 import type { Container } from "./composition/container";
 import { ContainerProvider } from "./composition/ContainerContext";
-import { createDocument } from "./domain/entities/Document";
+import { createMarkdownDocument, createPdfDocument } from "./domain/entities/Document";
 import type { AppWindow } from "./domain/ports/AppWindow";
 import type { FilePicker, FileReader, FileWriter } from "./domain/ports/FileSystem";
 import { err, ok } from "./domain/values/Result";
@@ -42,6 +42,10 @@ const FILES: Record<string, string> = {
   "/papers/loose.md": "# Loose",
 };
 
+const PDFS: Record<string, string> = {
+  "/papers/quad/paper.pdf": "%PDF-1.7\n%âãÏÓ\n1 0 obj",
+};
+
 class FakeAppWindow implements AppWindow {
   handler: (() => void) | null = null;
   closed = 0;
@@ -58,6 +62,12 @@ function makeContainer(): Container & { appWindow: FakeAppWindow } {
   const reader: FileReader = {
     async readTextFile(path) {
       return path in FILES ? ok(FILES[path]) : err("missing");
+    },
+    async readBytes(path, maxBytes) {
+      const text = PDFS[path] ?? FILES[path];
+      if (text === undefined) return err("missing");
+      const bytes = new TextEncoder().encode(text);
+      return ok(maxBytes === undefined ? bytes : bytes.slice(0, maxBytes));
     },
   };
   const picker: FilePicker = {
@@ -129,7 +139,7 @@ function button(label: string): HTMLButtonElement {
 
 /** Open the four files and arrange: [Runge: skeleton, intro] [Quad (collapsed): method] loose. */
 function arrange(manager: TabManager) {
-  Object.keys(FILES).forEach((path) => manager.openDocument(createDocument(path, FILES[path])));
+  Object.keys(FILES).forEach((path) => manager.openDocument(createMarkdownDocument(path, FILES[path])));
   const [skeleton, intro, method, loose] = manager.getSnapshot().tabs;
   const runge = manager.createGroup(skeleton.id) as string;
   manager.addToGroup(intro.id, runge);
@@ -176,7 +186,7 @@ describe("quit prompt × tab groups", () => {
 
     expect(first.appWindow.closed).toBe(1);
     const saved = JSON.parse(disk.session ?? "null");
-    expect(saved.version).toBe(2);
+    expect(saved.version).toBe(3);
     expect(saved.groups).toEqual([
       { name: "Runge v2", color: "blue", collapsed: false },
       { name: "Quad", color: "orange", collapsed: true },
@@ -215,5 +225,60 @@ describe("quit prompt × tab groups", () => {
 
     expect(first.appWindow.closed).toBe(1);
     expect(disk.session).toBeNull();
+  });
+});
+
+describe("PDF tabs before the viewer lands", () => {
+  const NOTE = "/papers/runge/docs/intro.md";
+  const PDF = "/papers/quad/paper.pdf";
+  const key = (code: string) =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { code, metaKey: true, bubbles: true }));
+
+  it("shows a placeholder, ignores edit/save/export, and keeps page + zoom across relaunch", async () => {
+    const first = makeContainer();
+    await launch(first);
+    await act(async () => {
+      first.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE]));
+      first.tabManager.openDocument(createPdfDocument(PDF));
+    });
+    const pdfTab = first.tabManager.getSnapshot().tabs[1];
+
+    // Placeholder instead of markdown rendering; no edit/save/export toolbar.
+    expect(document.querySelector(".pdf-pending")?.textContent).toContain("paper.pdf");
+    expect(document.querySelector(".doctoolbar")).toBeNull();
+    expect(document.querySelector(".reader")).toBeNull();
+
+    const save = vi.spyOn(first.documentService, "save");
+    const exportPdf = vi.spyOn(first.documentExporter, "exportPdf");
+    await act(async () => {
+      key("KeyE"); // toggle edit
+      key("KeyS"); // save
+      key("KeyP"); // export
+    });
+    expect(first.tabManager.getSnapshot().tabs[1].viewState.mode).toBe("reader");
+    expect(save).not.toHaveBeenCalled();
+    expect(exportPdf).not.toHaveBeenCalled();
+
+    // Where the reader was (the viewer will report this in Phase 2), saved on quit.
+    await act(async () => first.tabManager.setPdfView(pdfTab.id, { page: 6, pageOffset: 0.4, zoom: 1.5 }));
+    await act(async () => first.appWindow.handler?.());
+    await act(async () => button("Reopen next time").click());
+    await settle();
+    const saved = JSON.parse(disk.session ?? "null");
+    expect(saved.tabs[1]).toEqual({
+      path: PDF,
+      mode: "reader",
+      scrollTop: 0,
+      group: null,
+      pdf: { page: 6, pageOffset: 0.4, zoom: 1.5 },
+    });
+    await quit();
+
+    const second = makeContainer();
+    await launch(second);
+    const restored = second.tabManager.getSnapshot().tabs[1];
+    expect(restored.document).toEqual({ kind: "pdf", path: PDF, name: "paper.pdf" });
+    expect(restored.viewState.pdf).toEqual({ page: 6, pageOffset: 0.4, zoom: 1.5 });
+    expect(document.querySelector(".pdf-pending")).not.toBeNull();
   });
 });

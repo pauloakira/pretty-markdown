@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDocument, type Document } from "../../domain/entities/Document";
+import { createMarkdownDocument, createPdfDocument, type Document } from "../../domain/entities/Document";
+import { initialPdfView } from "../../domain/values/ViewState";
 import { activeTab } from "../../domain/entities/Workspace";
 import { TabManager } from "./TabManager";
 
-const doc = (path: string): Document => createDocument(path, `# ${path}`);
+const doc = (path: string): Document => createMarkdownDocument(path, `# ${path}`);
 
 describe("TabManager", () => {
   it("opens a document into a new active tab and notifies subscribers", () => {
@@ -67,7 +68,7 @@ describe("TabManager", () => {
     const id = manager.getSnapshot().tabs[0].id;
 
     manager.updateContent(id, "edited");
-    expect(activeTab(manager.getSnapshot())?.document.content).toBe("edited");
+    expect(activeTab(manager.getSnapshot())?.document).toMatchObject({ content: "edited" });
 
     manager.toggleMode(id);
     expect(activeTab(manager.getSnapshot())?.viewState.mode).toBe("edit");
@@ -131,6 +132,39 @@ describe("TabManager", () => {
       expect(ws.groups[0]).toMatchObject({ name: "PoliVEM", collapsed: true });
       expect(ws.tabs.map((t) => t.document.path)).toEqual(["/a.md", "/c.md", "/b.md"]);
       expect(activeTab(ws)?.document.path).toBe("/b.md");
+    });
+  });
+
+  describe("PDF tabs", () => {
+    it("restores a PDF's view, defaulting PDFs saved without one", () => {
+      const manager = new TabManager();
+      manager.restore(
+        [
+          { document: createPdfDocument("/p/a.pdf"), mode: "reader", scrollTop: 0, group: null, pdf: { page: 9, pageOffset: 0.2, zoom: 2 } },
+          { document: createPdfDocument("/p/b.pdf"), mode: "edit", scrollTop: 300, group: null },
+          { document: doc("/n/c.md"), mode: "edit", scrollTop: 120, group: null },
+        ],
+        [],
+        0,
+      );
+      const [a, b, c] = manager.getSnapshot().tabs;
+      expect(a.viewState).toEqual({ scrollTop: 0, mode: "reader", pdf: { page: 9, pageOffset: 0.2, zoom: 2 } });
+      expect(b.viewState).toEqual({ scrollTop: 0, mode: "reader", pdf: initialPdfView }); // never "edit"
+      expect(b.savedContent).toBeNull();
+      expect(c.viewState).toEqual({ scrollTop: 120, mode: "edit" });
+    });
+
+    it("notifies on a PDF view change only when it actually changes", () => {
+      const manager = new TabManager();
+      manager.openDocument(createPdfDocument("/p/a.pdf"));
+      const id = manager.getSnapshot().tabs[0].id;
+      const listener = vi.fn();
+      manager.subscribe(listener);
+
+      manager.setPdfView(id, { page: 3, pageOffset: 0, zoom: "page-width" });
+      manager.setPdfView(id, { page: 3, pageOffset: 0, zoom: "page-width" });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(manager.getSnapshot().tabs[0].viewState.pdf?.page).toBe(3);
     });
   });
 });

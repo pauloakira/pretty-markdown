@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Document } from "../../domain/entities/Document";
+import type { MarkdownDocument } from "../../domain/entities/Document";
 import { EditorPane } from "./EditorPane";
 import { Preview } from "./Preview";
 
 interface EditModeProps {
-  doc: Document;
+  doc: MarkdownDocument;
   renderMarkdown: (src: string) => string;
   onContentChange: (content: string) => void;
 }

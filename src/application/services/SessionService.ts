@@ -2,7 +2,7 @@ import type { Document } from "../../domain/entities/Document";
 import { toSession, type Workspace } from "../../domain/entities/Workspace";
 import type { SessionRepository } from "../../domain/ports/SessionRepository";
 import type { SessionGroup } from "../../domain/values/Session";
-import type { EditorMode } from "../../domain/values/ViewState";
+import type { EditorMode, PdfView } from "../../domain/values/ViewState";
 import type { DocumentService } from "./DocumentService";
 
 /** A tab reconstructed from the saved session, ready to populate the workspace. */
@@ -10,6 +10,8 @@ export interface RestoredTab {
   readonly document: Document;
   readonly mode: EditorMode;
   readonly scrollTop: number;
+  /** Where a PDF tab was; absent for markdown (and for PDFs from older sessions). */
+  readonly pdf?: PdfView;
   /** Index into `RestoredSession.groups`, or null when ungrouped. */
   readonly group: number | null;
 }
@@ -75,17 +77,23 @@ export class SessionService {
     if (!session || session.tabs.length === 0) return { tabs: [], groups: [], activeIndex: 0 };
 
     const tabs: RestoredTab[] = [];
-    for (const entry of session.tabs) {
+    // The saved index counts every saved tab; each one dropped before it (moved, deleted,
+    // or not a valid PDF any more) shifts the active tab one place left.
+    let activeIndex = session.activeIndex;
+    for (const [index, entry] of session.tabs.entries()) {
       const outcome = await this.documents.load(entry.path);
-      if (outcome.kind === "opened") {
+      if (outcome.kind !== "opened") {
+        if (index < session.activeIndex) activeIndex -= 1;
+      } else {
         tabs.push({
           document: outcome.document,
           mode: entry.mode,
           scrollTop: entry.scrollTop,
           group: entry.group,
+          ...(entry.pdf ? { pdf: entry.pdf } : {}),
         });
       }
     }
-    return { tabs, groups: session.groups, activeIndex: session.activeIndex };
+    return { tabs, groups: session.groups, activeIndex };
   }
 }

@@ -1,4 +1,12 @@
-import { createDocument, fileName, type Document } from "../../domain/entities/Document";
+import {
+  createMarkdownDocument,
+  createPdfDocument,
+  documentKindForPath,
+  fileName,
+  hasPdfSignature,
+  PDF_HEADER_WINDOW,
+  type Document,
+} from "../../domain/entities/Document";
 import type {
   FilePicker,
   FileReader,
@@ -35,11 +43,23 @@ export class DocumentService {
     return this.load(path);
   }
 
-  /** Load a known path (e.g. from a file association or recent-files list). */
+  /**
+   * Load a known path (e.g. from a file association or recent-files list). The extension
+   * decides the kind: markdown is read in full; a PDF is only checked — its header is read
+   * to confirm it exists and really is a PDF — and the viewer loads the bytes later.
+   */
   async load(path: string): Promise<OpenOutcome> {
+    if (documentKindForPath(path) === "pdf") {
+      const head = await this.reader.readBytes(path, PDF_HEADER_WINDOW);
+      if (!head.ok) return { kind: "error", message: head.error };
+      if (!hasPdfSignature(head.value)) {
+        return { kind: "error", message: `'${fileName(path)}' isn't a valid PDF file.` };
+      }
+      return { kind: "opened", document: createPdfDocument(path) };
+    }
     const result = await this.reader.readTextFile(path);
     if (!result.ok) return { kind: "error", message: result.error };
-    return { kind: "opened", document: createDocument(path, result.value) };
+    return { kind: "opened", document: createMarkdownDocument(path, result.value) };
   }
 
   /** Save to the document's path, or prompt for one if it has none. */
