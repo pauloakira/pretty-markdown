@@ -29,8 +29,12 @@ const assetUrl = (dir: string) => new URL(`/pdfjs/${dir}/`, window.location.href
 /** Room for the border/margin pdf.js leaves between pages (9px border + margins). */
 const PAGE_GAP_PX = 20;
 
-/** How often scroll/zoom changes are reported, at most (about one frame). */
-const REPORT_INTERVAL_MS = 16;
+/**
+ * How often scroll/zoom changes are reported, at most. Each report measures page boxes,
+ * which forces a layout while pdf.js is rendering — so not every frame. Fast enough for
+ * the toolbar's page number; the last change is always reported (trailing).
+ */
+const REPORT_INTERVAL_MS = 100;
 
 /** Outside-document links the app may open in the user's browser. */
 const EXTERNAL_LINK = /^(https?|mailto):/i;
@@ -58,6 +62,10 @@ export async function mountPdfJs(
     standardFontDataUrl: assetUrl("standard_fonts"),
     wasmUrl: assetUrl("wasm"),
     iccUrl: assetUrl("iccs"),
+    // GPU-backed page canvases, as pdf.js's own viewer uses. The API default (off) makes
+    // every canvas `willReadFrequently`, i.e. CPU-backed, which WebKit composites slowly:
+    // scrolling stuttered and pages flickered as they were redrawn.
+    enableHWA: true,
     // No `isEvalSupported` switch needed: pdf.js 6 never compiles PDF functions with eval,
     // and PDF JavaScript stays off because the viewer has no scripting manager.
   });
