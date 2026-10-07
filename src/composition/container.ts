@@ -7,6 +7,7 @@ import type { LinkOpener } from "../domain/ports/LinkOpener";
 import type { MacroMap } from "../domain/ports/MathRenderer";
 import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepository";
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
+import { IosFileSystem } from "../infrastructure/fs/IosFileSystem";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { PrintDocumentExporter } from "../infrastructure/export/PrintDocumentExporter";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
@@ -54,7 +55,9 @@ export function createContainer(): Container {
   ]);
   const pipeline = new MarkdownPipeline(mathRenderer, DEFAULT_PREAMBLE);
 
-  const fileSystem = new TauriFileSystem();
+  // iPadOS opens files in place through security-scoped bookmarks; desktop uses paths.
+  const fileSystem =
+    import.meta.env.TAURI_ENV_PLATFORM === "ios" ? new IosFileSystem() : new TauriFileSystem();
   const documentService = new DocumentService(fileSystem, fileSystem, fileSystem);
   const tabManager = new TabManager();
   const settingsRepository = new LocalStorageSettingsRepository();

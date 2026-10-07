@@ -1,0 +1,17 @@
+[package]
+name = "tauri-plugin-ipad-files"
+version = "0.1.0"
+description = "iPadOS document access for pretty-markdown: security-scoped bookmarks and iCloud downloads"
+authors = ["Paulo Akira"]
+license = "MIT"
+edition = "2021"
+publish = false
+# Links the Swift package built by tauri-plugin's build script.
+links = "tauri-plugin-ipad-files"
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

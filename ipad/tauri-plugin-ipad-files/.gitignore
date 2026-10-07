@@ -1,0 +1,4 @@
+/target
+# Copied in by tauri-plugin's build script (Tauri's Swift API) and Swift build output.
+/.tauri
+/ios/.build

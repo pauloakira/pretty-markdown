@@ -162,9 +162,14 @@ fn clear_session(app: tauri::AppHandle) -> Result<(), String> {
 /// This is the native side of the `FileSystem` port (see the TS `TauriFileSystem`
 /// adapter). Returns a `Result` so the frontend can model failure as a value rather
 /// than a thrown error.
+#[cfg(desktop)]
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(file_path(&path)).map_err(|e| format!("Failed to read '{path}': {e}"))
+    read_text(&file_path(&path), &path)
+}
+
+fn read_text(local: &Path, path: &str) -> Result<String, String> {
+    std::fs::read_to_string(local).map_err(|e| format!("Failed to read '{path}': {e}"))
 }
 
 /// A filesystem path from what the frontend passes: a plain path (desktop), or a
@@ -186,10 +191,19 @@ fn file_path(path: &str) -> PathBuf {
 ///
 /// Returns a raw IPC response, which reaches the frontend as an `ArrayBuffer`: no JSON
 /// array of numbers or base64, so even large PDFs cross the bridge cheaply.
+#[cfg(desktop)]
 #[tauri::command]
 fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::Response, String> {
-    let mut file = std::fs::File::open(file_path(&path))
-        .map_err(|e| format!("Failed to read '{path}': {e}"))?;
+    read_bytes(&file_path(&path), &path, max_bytes)
+}
+
+fn read_bytes(
+    local: &Path,
+    path: &str,
+    max_bytes: Option<u64>,
+) -> Result<tauri::ipc::Response, String> {
+    let mut file =
+        std::fs::File::open(local).map_err(|e| format!("Failed to read '{path}': {e}"))?;
     let mut bytes = Vec::new();
     match max_bytes {
         Some(limit) => file.take(limit).read_to_end(&mut bytes),
@@ -200,9 +214,84 @@ fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::R
 }
 
 /// Write UTF-8 text to a file on disk (overwriting). Native side of the `FileWriter` port.
+#[cfg(desktop)]
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(file_path(&path), contents).map_err(|e| format!("Failed to write '{path}': {e}"))
+    write_text(&file_path(&path), &path, contents)
+}
+
+fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> {
+    std::fs::write(local, contents).map_err(|e| format!("Failed to write '{path}': {e}"))
+}
+
+// ---- iPadOS file access ---------------------------------------------------------
+//
+// On iOS/iPadOS a picked file (e.g. in iCloud Drive) is reachable only through a
+// security-scoped bookmark, and may need downloading first. The mobile versions of the
+// file commands below ask the ipad-files plugin (ipad/tauri-plugin-ipad-files) to make the
+// file accessible, then read/write it like the desktop ones. They're `async` so the wait
+// for an iCloud download never blocks the main thread.
+
+/// The path to read or write now for a document the app knows by `path`.
+#[cfg(mobile)]
+fn accessible_path(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, String> {
+    let local = file_path(path);
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files()
+            .access(&local.to_string_lossy())
+            .map(PathBuf::from)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Ok(local)
+    }
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn read_text_file(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    read_text(&accessible_path(&app, &path)?, &path)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn read_file_bytes(
+    app: tauri::AppHandle,
+    path: String,
+    max_bytes: Option<u64>,
+) -> Result<tauri::ipc::Response, String> {
+    read_bytes(&accessible_path(&app, &path)?, &path, max_bytes)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn write_text_file(
+    app: tauri::AppHandle,
+    path: String,
+    contents: String,
+) -> Result<(), String> {
+    write_text(&accessible_path(&app, &path)?, &path, contents)
+}
+
+/// Keep access to a document the user just picked, so it can be reopened after the app
+/// restarts (iPadOS bookmarks). Desktop apps can reopen any path: nothing to do there.
+#[tauri::command]
+async fn remember_document(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files()
+            .remember(&file_path(&path).to_string_lossy())
+            .map(|_| ())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -211,6 +300,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PendingFiles::default());
+
+    // iPadOS document access (bookmarks, iCloud downloads); see accessible_path.
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_ipad_files::init());
 
     // Menus are desktop-only (iPadOS apps have none); this is the ⌘Q item from install_menu.
     #[cfg(desktop)]
@@ -225,6 +318,7 @@ pub fn run() {
             read_text_file,
             read_file_bytes,
             write_text_file,
+            remember_document,
             read_session,
             write_session,
             clear_session,
