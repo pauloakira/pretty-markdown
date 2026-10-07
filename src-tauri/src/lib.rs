@@ -164,8 +164,21 @@ fn clear_session(app: tauri::AppHandle) -> Result<(), String> {
 /// than a thrown error.
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(PathBuf::from(&path))
-        .map_err(|e| format!("Failed to read '{path}': {e}"))
+    std::fs::read_to_string(file_path(&path)).map_err(|e| format!("Failed to read '{path}': {e}"))
+}
+
+/// A filesystem path from what the frontend passes: a plain path (desktop), or a
+/// `file://` URL, which is what the iOS/iPadOS document picker returns.
+fn file_path(path: &str) -> PathBuf {
+    if path.starts_with("file://") {
+        if let Some(local) = tauri::Url::parse(path)
+            .ok()
+            .and_then(|u| u.to_file_path().ok())
+        {
+            return local;
+        }
+    }
+    PathBuf::from(path)
 }
 
 /// Read a file's raw bytes — all of them, or only the first `max_bytes` (enough to check a
@@ -175,7 +188,7 @@ fn read_text_file(path: String) -> Result<String, String> {
 /// array of numbers or base64, so even large PDFs cross the bridge cheaply.
 #[tauri::command]
 fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::Response, String> {
-    let mut file = std::fs::File::open(PathBuf::from(&path))
+    let mut file = std::fs::File::open(file_path(&path))
         .map_err(|e| format!("Failed to read '{path}': {e}"))?;
     let mut bytes = Vec::new();
     match max_bytes {
@@ -189,8 +202,7 @@ fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::R
 /// Write UTF-8 text to a file on disk (overwriting). Native side of the `FileWriter` port.
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(PathBuf::from(&path), contents)
-        .map_err(|e| format!("Failed to write '{path}': {e}"))
+    std::fs::write(file_path(&path), contents).map_err(|e| format!("Failed to write '{path}': {e}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

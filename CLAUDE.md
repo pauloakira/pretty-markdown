@@ -25,6 +25,7 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [DESIGN.md](DESIGN.md) | Product design, locked decisions, render pipeline, multi-tab model, perf targets |
 | [ROADMAP.md](ROADMAP.md) | Milestone build plan |
 | [diagram/](diagram/) | Mermaid UML — use-case and sequence diagrams |
+| [ipad/](ipad/) | iPad version (same codebase, Tauri iOS target): [plan](ipad/PLAN.md) and [how to run/install](ipad/README.md). Keep the Mac build unaffected: fence platform code with `cfg(desktop)`/`cfg(mobile)` |
 | [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | Plan for PDF reading (planned, not started) — engine choice, layer-by-layer changes, phases |
 
 ## Architecture in one breath
