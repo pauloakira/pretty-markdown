@@ -1,3 +1,4 @@
+#[cfg(desktop)]
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,7 @@ fn exit_app(app: tauri::AppHandle) {
 }
 
 /// Menu id of our replacement for the app menu's Quit item.
+#[cfg(desktop)]
 const QUIT_MENU_ID: &str = "pm-quit";
 
 /// Install Tauri's default menu with one change: the app menu's built-in Quit item is
@@ -47,9 +49,11 @@ fn install_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Watches open files and emits `file-changed` when they change on disk.
+/// Watches open files and emits `file-changed` when they change on disk (desktop only).
+#[cfg(desktop)]
 struct FileWatcher(Mutex<RecommendedWatcher>);
 
+#[cfg(desktop)]
 #[tauri::command]
 fn watch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
     state
@@ -60,6 +64,7 @@ fn watch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), Stri
         .map_err(|e| e.to_string())
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn unwatch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
     match state.0.lock().unwrap().unwatch(Path::new(&path)) {
@@ -71,6 +76,21 @@ fn unwatch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), St
         }) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// iOS/iPadOS has no file watching: accept and ignore, so the frontend works unchanged.
+#[cfg(mobile)]
+#[tauri::command]
+fn watch_file(path: String) -> Result<(), String> {
+    let _ = path;
+    Ok(())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn unwatch_file(path: String) -> Result<(), String> {
+    let _ = path;
+    Ok(())
 }
 
 /// Files requested via the OS (double-click / `open`) that arrived before the frontend
@@ -175,15 +195,20 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(PendingFiles::default())
-        .on_menu_event(|app, event| {
-            if event.id() == QUIT_MENU_ID {
-                let _ = app.emit("quit-requested", ());
-            }
-        })
+        .manage(PendingFiles::default());
+
+    // Menus are desktop-only (iPadOS apps have none); this is the ⌘Q item from install_menu.
+    #[cfg(desktop)]
+    let builder = builder.on_menu_event(|app, event| {
+        if event.id() == QUIT_MENU_ID {
+            let _ = app.emit("quit-requested", ());
+        }
+    });
+
+    builder
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             read_file_bytes,
@@ -210,26 +235,30 @@ pub fn run() {
             }
 
             // A single watcher for all open files; emits changed paths to the frontend.
-            let handle = app.handle().clone();
-            let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-                if let Ok(event) = res {
-                    if matches!(
-                        event.kind,
-                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
-                    ) {
-                        let paths: Vec<String> = event
-                            .paths
-                            .iter()
-                            .map(|p| p.to_string_lossy().into_owned())
-                            .collect();
-                        if !paths.is_empty() {
-                            let _ = handle.emit("file-changed", paths);
+            #[cfg(desktop)]
+            {
+                let handle = app.handle().clone();
+                let watcher =
+                    notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                        if let Ok(event) = res {
+                            if matches!(
+                                event.kind,
+                                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                            ) {
+                                let paths: Vec<String> = event
+                                    .paths
+                                    .iter()
+                                    .map(|p| p.to_string_lossy().into_owned())
+                                    .collect();
+                                if !paths.is_empty() {
+                                    let _ = handle.emit("file-changed", paths);
+                                }
+                            }
                         }
-                    }
-                }
-            })
-            .map_err(|e| e.to_string())?;
-            app.manage(FileWatcher(Mutex::new(watcher)));
+                    })
+                    .map_err(|e| e.to_string())?;
+                app.manage(FileWatcher(Mutex::new(watcher)));
+            }
 
             #[cfg(target_os = "macos")]
             install_menu(app.handle())?;
