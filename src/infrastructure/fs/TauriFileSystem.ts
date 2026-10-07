@@ -12,11 +12,15 @@ import { err, ok, type Result } from "../../domain/values/Result";
  * commands (see src-tauri/src/lib.rs); dialogs use the dialog plugin.
  */
 export class TauriFileSystem implements FilePicker, FileReader, FileWriter {
-  async pickMarkdownFile(): Promise<string | null> {
+  async pickDocument(): Promise<string | null> {
     const selected = await open({
       multiple: false,
       directory: false,
-      filters: [{ name: "Markdown", extensions: ["md", "markdown", "mdown", "txt"] }],
+      filters: [
+        { name: "Documents", extensions: ["md", "markdown", "mdown", "txt", "pdf"] },
+        { name: "Markdown", extensions: ["md", "markdown", "mdown", "txt"] },
+        { name: "PDF", extensions: ["pdf"] },
+      ],
     });
     return typeof selected === "string" ? selected : null;
   }

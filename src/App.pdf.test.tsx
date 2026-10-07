@@ -1,0 +1,184 @@
+import { act } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { createMarkdownDocument, createPdfDocument } from "./domain/entities/Document";
+import {
+  button,
+  FILES,
+  launch,
+  makeContainer,
+  quit,
+  quitVia,
+  settle,
+  shortcut,
+  useAppHarness,
+  type TestContainer,
+} from "./test/appHarness";
+import { disk } from "./test/tauriMock";
+
+/*
+ * PDF tabs in the running app, with a fake viewer standing in for pdf.js (the real
+ * adapter is exercised in a browser/webview; see docs/PDF_PLAN.md §6).
+ */
+
+vi.mock("@tauri-apps/api/core", async () => (await import("./test/tauriMock")).tauriCore);
+vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauriMock")).tauriEvent);
+
+useAppHarness();
+
+const PDF = "/papers/quad/paper.pdf";
+const NOTE = "/papers/runge/docs/intro.md";
+
+/** The page field, zoom label and "Fit width" state as shown in the PDF toolbar. */
+function toolbar() {
+  return {
+    page: document.querySelector<HTMLInputElement>(".pdftoolbar__page-input")?.value,
+    of: document.querySelector(".pdftoolbar__page-count")?.textContent,
+    zoom: document.querySelector(".pdftoolbar__zoom")?.textContent,
+    fitWidth: document.querySelector("[aria-pressed]")?.getAttribute("aria-pressed") === "true",
+  };
+}
+
+async function openPdf(app: TestContainer) {
+  await act(async () => app.tabManager.openDocument(createPdfDocument(PDF)));
+  await settle();
+}
+
+const wait = (ms: number) => act(() => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+describe("PDF tabs", () => {
+  it("open from the dialog into the viewer, with a PDF toolbar instead of the markdown one", async () => {
+    const app = makeContainer();
+    app.picks.push(PDF);
+    await launch(app);
+    await act(async () => button("Open a document").click());
+    await settle();
+
+    expect(app.tabManager.getSnapshot().tabs[0].document).toEqual({
+      kind: "pdf",
+      path: PDF,
+      name: "paper.pdf",
+    });
+    expect(app.pdfViewer.mounts).toHaveLength(1);
+    expect(app.pdfViewer.latest.current).toEqual({ page: 1, pageOffset: 0, zoom: "page-width" });
+    expect(toolbar()).toEqual({ page: "1", of: "/ 12", zoom: "150%", fitWidth: true });
+    expect(document.querySelector(".doctoolbar__name")?.getAttribute("title")).toBe("A Paper on Things");
+    expect(document.querySelector(".reader")).toBeNull(); // not rendered as markdown
+    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent)).not.toContain("Edit");
+  });
+
+  it("drives the viewer from the toolbar and ⌘+ / ⌘− / ⌘0", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')?.click());
+    expect(viewer.current.zoom).toBe(1.75); // fit-width was 150%
+    expect(toolbar()).toMatchObject({ zoom: "175%", fitWidth: false });
+
+    await act(async () => shortcut("Minus"));
+    expect(viewer.current.zoom).toBe(1.5);
+    await act(async () => shortcut("Equal"));
+    expect(viewer.current.zoom).toBe(1.75);
+    await act(async () => shortcut("Digit0"));
+    expect(viewer.current.zoom).toBe("page-width");
+    expect(toolbar().fitWidth).toBe(true);
+
+    const field = document.querySelector<HTMLInputElement>(".pdftoolbar__page-input");
+    if (!field) throw new Error("no page field");
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setValue?.call(field, "7");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    expect(viewer.current.page).toBe(7);
+    expect(toolbar().page).toBe("7");
+  });
+
+  it("ignores edit, save and export shortcuts", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const save = vi.spyOn(app.documentService, "save");
+    const exportPdf = vi.spyOn(app.documentExporter, "exportPdf");
+
+    await act(async () => {
+      shortcut("KeyE");
+      shortcut("KeyS");
+      shortcut("KeyP");
+    });
+    expect(app.tabManager.getSnapshot().tabs[0].viewState.mode).toBe("reader");
+    expect(save).not.toHaveBeenCalled();
+    expect(exportPdf).not.toHaveBeenCalled();
+  });
+
+  it("opens external links through the link opener", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    app.pdfViewer.latest.clickExternalLink("https://arxiv.org/abs/2110.14168");
+    expect(app.linkOpener.opened).toEqual(["https://arxiv.org/abs/2110.14168"]);
+  });
+
+  it("remembers the position: while reading, across tab switches, and through quit and relaunch", async () => {
+    const first = makeContainer();
+    await launch(first);
+    await act(async () => first.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await openPdf(first);
+    const pdfTab = () => first.tabManager.getSnapshot().tabs[1];
+
+    // Recorded once scrolling settles (debounced like the markdown reader).
+    await act(async () => first.pdfViewer.latest.moveTo({ page: 4, pageOffset: 0.5, zoom: 1.25 }));
+    expect(pdfTab().viewState.pdf?.page).toBe(1);
+    await wait(450);
+    expect(pdfTab().viewState.pdf).toEqual({ page: 4, pageOffset: 0.5, zoom: 1.25 });
+
+    // Switching away records the latest position at once and releases the viewer.
+    const firstViewer = first.pdfViewer.latest;
+    await act(async () => firstViewer.moveTo({ page: 5, pageOffset: 0.1, zoom: 1.25 }));
+    await act(async () => first.tabManager.activateTab(first.tabManager.getSnapshot().tabs[0].id));
+    expect(firstViewer.destroyed).toBe(true);
+    expect(pdfTab().viewState.pdf).toEqual({ page: 5, pageOffset: 0.1, zoom: 1.25 });
+
+    // Switching back reopens it where it was.
+    await act(async () => first.tabManager.activateTab(pdfTab().id));
+    await settle();
+    expect(first.pdfViewer.latest.current).toEqual({ page: 5, pageOffset: 0.1, zoom: 1.25 });
+
+    // A move right before quitting (inside the debounce) is still saved by the prompt.
+    await act(async () => first.pdfViewer.latest.moveTo({ page: 9, pageOffset: 0.25, zoom: 2 }));
+    await quitVia(first, "Reopen next time");
+    const saved = JSON.parse(disk.session ?? "null");
+    expect(saved.tabs[1].pdf).toEqual({ page: 9, pageOffset: 0.25, zoom: 2 });
+    await quit();
+
+    const second = makeContainer();
+    await launch(second);
+    expect(second.pdfViewer.latest.current).toEqual({ page: 9, pageOffset: 0.25, zoom: 2 });
+    expect(toolbar()).toMatchObject({ page: "9", zoom: "200%", fitWidth: false });
+  });
+
+  it("shows an error instead of the document when the file is gone", async () => {
+    const app = makeContainer();
+    await launch(app);
+    // A tab whose file was deleted after it was opened.
+    await act(async () => app.tabManager.openDocument(createPdfDocument("/papers/deleted.pdf")));
+    await settle();
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("No such file");
+    expect(app.pdfViewer.mounts).toHaveLength(0);
+    expect(toolbar()).toMatchObject({ of: "/ –", zoom: "–" });
+  });
+
+  it("shows the viewer's error when a PDF can't be opened", async () => {
+    const app = makeContainer();
+    await launch(app);
+    app.pdfViewer.failWith = "This PDF is password-protected. Opening protected PDFs isn't supported yet.";
+    await openPdf(app);
+
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      "This PDF is password-protected. Opening protected PDFs isn't supported yet.",
+    );
+  });
+});

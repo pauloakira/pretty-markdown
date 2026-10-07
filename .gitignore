@@ -17,3 +17,6 @@ src-tauri/target/
 .env
 .env.*
 !.env.example
+
+# TypeScript incremental build info
+*.tsbuildinfo

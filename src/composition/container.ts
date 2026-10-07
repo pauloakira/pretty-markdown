@@ -3,6 +3,7 @@ import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { AppWindow } from "../domain/ports/AppWindow";
 import type { DocumentExporter } from "../domain/ports/DocumentExporter";
+import type { LinkOpener } from "../domain/ports/LinkOpener";
 import type { MacroMap } from "../domain/ports/MathRenderer";
 import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepository";
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
@@ -15,7 +16,10 @@ import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
 import { LocalStorageRecentFilesRepository } from "../infrastructure/persistence/LocalStorageRecentFilesRepository";
 import { LocalStorageSettingsRepository } from "../infrastructure/persistence/LocalStorageSettingsRepository";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
+import { LazyPdfViewerFactory } from "../infrastructure/pdf/LazyPdfViewerFactory";
 import { TauriAppWindow } from "../infrastructure/shell/TauriAppWindow";
+import { TauriLinkOpener } from "../infrastructure/shell/TauriLinkOpener";
+import type { PdfViewerFactory } from "../presentation/pdf/PdfViewer";
 
 /**
  * Default math preamble — custom macros available in every document, fed to both
@@ -37,6 +41,9 @@ export interface Container {
   readonly sessionService: SessionService;
   readonly appWindow: AppWindow;
   readonly documentExporter: DocumentExporter;
+  /** Renders PDF tabs; pdf.js itself loads on first use. */
+  readonly pdfViewer: PdfViewerFactory;
+  readonly linkOpener: LinkOpener;
 }
 
 export function createContainer(): Container {
@@ -55,6 +62,8 @@ export function createContainer(): Container {
   const sessionService = new SessionService(new TauriSessionRepository(), documentService);
   const appWindow = new TauriAppWindow();
   const documentExporter = new PrintDocumentExporter();
+  const pdfViewer = new LazyPdfViewerFactory();
+  const linkOpener = new TauriLinkOpener();
 
   return {
     documentService,
@@ -65,5 +74,7 @@ export function createContainer(): Container {
     sessionService,
     appWindow,
     documentExporter,
+    pdfViewer,
+    linkOpener,
   };
 }

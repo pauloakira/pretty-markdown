@@ -12,6 +12,7 @@ import type {
   FileReader,
   FileWriter,
 } from "../../domain/ports/FileSystem";
+import { err, type Result } from "../../domain/values/Result";
 
 /** Result of an open request, modeled as a value so the UI can react to each case. */
 export type OpenOutcome =
@@ -38,7 +39,7 @@ export class DocumentService {
 
   /** Prompt for a file and load it. */
   async open(): Promise<OpenOutcome> {
-    const path = await this.picker.pickMarkdownFile();
+    const path = await this.picker.pickDocument();
     if (!path) return { kind: "cancelled" };
     return this.load(path);
   }
@@ -60,6 +61,18 @@ export class DocumentService {
     const result = await this.reader.readTextFile(path);
     if (!result.ok) return { kind: "error", message: result.error };
     return { kind: "opened", document: createMarkdownDocument(path, result.value) };
+  }
+
+  /**
+   * Read a PDF's bytes for the viewer — the whole file, checked again because it may have
+   * changed since the tab was opened.
+   */
+  async loadPdfData(path: string): Promise<Result<Uint8Array>> {
+    const bytes = await this.reader.readBytes(path);
+    if (bytes.ok && !hasPdfSignature(bytes.value)) {
+      return err(`'${fileName(path)}' isn't a valid PDF file.`);
+    }
+    return bytes;
   }
 
   /** Save to the document's path, or prompt for one if it has none. */

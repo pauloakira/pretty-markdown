@@ -58,6 +58,7 @@ Reader-first build plan. Each milestone is independently shippable.
 - [ ] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
       restore, file watching. Planned in phases; see [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
       - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
-      - [ ] Phase 2 — viewer · [ ] Phase 3 — integration · [ ] Phase 4 — polish.
+      - [x] Phase 2 — viewer: pdf.js (lazy), zoom/page controls, links, position memory.
+      - [ ] Phase 3 — integration (find, file watching, file association) · [ ] Phase 4 — polish.
 - [ ] Full TeX engine / TikZ (opt-in renderer).
 - [ ] Plugin/theme system.

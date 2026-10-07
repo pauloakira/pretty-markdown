@@ -17,6 +17,7 @@ export interface FileWriter {
 
 /** Port: native file dialogs. Each resolves to null if the user cancels. */
 export interface FilePicker {
-  pickMarkdownFile(): Promise<string | null>;
+  /** Pick a document to open: markdown or PDF. */
+  pickDocument(): Promise<string | null>;
   pickSavePath(defaultName?: string): Promise<string | null>;
 }

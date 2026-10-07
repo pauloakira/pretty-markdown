@@ -12,7 +12,7 @@ class FakePicker implements FilePicker {
     private readonly openPath: string | null,
     private readonly savePath: string | null = null,
   ) {}
-  async pickMarkdownFile(): Promise<string | null> {
+  async pickDocument(): Promise<string | null> {
     return this.openPath;
   }
   async pickSavePath(): Promise<string | null> {
@@ -168,5 +168,32 @@ describe("DocumentService — PDFs", () => {
       content: "# Notes",
     });
     expect(fake.bytesRequested).toBeNull();
+  });
+});
+
+describe("DocumentService — PDF data for the viewer", () => {
+  it("reads the whole file (no byte limit)", async () => {
+    const pdf = new TextEncoder().encode("%PDF-1.7\n...rest of the file...");
+    const fake = new FakeReader(ok(""), ok(pdf));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    expect(await service.loadPdfData("/p/a.pdf")).toEqual(ok(pdf));
+    expect(fake.bytesRequested).toEqual({ path: "/p/a.pdf", maxBytes: undefined });
+  });
+
+  it("rejects bytes that aren't a PDF, and passes read errors through", async () => {
+    const notPdf = new DocumentService(
+      new FakePicker(null),
+      new FakeReader(ok(""), ok(new TextEncoder().encode("<html>"))),
+      new FakeWriter(),
+    );
+    expect(await notPdf.loadPdfData("/p/a.pdf")).toEqual(err("'a.pdf' isn't a valid PDF file."));
+
+    const missing = new DocumentService(
+      new FakePicker(null),
+      new FakeReader(ok(""), err("Failed to read '/p/a.pdf'")),
+      new FakeWriter(),
+    );
+    expect(await missing.loadPdfData("/p/a.pdf")).toEqual(err("Failed to read '/p/a.pdf'"));
   });
 });

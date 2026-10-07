@@ -1,6 +1,6 @@
 # PDF reading — implementation plan
 
-> Status: **Phase 1 done** (2026-10-05); Phases 2–4 not started. Decisions are recorded in
+> Status: **Phases 1–2 done** (2026-10-05); Phases 3–4 not started. Decisions are recorded in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log). Update
 > [DESIGN.md](../DESIGN.md) and [ROADMAP.md](../ROADMAP.md) as each phase lands.
 
@@ -225,7 +225,7 @@ commit-at-checkpoints convention).
   (paths with spaces and `~`), a fake `.pdf`, and a markdown note. The PDFs came through
   the raw-bytes IPC, the fake was dropped, and the saved page and zoom round-tripped.
 
-### Phase 2: Viewer
+### Phase 2: Viewer ✅ (2026-10-05)
 - Open-dialog filter includes `.pdf` (and `pickMarkdownFile` → `pickDocument`), moved here
   from Phase 1. The `PdfPending` placeholder is removed.
 - `pdfjs-dist` dependency, worker + `cmaps` + `standard_fonts` assets, lazy chunk.
@@ -234,9 +234,68 @@ commit-at-checkpoints convention).
 - **Done when:** the fixtures render correctly in the real app (including CJK and
   unembedded fonts), links behave correctly, and markdown startup time is unchanged.
 
+**As built, versus the plan:**
+- **pdf.js 6.4, legacy build.** It transpiles newer JavaScript features; WKWebView's
+  engine is the user's macOS Safari version, which can lag behind the modern build.
+- **Four asset folders, not two.** pdf.js 6 also needs `wasm/` (JPEG 2000 and JBIG2
+  decoders, colour management) and `iccs/` (ICC profiles). A small Vite plugin
+  (`pdfjsAssets` in `vite.config.ts`) serves them from `node_modules` in dev and copies
+  them to `dist/pdfjs/` on build (4.3 MB). They're fetched from `/pdfjs/…`, so they work
+  under Tauri's `tauri://` protocol.
+- **Bundle sizes.** The main bundle grew by about 7 KB. pdf.js (713 KB, plus 224 KB of
+  CSS) and its worker (1.3 MB) load only when the first PDF tab is shown.
+- **No `isEvalSupported` option.** pdf.js 6 removed it because it no longer compiles PDF
+  functions with `eval`. PDF JavaScript stays off: the viewer has no scripting manager.
+- **Position persistence moved here from Phase 3.** `PdfReader` records the view debounced
+  while reading, immediately on tab switch, and the app flushes it on quit (`pdfViewRef`).
+  A tab switch or relaunch reopens at the same page and zoom.
+- **External links** go through a new `LinkOpener` port (Tauri opener plugin) and never
+  navigate the web view. In-document links are handled by pdf.js.
+- **Fixed while testing in a browser and the real web view:**
+  - pdf.js's CSS sets `:root { color-scheme: light dark }`, which overrode our Light
+    theme. Our rule is now `:root:not([data-theme="dark"])`, which is more specific.
+  - Views were reported via `requestAnimationFrame`, which stalls in hidden windows. A
+    16 ms timer plus our own scroll listener now report them.
+  - The final view was measured after React detached the container (all zeros, so it
+    "landed" on the last page). The adapter now keeps the last measured view.
+  - Zoom steps within 3% of the current scale are skipped, so fit-width at 150.4% zooms
+    out to 125%, not to an invisible 150%.
+  - The gap above a page now counts as that page (go-to-page parks the viewport there).
+  - A container with no size at mount (hidden window) defers the initial view until it
+    has a real size, instead of fitting to zero.
+- **Verified:**
+  - In a Chromium preview against real PDFs and a generated fixture with a non-embedded
+    Japanese font: the bundled cMaps decode 日本語テキスト, standard fonts load, external
+    and internal links work, and a 4.9 MB PDF paints its first page in about 370 ms.
+  - In the **real WKWebView production build** (a separately named copy, so the user's
+    app and session were untouched): a 2.9 MB iCloud PDF loaded through the raw-bytes
+    IPC, the worker ran from `tauri://`, and an in-range saved position (page 7, offset
+    0.5, 125%) was restored exactly.
+- **Smoothness and sharpness, tuned with the user in the real app** (temporary probe:
+  frame cadence, page draw times, wheel events, canvas geometry):
+  - **GPU canvases (`enableHWA: true`).** pdf.js's API default creates CPU-backed
+    (`willReadFrequently`) canvases, which WebKit scrolled with stutter and flicker.
+    pdf.js's own viewer turns this on.
+  - **Pre-drawing.** A momentum wheel (here about 360 px per event, around 18,000 px/s)
+    outruns pdf.js's "visible + 1" drawing. Measured frames were fine (about 13 ms); the
+    problem was pages appearing before they were drawn. The adapter now pre-draws 4 pages
+    ahead in the scroll direction and 1 behind, through pdf.js's own queue
+    (`preRenderPages`).
+  - **Page geometry.** Our global `* { box-sizing: border-box }` squeezed each page canvas
+    into its 9 px border (drawn for 1665 px, shown at 1647, a ~1% non-uniform stretch). The
+    toolbar's 33.6 px height also put pages off the pixel grid. Together they made glyphs
+    look warped. Fixed by restoring the content box inside the viewer and giving the
+    toolbar a whole-pixel height.
+  - **At least 2× drawing** (`OutputScale.pixelRatio`), so standard (1×) displays get
+    supersampled, smoother glyphs. Retina is unchanged.
+- **Known edge case (Phase 3):** an out-of-range saved page (the PDF got shorter) clamps to
+  the last page in Chromium but landed a few pages earlier in WKWebView.
+
 ### Phase 3: Integration
-- `FindTarget` refactor plus PDF find, page/zoom persistence through tab switches and
-  quit/relaunch, file watching, file association, recent files, the document cache.
+- `FindTarget` refactor plus PDF find, file watching, file association, the document
+  cache, and the out-of-range restore edge case above. (Page/zoom persistence through tab
+  switches and quit/relaunch already landed in Phase 2. Recent files work for PDFs opened
+  from the dialog.)
 - App-level tests with the fake viewer, and a real web view pass over the fixtures.
 - **Done when:** §1's MVP list is complete and the performance targets in §5 are met.
 
