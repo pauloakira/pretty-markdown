@@ -1,6 +1,7 @@
 # iPad version — plan
 
-> Status: **Phase A (spike) done** (2026-10-06). Same codebase as the Mac app; see
+> Status: **Phase A (spike) done** (2026-10-06); **Phase B implemented** (2026-10-07),
+> pending a real-device check. Same codebase as the Mac app; see
 > [README.md](README.md) for running it. Record decisions in
 > [ARCHITECTURE.md §9](../docs/ARCHITECTURE.md#9-decision-log).
 
@@ -29,7 +30,35 @@ Store. The Mac app must keep working exactly as before at every step.
     original and the copies vanish (session restore will break). → Phase B.
   - ⚠️ The settings gear is clipped at the right edge of the tab bar. → Phase D.
 
-## Phase B: File access done right (the main work)
+## Phase B: File access done right (the main work) — implemented, device check pending
+
+**As built (2026-10-07):**
+- [`tauri-plugin-ipad-files`](tauri-plugin-ipad-files) is a small Swift and Rust plugin,
+  an iOS-only dependency, so the Mac never compiles it. It has two calls:
+  - `remember(path)`: start security-scoped access and store a bookmark for the path, in
+    UserDefaults.
+  - `access(path)`: resolve the bookmark (following moves and refreshing stale bookmarks),
+    start access, and do a coordinated read, which makes iCloud download a cloud-only
+    file first. It returns the path to read or write. The work runs off the main thread.
+- The iOS versions of `read_text_file` / `read_file_bytes` / `write_text_file` are `async`
+  and call `access` first. The desktop versions are unchanged, sharing the read/write
+  helpers.
+- `IosFileSystem` is chosen at build time via `TAURI_ENV_PLATFORM`. It opens the picker in
+  **scoped (open-in-place)** mode and calls `remember_document` right after a pick. The
+  document's identity stays its real path, so sessions, recent files, de-duplication and
+  *Group tabs by folder* need no change.
+- **Verified in the simulator:** a picked file is opened in place (the session stores the
+  original path, not a temporary copy), its bookmark is stored, and quitting and
+  relaunching restores the tab through the bookmark.
+- **Not verifiable in the simulator:** the simulator neither enforces the iPadOS file
+  sandbox nor signs into iCloud. Real-device checks still to do:
+  - a file picked from iCloud Drive reopens after the app is force-quit;
+  - a file evicted to the cloud downloads on open;
+  - saving an edited markdown file updates it in iCloud.
+- **Known v1 limitations:** writes are plain writes after a coordinated read (not a
+  coordinated write); Save As to a new location isn't available on iPad.
+
+**Original plan:**
 
 iPadOS apps can't open arbitrary paths. A file picked from iCloud Drive is reachable only
 through a **security-scoped URL**, and to reopen it after a relaunch the app must keep a
