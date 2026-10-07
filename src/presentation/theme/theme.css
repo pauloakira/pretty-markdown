@@ -959,7 +959,10 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.3rem 0.9rem;
+  /* A whole number of pixels: content below (a PDF's page canvases) must start on the
+     pixel grid, or every page is composited a fraction of a pixel off and blurs. */
+  height: 34px;
+  padding: 0 0.9rem;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
@@ -1049,6 +1052,15 @@ body {
 }
 .pdf-reader__scroll {
   overflow: auto;
+}
+/*
+ * pdf.js lays pages out for the default content-box model. Our global `* { border-box }`
+ * took each page's 9px border out of its content, squeezing a canvas drawn for 1665px
+ * into 1647px (a non-uniform ~1% shrink that warped glyphs). Zero specificity: this only
+ * beats the global rule, so pdf.js's own `box-sizing` rules still apply.
+ */
+:where(.pdf-reader__scroll, .pdf-reader__scroll *) {
+  box-sizing: content-box;
 }
 .pdf-reader__status {
   position: absolute;

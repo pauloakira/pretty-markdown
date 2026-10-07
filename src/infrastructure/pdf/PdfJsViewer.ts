@@ -11,17 +11,37 @@ import {
   getDocument,
   GlobalWorkerOptions,
   InvalidPDFException,
+  OutputScale,
   PasswordException,
   type PDFDocumentProxy,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
-import { EventBus, PDFLinkService, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
+import {
+  EventBus,
+  PDFLinkService,
+  PDFViewer,
+  RenderingStates,
+} from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { err, ok, type Result } from "../../domain/values/Result";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { PdfMountOptions, PdfViewerHandle } from "../../presentation/pdf/PdfViewer";
+import { preRenderPages } from "./preRender";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+
+/**
+ * Draw pages at no less than 2× pixel density. On a standard (1×) display pdf.js drew
+ * glyphs at one canvas pixel per screen pixel, and canvas text gets no font hinting, so
+ * letters looked rough and uneven. Drawing at 2× and letting WebKit scale the canvas
+ * down supersamples them. Retina screens are already 2×, so nothing changes there.
+ * pdf.js reads its pixel ratio from this one getter (the viewer shares the class).
+ */
+const MIN_PIXEL_RATIO = 2;
+Object.defineProperty(OutputScale, "pixelRatio", {
+  configurable: true,
+  get: () => Math.max(MIN_PIXEL_RATIO, globalThis.devicePixelRatio || 1),
+});
 
 /** Where the pdfjs-assets Vite plugin serves pdf.js's data files (see vite.config.ts). */
 const assetUrl = (dir: string) => new URL(`/pdfjs/${dir}/`, window.location.href).href;
@@ -35,6 +55,34 @@ const PAGE_GAP_PX = 20;
  * the toolbar's page number; the last change is always reported (trailing).
  */
 const REPORT_INTERVAL_MS = 100;
+
+/**
+ * Pages drawn ahead of the viewport in the scroll direction (and behind it). pdf.js draws
+ * only the visible pages plus one ahead; a momentum flick (trackpad, Magic Mouse) moves
+ * ~9 pages/s at fit-width, so readers mostly saw pages that weren't drawn yet popping in.
+ * Drawn pages join pdf.js's page buffer (≥ 10 pages, least-recently-used), so memory
+ * stays bounded.
+ */
+const PRERENDER_AHEAD = 4;
+const PRERENDER_BEHIND = 1;
+
+/** The slice of PDFViewer's (semi-internal) API the pre-renderer uses; pdfjs-dist is pinned. */
+interface VisiblePage {
+  readonly id: number;
+  readonly view: { readonly renderingState: number };
+}
+interface VisiblePages {
+  readonly first: VisiblePage;
+  readonly last: VisiblePage;
+  readonly views: readonly VisiblePage[];
+  readonly ids: Set<number>;
+}
+interface ViewerInternals {
+  _getVisiblePages(): VisiblePages;
+  readonly renderingQueue: { renderHighestPriority(pages?: VisiblePages): void };
+  getPageView(index: number): { readonly renderingState: number } | undefined;
+  readonly pagesCount: number;
+}
 
 /** Outside-document links the app may open in the user's browser. */
 const EXTERNAL_LINK = /^(https?|mailto):/i;
@@ -163,6 +211,57 @@ export async function mountPdfJs(
   // stops in a hidden window, and the last scroll before a tab switch must be recorded.
   container.addEventListener("scroll", reportView, { passive: true });
 
+  // Pre-draw pages around the viewport, favouring the scroll direction, whenever pdf.js
+  // has nothing more urgent: after each page finishes drawing, and as the reader scrolls.
+  // Pages are queued through pdf.js's own rendering queue, so its cancellation, pausing
+  // and page buffer keep working; we just hand it a wider set of "pages to draw".
+  const internals = viewer as unknown as ViewerInternals;
+  let lastScrollTop = container.scrollTop;
+  let scrollingDown = true;
+  let preRenderTimer = 0;
+  const preRender = () => {
+    preRenderTimer = 0;
+    const top = container.scrollTop;
+    if (top !== lastScrollTop) scrollingDown = top > lastScrollTop;
+    lastScrollTop = top;
+
+    const visible = internals._getVisiblePages();
+    if (visible.views.length === 0) return;
+    const count = internals.pagesCount;
+    const first = visible.first.id;
+    const last = visible.last.id;
+    // Leave the visible pages, and anything already drawing, to pdf.js.
+    const drawingNearby = (from: number, to: number) => {
+      for (let id = Math.max(1, from); id <= Math.min(count, to); id += 1) {
+        if (internals.getPageView(id - 1)?.renderingState === RenderingStates.RUNNING) return true;
+      }
+      return false;
+    };
+    if (visible.views.some((v) => v.view.renderingState !== RenderingStates.FINISHED)) return;
+    if (drawingNearby(first - PRERENDER_AHEAD, last + PRERENDER_AHEAD)) return;
+
+    const pages: VisiblePage[] = [];
+    for (const id of preRenderPages(first, last, count, scrollingDown, PRERENDER_AHEAD, PRERENDER_BEHIND)) {
+      const view = internals.getPageView(id - 1);
+      // Not drawn yet, or paused mid-draw when something more urgent came up (pdf.js's
+      // queue resumes those).
+      const pending = view?.renderingState === RenderingStates.INITIAL || view?.renderingState === RenderingStates.PAUSED;
+      if (view && pending) pages.push({ id, view });
+    }
+    if (pages.length === 0) return;
+    internals.renderingQueue.renderHighestPriority({
+      first: pages[0],
+      last: pages[0],
+      views: pages,
+      ids: new Set(pages.map((p) => p.id)),
+    });
+  };
+  const schedulePreRender = () => {
+    if (!preRenderTimer) preRenderTimer = window.setTimeout(preRender, REPORT_INTERVAL_MS);
+  };
+  eventBus.on("pagerendered", schedulePreRender);
+  container.addEventListener("scroll", schedulePreRender, { passive: true });
+
   // "Fit width" has to be re-fitted when the window (so the container) resizes.
   const resizeObserver = new ResizeObserver(() => {
     if (container.clientWidth === 0) return;
@@ -204,6 +303,9 @@ export async function mountPdfJs(
     },
     destroy() {
       window.clearTimeout(timer);
+      window.clearTimeout(preRenderTimer);
+      container.removeEventListener("scroll", schedulePreRender);
+      eventBus.off("pagerendered", schedulePreRender);
       resizeObserver.disconnect();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);

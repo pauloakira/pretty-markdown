@@ -271,6 +271,23 @@ commit-at-checkpoints convention).
     app and session were untouched): a 2.9 MB iCloud PDF loaded through the raw-bytes
     IPC, the worker ran from `tauri://`, and an in-range saved position (page 7, offset
     0.5, 125%) was restored exactly.
+- **Smoothness and sharpness, tuned with the user in the real app** (temporary probe:
+  frame cadence, page draw times, wheel events, canvas geometry):
+  - **GPU canvases (`enableHWA: true`).** pdf.js's API default creates CPU-backed
+    (`willReadFrequently`) canvases, which WebKit scrolled with stutter and flicker.
+    pdf.js's own viewer turns this on.
+  - **Pre-drawing.** A momentum wheel (here about 360 px per event, around 18,000 px/s)
+    outruns pdf.js's "visible + 1" drawing. Measured frames were fine (about 13 ms); the
+    problem was pages appearing before they were drawn. The adapter now pre-draws 4 pages
+    ahead in the scroll direction and 1 behind, through pdf.js's own queue
+    (`preRenderPages`).
+  - **Page geometry.** Our global `* { box-sizing: border-box }` squeezed each page canvas
+    into its 9 px border (drawn for 1665 px, shown at 1647, a ~1% non-uniform stretch). The
+    toolbar's 33.6 px height also put pages off the pixel grid. Together they made glyphs
+    look warped. Fixed by restoring the content box inside the viewer and giving the
+    toolbar a whole-pixel height.
+  - **At least 2× drawing** (`OutputScale.pixelRatio`), so standard (1×) displays get
+    supersampled, smoother glyphs. Retina is unchanged.
 - **Known edge case (Phase 3):** an out-of-range saved page (the PDF got shorter) clamps to
   the last page in Chromium but landed a few pages earlier in WKWebView.
 
