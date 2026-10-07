@@ -48,15 +48,43 @@ group under `~/Library/Developer/CoreSimulator/Devices/<udid>/data/Containers/Sh
 
 ## Install on your iPad (free Apple ID)
 
-*Not done yet; see PLAN.md, Phase E. Expected steps:*
+### One-time setup
 
-1. In Xcode, open `src-tauri/gen/apple/pretty-markdown.xcodeproj`, go to **Signing &
-   Capabilities**, and choose your **Personal Team** (sign in with your Apple ID).
-2. On the iPad, go to **Settings → Privacy & Security → Developer Mode** and turn it on
-   (it restarts).
-3. Connect the iPad, or use the same network with pairing enabled, then build and install.
-4. On the iPad, go to **Settings → General → VPN & Device Management** and trust your
-   developer certificate.
+1. In Xcode → **Settings → Accounts**, sign in with your Apple ID. That creates your free
+   **Personal Team**. Its ID is the `teamID` next to "(Personal Team)" in:
+   ```bash
+   defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier | grep -E 'teamID|teamName'
+   ```
+2. Connect the iPad by cable and unlock it. **Developer Mode** (Settings → Privacy &
+   Security) only appears after a Mac has asked the iPad for developer access. Opening
+   Xcode's **Window → Devices and Simulators** with the iPad connected does that, as does:
+   ```bash
+   xcrun devicectl device info ddiServices --device "<iPad name>"
+   ```
+   Turn Developer Mode on; the iPad restarts.
 
-**Free-account limits:** the app stops launching **after 7 days** and has to be
-reinstalled from the Mac (your files and data stay). At most 3 such apps per device.
+### Install and renew
+
+```bash
+APPLE_DEVELOPMENT_TEAM=<your team id> ./ipad/install.sh
+```
+
+[`install.sh`](install.sh):
+1. Finds the connected iPad. To pick a device, pass its name or id as an argument.
+2. Builds a release `.ipa` signed with your team.
+3. Installs it with `devicectl`.
+
+On the first install it also registers the iPad with your team. It also keeps your team ID
+out of the committed Xcode project.
+
+After the **first** install, trust the certificate on the iPad: **Settings → General → VPN
+& Device Management** → your Apple ID → Trust.
+
+**Free-account limits:** the app stops launching **7 days** after it was built. Run the
+script again to renew; your tabs, files and their permissions survive a reinstall. At most
+3 such apps per device.
+
+**App icon:** iPadOS wants an opaque, full-bleed icon (it rounds the corners itself), so
+the iOS icon set is generated from [`app-icon-ios.svg`](../src-tauri/app-icon-ios.svg). That
+file has the same Σ design as the Mac's `app-icon.svg`, but without the transparent margin
+and rounded corners. To regenerate it without touching the Mac icons, see PLAN.md, Phase E.

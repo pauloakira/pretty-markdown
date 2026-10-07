@@ -97,12 +97,27 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
 - PDF export: `window.print` isn't available in WKWebView on iOS. Offer the share sheet or
   the native print dialog instead, or hide the option.
 
-## Phase E: Install on the iPad
+## Phase E: Install on the iPad ✅ (2026-10-07)
 
-- Signing with the free Personal Team, Developer Mode, trusting the certificate (steps in
-  the README).
-- A script in this folder to rebuild and reinstall over USB or Wi-Fi, since free builds
-  expire every 7 days.
+- **Installed on a real iPad Pro 12.9" (iPadOS 26.6)** with the free Personal Team, built
+  with Xcode 16.2.
+- **Gotchas found on the way:**
+  - Developer Mode is hidden until the Mac requests developer services from the iPad.
+  - The first install fails with "provisioning profile cannot be installed on this device"
+    until the iPad is registered with the team. An `xcodebuild … -destination id=<udid>
+    -allowProvisioningDeviceRegistration` run does that.
+  - `tauri ios build` writes `DEVELOPMENT_TEAM` into `project.pbxproj`; we keep it out of
+    git.
+- **[`install.sh`](install.sh)** does all of this in one command and is how the app is
+  renewed every 7 days.
+- **Signing:** we stay on the free Personal Team. The 7-day limit is Apple's for free
+  accounts. A paid developer membership would give 1-year builds; we decided against it.
+- **App icon:** iOS needs an opaque, full-bleed icon, so the iOS set comes from
+  `src-tauri/app-icon-ios.svg`. Regenerate it without touching the Mac icons:
+  1. `npx tauri icon src-tauri/app-icon-ios.svg -o <tmp> --ios-color "#3f6bc8"`
+  2. Strip the alpha channel from the PNGs in `<tmp>/ios`.
+  3. Copy them into `src-tauri/icons/ios/` and
+     `src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/`.
 
 ## Risks
 
@@ -110,5 +125,5 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
 |---|---|
 | WKWebView on iPadOS has a tighter canvas memory budget; large PDFs at Retina resolution could be killed | Tune pdf.js's page buffer and `maxCanvasPixels` on iPad; test with a 300-page PDF on the real device |
 | iCloud files not downloaded yet | Download on open with progress (Phase B) |
-| Free provisioning expires every 7 days | A one-command reinstall script (Phase E); data and bookmarks survive a reinstall |
+| Free provisioning expires every 7 days | `ipad/install.sh` renews in one command (Phase E); data and bookmarks survive a reinstall |
 | A change breaks the Mac build | Platform code fenced with `cfg(desktop)` / `cfg(mobile)`; Mac checks after every iPad change; macOS CI later |
