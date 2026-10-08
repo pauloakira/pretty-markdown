@@ -119,6 +119,68 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   3. Copy them into `src-tauri/icons/ios/` and
      `src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/`.
 
+## Phase F: Publish to the App Store (optional; not decided)
+
+The free Personal Team can't publish. Publishing needs the **Apple Developer Program**
+($99/year), which also gives TestFlight and 1-year development builds. Suggested order:
+first TestFlight for personal use, then the App Store once Phase D is done.
+
+**F1. Account and toolchain**
+- **Enroll in the Apple Developer Program.**
+  - *Individual:* fast; your legal name is shown as the seller.
+  - *Organization:* needs a D-U-N-S number; takes longer.
+- **Toolchain:** since 2026-04-28 App Store Connect only accepts builds made with
+  **Xcode 26+ and the iPadOS 26 SDK**.
+  - This Mac has Xcode 16.2 on macOS 15.1, so upgrade macOS first.
+  - Xcode 26.0 needs macOS 15.6+; Xcode 26.4+ needs macOS 26.2+.
+  - The deployment target can stay at iPadOS 14. Only the SDK we build against changes.
+- **Re-verify after the upgrade:** check the Tauri iOS build, and the Mac build and tests,
+  with the new Xcode.
+
+**F2. Things Apple requires in the app**
+- **Privacy manifest** (`PrivacyInfo.xcprivacy` in the Xcode project). Declare:
+  - no tracking and no data collected;
+  - the "required reason" APIs we use: `UserDefaults` (for the bookmarks; reason
+    `CA92.1`), plus any that WebKit or Tauri make us declare (check Xcode's privacy
+    report).
+- **Export compliance:** the app uses no custom encryption. Set
+  `ITSAppUsesNonExemptEncryption = NO` in Info.plist.
+- **Distribution signing:** an App Store export (`--export-method app-store-connect`)
+  with the paid team. `install.sh` stays for development builds.
+- **Bundle ID** `com.prettymarkdown.app`: register it in the developer account. Pick a
+  store name; "pretty-markdown" may need a variant if it's taken.
+
+**F3. Review-readiness (Apple tests on real iPads)**
+- **Finish Phase D first:** long-press instead of right-click, the clipped settings gear,
+  safe areas and Split View, and PDF export (or hide it).
+- **Hide or replace what doesn't work on iPad:**
+  - *Save As* (currently it does nothing);
+  - anything that mentions the Mac (⌘ shortcuts in tooltips are fine with a keyboard).
+- **No crashes on first launch** with an empty session. Apple's review usually starts with
+  an empty install.
+- **All code is bundled.** We never download JS, which guideline 2.5.2 requires; pdf.js,
+  KaTeX and MathJax ship inside the app.
+
+**F4. Store listing (App Store Connect)**
+- **Name, subtitle, description, keywords and category** (Productivity, or Developer Tools).
+- **Screenshots:** 13" iPad screenshots are required. Show markdown with math, a PDF, and
+  tabs.
+- **Privacy policy URL:** a short "collects nothing" page, e.g. in the GitHub repo.
+- **Support URL:** the repo's issues page.
+- **Age rating questionnaire:** answer it; the app should rate 4+.
+- **Price:** free or paid.
+- **App icon:** done (the 1024px full-bleed Σ from Phase E).
+
+**F5. Ship**
+1. **TestFlight internal testing:** no review, builds last 90 days.
+2. **Submit for review.** Expect a day or two, and maybe a round of questions.
+3. **Each update:** bump the version, then upload and submit again.
+
+**Later, maybe: the Mac App Store.** The same membership covers it, but the Mac app would
+need the App Sandbox. Its file watching, opening arbitrary paths, and session restore would
+then work through security-scoped bookmarks, like the iPad version already does. Until
+then, the Mac app ships as today (GitHub, `scripts/install.sh`).
+
 ## Risks
 
 | Risk | Mitigation |
@@ -126,4 +188,5 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
 | WKWebView on iPadOS has a tighter canvas memory budget; large PDFs at Retina resolution could be killed | Tune pdf.js's page buffer and `maxCanvasPixels` on iPad; test with a 300-page PDF on the real device |
 | iCloud files not downloaded yet | Download on open with progress (Phase B) |
 | Free provisioning expires every 7 days | `ipad/install.sh` renews in one command (Phase E); data and bookmarks survive a reinstall |
+| App Store review rejects touch/iPad issues | Finish Phase D before submitting; test on the real iPad and in TestFlight first |
 | A change breaks the Mac build | Platform code fenced with `cfg(desktop)` / `cfg(mobile)`; Mac checks after every iPad change; macOS CI later |
