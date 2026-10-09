@@ -224,6 +224,40 @@ fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> 
     std::fs::write(local, contents).map_err(|e| format!("Failed to write '{path}': {e}"))
 }
 
+/// Write raw bytes to a file (overwriting), e.g. a PDF with new highlights. Native side of
+/// `FileWriter.writeBytes`.
+///
+/// The bytes arrive as the raw request body, so a large file crosses the bridge without a
+/// JSON array of numbers. The path travels in the `path` header, percent-encoded because
+/// header values are ASCII-only.
+#[cfg(desktop)]
+#[tauri::command]
+fn write_file_bytes(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let (path, bytes) = bytes_request(&request)?;
+    write_bytes(&file_path(&path), &path, bytes)
+}
+
+/// The path and bytes of a `write_file_bytes` request.
+fn bytes_request<'a>(request: &'a tauri::ipc::Request<'_>) -> Result<(String, &'a [u8]), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected the file's bytes as the request body".into());
+    };
+    let header = request
+        .headers()
+        .get("path")
+        .and_then(|value| value.to_str().ok())
+        .ok_or("Missing the file path")?;
+    let path = percent_encoding::percent_decode_str(header)
+        .decode_utf8()
+        .map_err(|e| format!("Invalid file path: {e}"))?
+        .into_owned();
+    Ok((path, bytes))
+}
+
+fn write_bytes(local: &Path, path: &str, bytes: &[u8]) -> Result<(), String> {
+    std::fs::write(local, bytes).map_err(|e| format!("Failed to write '{path}': {e}"))
+}
+
 // ---- iPadOS file access ---------------------------------------------------------
 //
 // On iOS/iPadOS a picked file (e.g. in iCloud Drive) is reachable only through a
@@ -276,6 +310,16 @@ async fn write_text_file(
     write_text(&accessible_path(&app, &path)?, &path, contents)
 }
 
+#[cfg(mobile)]
+#[tauri::command]
+async fn write_file_bytes(
+    app: tauri::AppHandle,
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
+    let (path, bytes) = bytes_request(&request)?;
+    write_bytes(&accessible_path(&app, &path)?, &path, bytes)
+}
+
 /// Keep access to a document the user just picked, so it can be reopened after the app
 /// restarts (iPadOS bookmarks). Desktop apps can reopen any path: nothing to do there.
 #[tauri::command]
@@ -318,6 +362,7 @@ pub fn run() {
             read_text_file,
             read_file_bytes,
             write_text_file,
+            write_file_bytes,
             remember_document,
             read_session,
             write_session,
@@ -386,4 +431,92 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+    use tauri::ipc::{CallbackFn, InvokeBody};
+    use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
+    use tauri::webview::InvokeRequest;
+
+    /// A fresh, empty directory for one test.
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("pm-test-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Call `write_file_bytes` through Tauri's IPC layer, as the frontend does.
+    fn invoke_write(path: &str, body: InvokeBody) -> Result<(), serde_json::Value> {
+        let app = mock_builder()
+            .invoke_handler(tauri::generate_handler![write_file_bytes])
+            .build(mock_context(noop_assets()))
+            .unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+        let mut headers = tauri::http::HeaderMap::new();
+        let encoded = utf8_percent_encode(path, NON_ALPHANUMERIC).to_string();
+        headers.insert("path", encoded.parse().unwrap());
+        get_ipc_response(
+            &webview,
+            InvokeRequest {
+                cmd: "write_file_bytes".into(),
+                callback: CallbackFn(0),
+                error: CallbackFn(1),
+                url: "tauri://localhost".parse().unwrap(),
+                body,
+                headers,
+                invoke_key: INVOKE_KEY.to_string(),
+            },
+        )
+        .map(|_| ())
+    }
+
+    #[test]
+    fn write_file_bytes_writes_the_exact_bytes() {
+        let dir = temp_dir("write-bytes");
+        // Spaces and non-ASCII characters, as in iCloud paths and real file names.
+        let file = dir.join("Données de teste é.pdf");
+        let bytes: Vec<u8> = (0..=255u8).cycle().take(300_000).collect();
+
+        invoke_write(file.to_str().unwrap(), InvokeBody::Raw(bytes.clone())).unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), bytes);
+
+        // Writing again replaces the file rather than appending to it.
+        let shorter = b"%PDF-1.7 shorter".to_vec();
+        invoke_write(file.to_str().unwrap(), InvokeBody::Raw(shorter.clone())).unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), shorter);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn write_file_bytes_reports_a_missing_folder() {
+        let dir = temp_dir("write-bytes-missing");
+        let file = dir.join("no-such-folder").join("paper.pdf");
+        let error = invoke_write(file.to_str().unwrap(), InvokeBody::Raw(vec![1, 2, 3]))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Failed to write"), "{error}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn write_file_bytes_rejects_a_json_body() {
+        let dir = temp_dir("write-bytes-json");
+        let file = dir.join("paper.pdf");
+        let error = invoke_write(
+            file.to_str().unwrap(),
+            InvokeBody::Json(serde_json::json!({})),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("request body"), "{error}");
+        assert!(!file.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
