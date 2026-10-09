@@ -27,7 +27,7 @@ groups, find bar, session restore, and file watching.
 ### Out of scope (for now)
 
 - Editing PDFs, filling forms, signing.
-- Annotations and highlights (see §10 Future).
+- Annotations and highlights (planned separately: [PDF_HIGHLIGHTS_PLAN.md](PDF_HIGHLIGHTS_PLAN.md)).
 - Printing or exporting PDFs (a PDF tab hides **Export PDF**).
 - Becoming the system's default PDF app. We register as a viewer only.
 
@@ -327,8 +327,9 @@ commit-at-checkpoints convention).
 
 ## 10. Future
 
-- **Highlights and annotations,** stored in a sidecar file (e.g. `paper.pdf.pm.json`)
-  rather than written into the PDF.
+- **Highlights and annotations:** planned in [PDF_HIGHLIGHTS_PLAN.md](PDF_HIGHLIGHTS_PLAN.md).
+  Highlights are saved into the PDF itself, not a sidecar file, so they also work on iPad
+  and in other readers.
 - **LaTeX workflow:** SyncTeX jumps between a `.tex`/`.md` source and its compiled PDF.
 - **Search across open tabs** (markdown and PDF together).
 - **Side-by-side view:** markdown notes next to the PDF they annotate.
