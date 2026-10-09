@@ -60,4 +60,15 @@ export class TauriFileSystem implements FilePicker, FileReader, FileWriter {
       return err(error instanceof Error ? error.message : String(error));
     }
   }
+
+  async writeBytes(path: string, bytes: Uint8Array): Promise<Result<void>> {
+    try {
+      // The bytes go as the raw request body (no JSON), and the path in a header, which
+      // must be ASCII: hence the percent-encoding (decoded by the command).
+      await invoke("write_file_bytes", bytes, { headers: { path: encodeURIComponent(path) } });
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
 }

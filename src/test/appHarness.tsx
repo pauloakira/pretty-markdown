@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import App from "../App";
 import { DocumentService } from "../application/services/DocumentService";
+import { PdfSaver } from "../application/services/PdfSaver";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { Container } from "../composition/container";
@@ -157,6 +158,9 @@ export function makeContainer(): TestContainer {
     async writeTextFile() {
       return ok(undefined);
     },
+    async writeBytes() {
+      return ok(undefined);
+    },
   };
   const documentService = new DocumentService(picker, reader, writer);
   return {
@@ -169,6 +173,7 @@ export function makeContainer(): TestContainer {
     appWindow: new FakeAppWindow(),
     documentExporter: { exportPdf: async () => {} },
     pdfViewer: new FakePdfViewerFactory(),
+    pdfSaver: new PdfSaver(writer),
     linkOpener: new FakeLinkOpener(),
     picks,
   };

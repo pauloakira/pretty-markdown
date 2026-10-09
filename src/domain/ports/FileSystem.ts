@@ -13,6 +13,8 @@ export interface FileReader {
 /** Port: write file contents to disk. */
 export interface FileWriter {
   writeTextFile(path: string, contents: string): Promise<Result<void>>;
+  /** Replace a file's contents with raw bytes, e.g. a PDF with new highlights. */
+  writeBytes(path: string, bytes: Uint8Array): Promise<Result<void>>;
 }
 
 /** Port: native file dialogs. Each resolves to null if the user cancels. */

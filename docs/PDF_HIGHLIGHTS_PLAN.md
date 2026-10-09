@@ -1,7 +1,8 @@
 # PDF highlights — implementation plan
 
-> Status: **planned, not started** (2026-10-08). Apple Pencil support was added the same
-> day. A spike confirmed that the approach works (§2). This plan supersedes the "sidecar file" idea in
+> Status: **in progress.** Planned 2026-10-08, with Apple Pencil support added the same
+> day; a spike confirmed that the approach works (§2). **PR 1, writing PDF files, is done**
+> (2026-10-09; §7). This plan supersedes the "sidecar file" idea in
 > [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) as phases land.
 
@@ -175,8 +176,8 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 
 - **`FileWriter` port:** add `writeBytes(path, bytes): Promise<Result<void>>`, next to
   `writeTextFile`.
-- **A small `PdfAnnotationSaver`** (or a method on `DocumentService`):
-  `save(path, bytes)` writes the bytes and remembers the **last bytes it wrote per path**
+- **`PdfSaver`** (`src/application/services/PdfSaver.ts`, in the container as
+  `pdfSaver`): `save(path, bytes)` writes the bytes and remembers the **last bytes it wrote per path**
   (size and hash), so file watching can recognise our own writes (§4.4). It returns a
   `Result`, and its errors are messages for the UI.
 
@@ -361,9 +362,24 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 - **Done when:** text can be highlighted, recoloured, deleted and undone on the Mac and the
   iPad. Highlights are lost on close, as expected at this stage.
 
-### Phase H2: Saving
+### PR 1: Writing PDF files ✅ (2026-10-09)
+Split out of H2 so the riskiest change, writing to the user's files, got its own review.
 - `write_file_bytes` (desktop and iOS) and `FileWriter.writeBytes`.
-- The saver, with own-write tracking.
+- `PdfSaver` with own-write tracking: a `fingerprint` (size + FNV-1a) of the last write per
+  path.
+- **Tested:**
+  - Rust, through Tauri's mock IPC: exact bytes, overwriting, a missing folder, a
+    non-raw body.
+  - Unit tests for `PdfSaver` and `fingerprint`.
+  - **Live, with a temporary probe in the real app:**
+    - **Mac:** a 4.9 MB PDF was written in 15 ms, byte-identical (`cmp`), to a path with
+      spaces and accents.
+    - **iPad simulator:** a 3 MB file through the bookmark path, in 153 ms, identical
+      when read back.
+    - Both reported a missing folder as a clear error.
+
+### Phase H2: Saving
+- Uses PR 1's `write_file_bytes` and `PdfSaver`.
 - Autosave with a debounce, plus flushing on unmount and on quit.
 - Error banners; signed and encrypted handling; the changed-on-disk guard (§5.2).
 - **Done when:** highlights survive closing and reopening, show up in Preview and on the

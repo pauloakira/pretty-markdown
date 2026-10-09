@@ -60,6 +60,9 @@ const nullWriter: FileWriter = {
   async writeTextFile() {
     return ok(undefined);
   },
+  async writeBytes() {
+    return ok(undefined);
+  },
 };
 
 function documentsWith(files: Record<string, string>): DocumentService {
