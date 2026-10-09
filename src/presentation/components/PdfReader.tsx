@@ -116,6 +116,9 @@ export function PdfReader({
         onExternalLink: (url) => void linkOpener.openExternal(url),
         highlightColor: colorRef.current,
         onSave,
+        onToolChange: (next) => {
+          if (!cancelled) setToolState(next);
+        },
       });
       if (!mounted.ok) {
         if (!cancelled) setStatus({ kind: "error", message: mounted.error });

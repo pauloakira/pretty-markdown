@@ -90,6 +90,11 @@ export class FakePdfHandle implements PdfViewerHandle {
   setHighlightColor(color: HighlightColor) {
     this.color = color;
   }
+  /** Simulate pdf.js switching tools itself (e.g. the Highlight button by a selection). */
+  switchToolItself(tool: PdfTool) {
+    this.tool = tool;
+    this.options.onToolChange(tool);
+  }
   /** Simulate the reader highlighting a passage. */
   highlight() {
     this.highlights += 1;

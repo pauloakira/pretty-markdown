@@ -219,6 +219,18 @@ describe("PDF highlights", () => {
     expect(pressed(highlightButton())).toBe(false);
   });
 
+  it("follows the viewer when it enters highlight mode by itself", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    // The Highlight button next to a selection puts pdf.js in highlight mode.
+    await act(async () => app.pdfViewer.latest.switchToolItself("highlight"));
+    expect(pressed(highlightButton())).toBe(true);
+    await act(async () => highlightButton().click());
+    expect(app.pdfViewer.latest.tool).toBe("select");
+    expect(pressed(highlightButton())).toBe(false);
+  });
+
   it("picks the colour from the menu, and remembers it for the next PDF", async () => {
     const app = makeContainer();
     await launch(app);

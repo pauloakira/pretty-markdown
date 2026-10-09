@@ -1125,6 +1125,14 @@ body {
     0 0 0 2px var(--bg),
     0 0 0 4px var(--accent);
 }
+/*
+ * pdf.js puts the Highlight button shown next to a selection inside the page's text
+ * layer, which sits below the link layer: a link under the button (a citation, say) took
+ * the click and jumped away. Lift the text layer above the links while the button shows.
+ */
+.pdf-reader__scroll .textLayer:has(> .editToolbar) {
+  z-index: 3;
+}
 /* In highlight mode, the pointer over text says "highlighter", not "text cursor". */
 .pdf-reader__stage--highlighting .textLayer {
   cursor: crosshair;

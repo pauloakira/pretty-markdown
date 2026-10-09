@@ -27,7 +27,7 @@ groups, find bar, session restore, and file watching.
 ### Out of scope (for now)
 
 - Editing PDFs, filling forms, signing.
-- Annotations and highlights (planned separately: [PDF_HIGHLIGHTS_PLAN.md](PDF_HIGHLIGHTS_PLAN.md)).
+- Annotations other than highlights. Highlights are done: see [PDF_HIGHLIGHTS_PLAN.md](PDF_HIGHLIGHTS_PLAN.md).
 - Printing or exporting PDFs (a PDF tab hides **Export PDF**).
 - Becoming the system's default PDF app. We register as a viewer only.
 

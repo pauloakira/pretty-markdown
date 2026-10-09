@@ -203,12 +203,38 @@ export async function mountPdfJs(
   };
   eventBus.on("annotationeditoruimanager", onUiManager);
 
+  // pdf.js's editor asks its host app to change modes through the event bus: the
+  // Highlight button next to a selection asks for highlight mode and creates the highlight
+  // once it's in; double-clicking a highlight asks to edit it. pdf.js's own viewer app
+  // answers these; here we do, for the modes this app offers (highlighting only).
+  const OFFERED_MODES: readonly number[] = [AnnotationEditorType.NONE, AnnotationEditorType.HIGHLIGHT];
+  const onModeRequest = (event: { mode: number; editId?: string | null; mustEnterInEditMode?: boolean }) => {
+    if (!OFFERED_MODES.includes(event.mode)) return;
+    viewer.annotationEditorMode = {
+      mode: event.mode,
+      editId: event.editId ?? null,
+      mustEnterInEditMode: event.mustEnterInEditMode ?? false,
+    };
+  };
+  const onModeChanged = (event: { mode: number }) =>
+    options.onToolChange(event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select");
+  eventBus.on("showannotationeditorui", onModeRequest);
+  eventBus.on("switchannotationeditormode", onModeRequest);
+  eventBus.on("annotationeditormodechanged", onModeChanged);
+
   // The highlighter colour. pdf.js takes the default from the first colour in the list
   // above, but only once per page load (it's static), so set it explicitly as well, once
   // the editor types exist (they register with the first editor layer).
+  //
+  // pdf.js applies a colour to the selected highlights if there are any, and makes it the
+  // default for new ones otherwise. The toolbar's colour means "for new highlights" (pdf.js's
+  // own toolbar next to a highlight recolours it), so deselect first.
   let highlightColor: HighlightColor = options.highlightColor;
-  const applyHighlightColor = () =>
-    uiManager?.updateParams(AnnotationEditorParamsType.HIGHLIGHT_COLOR, highlightHex(highlightColor));
+  const applyHighlightColor = () => {
+    if (!uiManager) return;
+    uiManager.unselectAll();
+    uiManager.updateParams(AnnotationEditorParamsType.HIGHLIGHT_COLOR, highlightHex(highlightColor));
+  };
   const onFirstEditorLayer = () => {
     eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);
     applyHighlightColor();
@@ -440,8 +466,7 @@ export async function mountPdfJs(
     },
     setHighlightColor(color) {
       highlightColor = color;
-      applyHighlightColor(); // recolours the selected highlight, if any: save that too
-      scheduleSave();
+      applyHighlightColor();
     },
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
@@ -454,6 +479,9 @@ export async function mountPdfJs(
       eventBus.off("switchannotationeditorparams", scheduleSave);
       eventBus.off("editingstateschanged", scheduleSave);
       eventBus.off("annotationeditoruimanager", onUiManager);
+      eventBus.off("showannotationeditorui", onModeRequest);
+      eventBus.off("switchannotationeditormode", onModeRequest);
+      eventBus.off("annotationeditormodechanged", onModeChanged);
       eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);
       container.removeEventListener("pointerup", scheduleSave);
       container.removeEventListener("keyup", scheduleSave);

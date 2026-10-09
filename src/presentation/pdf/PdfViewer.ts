@@ -18,6 +18,11 @@ export interface PdfMountOptions {
    * changes pending, to be retried with the next change or flush.
    */
   readonly onSave: (bytes: Uint8Array) => Promise<Result<void>>;
+  /**
+   * The viewer switched tools by itself: the Highlight button next to a selection, or
+   * double-clicking a highlight, enters highlight mode. Keeps the toolbar in step.
+   */
+  readonly onToolChange: (tool: PdfTool) => void;
 }
 
 /**
@@ -49,7 +54,7 @@ export interface PdfViewerHandle {
   setZoom(zoom: PdfZoom): void;
   goToPage(page: number): void;
   setTool(tool: PdfTool): void;
-  /** The colour for new highlights; also recolours a highlight that is selected. */
+  /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;
   /** Save any highlights not saved yet, now. Resolves once the save has finished. */
   flush(): Promise<void>;
