@@ -1,7 +1,7 @@
 # PDF highlights — implementation plan
 
-> Status: **planned, not started** (2026-10-08). A spike confirmed that the approach works
-> (§2). This plan supersedes the "sidecar file" idea in
+> Status: **planned, not started** (2026-10-08). Apple Pencil support was added the same
+> day. A spike confirmed that the approach works (§2). This plan supersedes the "sidecar file" idea in
 > [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) as phases land.
 
@@ -13,6 +13,12 @@ paper:
 2. Change the highlight's colour or delete it.
 3. Find it again next time the PDF is opened, on the Mac and on the iPad.
 
+On the iPad, the **Apple Pencil is the main way to highlight**.
+- **Turn on highlight mode**, then drag the Pencil across a line like a highlighter pen.
+  Your finger keeps scrolling.
+- **Outside highlight mode,** the Pencil behaves as it does everywhere else: it scrolls
+  and selects. That leaves room for a later **note-taking** feature with the Pencil (§8).
+
 ### In scope
 
 - Highlighting selected text, in a few colours (yellow by default).
@@ -20,12 +26,18 @@ paper:
 - Highlights are **saved into the PDF file** as standard PDF highlight annotations.
 - **Existing highlights** in a PDF (made in Preview, Acrobat, or on the iPad) show up and can
   be edited.
-- Works on the iPad (touch selection), through the same code.
+- **iPad with the Apple Pencil, in highlight mode:** a Pencil stroke over text highlights
+  that text, snapped to the lines like a real highlighter but neater. Fingers keep
+  scrolling and zooming (§3.4).
+- iPad without a Pencil: select with a long press, then use the floating button, the same
+  as on the Mac.
 
 ### Out of scope (for now)
 
-- Freehand highlighting, ink drawing, text notes or comments, stamps. pdf.js supports
-  these too, so they're natural follow-ups (§8).
+- Freehand highlighting on the Mac; on the iPad, the Pencil does freehand highlights over
+  figures and scans (§3.4).
+- Ink drawing, text notes or comments, stamps. pdf.js supports these too, so they're
+  natural follow-ups (§8).
 - A sidebar listing all highlights, and exporting them as markdown (§8).
 - Filling forms, signing, or any other PDF editing.
 
@@ -98,6 +110,54 @@ open question (§9). It would need the "keep edits across tab switches" work abo
   blue, pink, red). The last one used becomes the default, remembered in settings.
 - *Verify in Phase H1* that the floating button works without the full pdf.js app UI. If
   it doesn't, ship highlight mode only.
+
+### 3.4 Apple Pencil: in highlight mode, the Pencil highlights and the finger scrolls
+
+**Decided (2026-10-08): the Pencil highlights only in highlight mode.**
+- Highlight mode is toggled with the marker button in the PDF toolbar.
+- Outside the mode, the Pencil behaves like a finger: it scrolls, taps links, and selects
+  text with a long press, which you can then copy.
+- This keeps the Pencil free for a later **note-taking** feature (§8). The modes would
+  then be *highlight* and *write*.
+
+**In highlight mode:**
+- **A Pencil stroke over text → a text highlight.** The stroke's start and end points are
+  turned into a text range: `document.caretRangeFromPoint` on pdf.js's text layer. That
+  range becomes the selection, and pdf.js highlights it like any other selection. The
+  result follows the text lines exactly, even if the stroke wobbles.
+- **A Pencil stroke over no text** (a figure, a scanned page) → a **freehand highlight**,
+  using pdf.js's free-highlight drawing. This follows the stroke, with the marker's width
+  and transparency.
+- **A Pencil tap on a highlight** selects it: recolour or delete in pdf.js's toolbar.
+- **Fingers** scroll, pinch-zoom and long-press-select as usual. They never draw.
+- **While drawing,** a live stroke preview is shown, so the Pencil feels immediate. When
+  the Pencil lifts, the preview snaps to the text.
+- **The colour** is the same current colour as on the Mac; pick it from the PDF toolbar.
+- **Leaving the mode:** tap the marker button again or press Esc on a keyboard. Pencil
+  double-tap toggles it too (below).
+- **Pencil double-tap toggles highlight mode** (Apple Pencil 2nd generation). This is the
+  gesture iPad users expect for switching tools.
+  - The double-tap only reaches native code (`UIPencilInteraction`). A small addition to
+    `tauri-plugin-ipad-files` forwards it to the web view as an event.
+  - It respects the user's system setting for the gesture (*Settings → Apple Pencil*):
+    when that is set to "Ignore", nothing happens.
+  - Optional within H3, but cheap and high value.
+- **Pencil hover** (the iPad Pro 12.9" 6th generation with the Pencil 2nd generation
+  supports it) is optional polish. In highlight mode, show a highlighter cursor where the
+  stroke would land.
+
+**Target hardware:** iPad Pro 12.9" (6th generation, M2) with the **Apple Pencil (2nd
+generation)**. That gives pressure, tilt, double-tap and hover. Squeeze isn't available on
+this Pencil (Pencil Pro only).
+
+**How it's told apart in the web view (WKWebView):**
+- WebKit marks each touch with `Touch.touchType`: `"stylus"` for the Pencil and `"direct"`
+  for a finger. Pointer events report `pointerType: "pen"`.
+- In highlight mode only, on a stylus `touchstart` over a page we call
+  `preventDefault()`, so the stroke doesn't scroll. Finger touches are left alone, so native scrolling, momentum and pinch keep
+  working.
+- iPadOS already rejects the palm while the Pencil is in use.
+- *Verify these on the real iPad first* (Phase H3, step 1). The simulator has no Pencil.
 
 ## 4. Architecture changes, by layer
 
@@ -187,16 +247,34 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
   the saver's last-written bytes for that path, and skip a match. Otherwise every
   highlight would reload the viewer.
 
-### 4.5 iPad
+### 4.5 iPad and Apple Pencil
 
 - **Writing:** the iOS `write_file_bytes` uses the same bookmark path as text saves, so
   iCloud files are written in place.
-- **Touch:** long-press selects text in WKWebView, and pdf.js highlights a selection when
-  the pointer is released. *Verify on the real iPad* that both the floating button and
-  highlight mode work with touch, and that the system's selection menu doesn't get in the
-  way.
-- **The editor toolbar** needs touch-sized targets. That ties in with
-  [ipad/PLAN.md](../ipad/PLAN.md) Phase D.
+- **Pencil input (§3.4)** goes in a new infrastructure module, `src/infrastructure/pdf/pencil.ts`,
+  so `PdfJsViewer` stays readable. It's attached only when the device has touch, and is
+  inert on the Mac. It contains:
+  - `isStylus(touch)` and the stroke tracker: pointer events with `pointerType === "pen"`,
+    and `getCoalescedEvents()` for a smooth preview at 120 Hz;
+  - `strokeToRange(start, end, textLayer)` (a pure function, unit-tested): turns the
+    stroke's endpoints into a text `Range`, or `null` when no text is under the stroke;
+  - which pdf.js call to make: for text, set the selection and ask pdf.js's UI manager to
+    highlight it, the same path as the floating button; for no text, drive a free
+    highlight with the stroke's points;
+  - the preview overlay: one absolutely positioned canvas over the page being drawn on,
+    cleared when the Pencil lifts.
+- **The `PdfViewer` contract** needs nothing new for the Pencil. It follows the same
+  `setTool("highlight")` as the Mac's highlight mode, with the same colour and save path.
+  The Pencil handlers are attached only while the tool is `"highlight"`.
+- **Double-tap (Pencil 2nd generation):** `tauri-plugin-ipad-files` adds a
+  `UIPencilInteraction` to the web view. On a double-tap, it emits a `pencil-double-tap`
+  event, unless the user's preferred action is "Ignore". The PDF reader listens for it
+  and toggles highlight mode on the active PDF tab.
+- **Long-press and finger selection:** pdf.js highlights a selection when the pointer is
+  released. *Verify on the real iPad* that the floating button appears after a long-press
+  selection, and that the system's selection menu (Copy / Look Up) doesn't cover it.
+- **Touch-sized targets** for pdf.js's editor toolbar (colour, delete), and the marker
+  button in our toolbar. That ties in with [ipad/PLAN.md](../ipad/PLAN.md) Phase D.
 
 ## 5. Edge cases
 
@@ -222,7 +300,20 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
    highlights, not the file size. The file is still written in full (about 50 MB for a big
    scan). Measure it with the 300-page fixture; the debounce keeps writes rare.
 7. **Scanned PDFs without a text layer:** there's nothing to select, so the floating button
-   never appears. Freehand highlighting (§8) would be the answer there.
+   never appears. On the iPad, the Pencil falls back to freehand highlighting (§3.4). On
+   the Mac, freehand highlighting stays a future item (§8).
+8. **Pencil strokes across columns or pages:** a range is built from the start and end
+   points, so a stroke that wanders into the next column would select everything in
+   between.
+   - Limit a text highlight to the **lines the stroke actually passed over**: intersect
+     the range's line boxes with the stroke's vertical extent.
+   - A stroke that crosses onto another page is clipped to the page where it started.
+9. **A Pencil stroke that's really a tap or a scroll attempt (in highlight mode):**
+   - Strokes shorter than a few points become a tap: select the highlight under it, or
+     nothing.
+   - In highlight mode the Pencil can't scroll; scrolling is done with a finger. Outside
+     the mode, the Pencil scrolls normally.
+10. **Zoom while drawing:** a pinch with the other hand cancels the stroke in progress.
 
 ## 6. Testing
 
@@ -241,6 +332,18 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
   - a PDF that is encrypted with permissions only;
   - a scanned PDF;
   - the 300-page PDF (to time saving).
+- **`strokeToRange`:** unit-tested with a fake text layer: a single line, several lines, a
+  stroke over a gap, a wobbly stroke, a stroke across columns.
+- **On the real iPad, with the Pencil:**
+  - highlight one line, several lines, and a word, in highlight mode;
+  - outside highlight mode the Pencil scrolls and selects, and draws nothing;
+  - double-tap toggles the mode, and does nothing when the system setting is "Ignore";
+  - check a stroke over a figure (it should become a freehand highlight);
+  - fingers still scroll, momentum works, and pinch-zoom works while the Pencil is
+    resting;
+  - palm on the screen while drawing;
+  - landscape, portrait, and Split View;
+  - performance on a 300-page PDF.
 - **Cross-app checks:** after highlighting, open the file in **Preview** on the Mac and in
   the **Files app** on the iPad. The highlights should appear in the right place and
   colour.
@@ -266,7 +369,22 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 - **Done when:** highlights survive closing and reopening, show up in Preview and on the
   iPad through iCloud, and never touch signed PDFs.
 
-### Phase H3: Integration with PDF reload
+### Phase H3: Apple Pencil on iPad
+- **Step 1, a device check (a short spike on the real iPad):** confirm that WKWebView
+  reports `touchType: "stylus"` and `pointerType: "pen"`. Confirm that cancelling a stylus
+  `touchstart` stops scrolling without breaking finger scrolling.
+- Build `pencil.ts`: the stroke tracker, `strokeToRange`, the preview overlay, and the
+  free-highlight fallback.
+- Touch-sized editor controls and a touch-sized marker button.
+- Optional: Pencil double-tap toggles highlight mode (native `UIPencilInteraction` in
+  `tauri-plugin-ipad-files`), and the hover cursor.
+- **Done when:**
+  - in highlight mode, a highlighter-style Pencil stroke over text produces a neat text
+    highlight on the iPad;
+  - outside the mode, the Pencil and fingers behave as before;
+  - the highlights save to iCloud and appear on the Mac.
+
+### Phase H4: Integration with PDF reload
 - When PDF_PLAN Phase 3's reload-on-change lands (or as part of it), skip our own writes,
   and reload cleanly after external changes.
 - Update the docs: PDF_PLAN §1 "Out of scope", DESIGN.md, the README feature list, and
@@ -274,7 +392,13 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 
 ## 8. Future
 
-- **Freehand highlight** (pdf.js has a "free highlight" mode), useful for scanned PDFs.
+- **Freehand highlight on the Mac** (pdf.js has a "free highlight" mode), useful for
+  scanned PDFs. The iPad gets it with the Pencil in H3.
+- **Taking notes with the Pencil on iPad.** Handwritten notes and drawings on the page
+  (pdf.js's ink editor, saved into the PDF like highlights), in a *write* mode next to
+  *highlight* mode. Another option is handwriting into a markdown note beside the PDF. To
+  be planned separately.
+- **Pencil eraser mode:** a stroke over a highlight deletes it.
 - **Notes on highlights** (pdf.js 6 has a comment manager).
 - **A highlights sidebar:** all highlights in the PDF, with their text and page; click to
   jump.
@@ -289,3 +413,10 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 2. **Default mode:** floating button on selection (recommended), or require switching into
    highlight mode first?
 3. **Colours:** pdf.js's default five, or a custom palette that matches the app's theme?
+
+**Decided:**
+- **Pencil behaviour (2026-10-08):** the Pencil highlights **only in highlight mode**.
+  Outside it, the Pencil scrolls and selects like a finger. Pencil note-taking is a later
+  feature (§3.4, §8).
+- **Hardware (2026-10-08):** Apple Pencil (2nd generation) on the iPad Pro 12.9" (6th
+  generation). Double-tap and hover are available; squeeze isn't.
