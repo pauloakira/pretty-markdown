@@ -1,4 +1,5 @@
 import { DocumentService } from "../application/services/DocumentService";
+import { PdfSaver } from "../application/services/PdfSaver";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { AppWindow } from "../domain/ports/AppWindow";
@@ -44,6 +45,8 @@ export interface Container {
   readonly documentExporter: DocumentExporter;
   /** Renders PDF tabs; pdf.js itself loads on first use. */
   readonly pdfViewer: PdfViewerFactory;
+  /** Saves PDFs (e.g. with new highlights) and recognises those saves when watching. */
+  readonly pdfSaver: PdfSaver;
   readonly linkOpener: LinkOpener;
 }
 
@@ -66,6 +69,7 @@ export function createContainer(): Container {
   const appWindow = new TauriAppWindow();
   const documentExporter = new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
+  const pdfSaver = new PdfSaver(fileSystem);
   const linkOpener = new TauriLinkOpener();
 
   return {
@@ -78,6 +82,7 @@ export function createContainer(): Container {
     appWindow,
     documentExporter,
     pdfViewer,
+    pdfSaver,
     linkOpener,
   };
 }

@@ -42,6 +42,9 @@ class FakeWriter implements FileWriter {
     if (this.result.ok) this.written = { path, contents };
     return this.result;
   }
+  async writeBytes(): Promise<Result<void>> {
+    return this.result;
+  }
 }
 
 const reader = (r: Result<string>) => new FakeReader(r);
