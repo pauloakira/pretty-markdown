@@ -1,3 +1,4 @@
+#[cfg(desktop)]
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -11,6 +12,7 @@ fn exit_app(app: tauri::AppHandle) {
 }
 
 /// Menu id of our replacement for the app menu's Quit item.
+#[cfg(desktop)]
 const QUIT_MENU_ID: &str = "pm-quit";
 
 /// Install Tauri's default menu with one change: the app menu's built-in Quit item is
@@ -47,9 +49,11 @@ fn install_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Watches open files and emits `file-changed` when they change on disk.
+/// Watches open files and emits `file-changed` when they change on disk (desktop only).
+#[cfg(desktop)]
 struct FileWatcher(Mutex<RecommendedWatcher>);
 
+#[cfg(desktop)]
 #[tauri::command]
 fn watch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
     state
@@ -60,6 +64,7 @@ fn watch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), Stri
         .map_err(|e| e.to_string())
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn unwatch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), String> {
     match state.0.lock().unwrap().unwatch(Path::new(&path)) {
@@ -71,6 +76,21 @@ fn unwatch_file(state: tauri::State<FileWatcher>, path: String) -> Result<(), St
         }) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// iOS/iPadOS has no file watching: accept and ignore, so the frontend works unchanged.
+#[cfg(mobile)]
+#[tauri::command]
+fn watch_file(path: String) -> Result<(), String> {
+    let _ = path;
+    Ok(())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn unwatch_file(path: String) -> Result<(), String> {
+    let _ = path;
+    Ok(())
 }
 
 /// Files requested via the OS (double-click / `open`) that arrived before the frontend
@@ -142,10 +162,28 @@ fn clear_session(app: tauri::AppHandle) -> Result<(), String> {
 /// This is the native side of the `FileSystem` port (see the TS `TauriFileSystem`
 /// adapter). Returns a `Result` so the frontend can model failure as a value rather
 /// than a thrown error.
+#[cfg(desktop)]
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(PathBuf::from(&path))
-        .map_err(|e| format!("Failed to read '{path}': {e}"))
+    read_text(&file_path(&path), &path)
+}
+
+fn read_text(local: &Path, path: &str) -> Result<String, String> {
+    std::fs::read_to_string(local).map_err(|e| format!("Failed to read '{path}': {e}"))
+}
+
+/// A filesystem path from what the frontend passes: a plain path (desktop), or a
+/// `file://` URL, which is what the iOS/iPadOS document picker returns.
+fn file_path(path: &str) -> PathBuf {
+    if path.starts_with("file://") {
+        if let Some(local) = tauri::Url::parse(path)
+            .ok()
+            .and_then(|u| u.to_file_path().ok())
+        {
+            return local;
+        }
+    }
+    PathBuf::from(path)
 }
 
 /// Read a file's raw bytes — all of them, or only the first `max_bytes` (enough to check a
@@ -153,10 +191,19 @@ fn read_text_file(path: String) -> Result<String, String> {
 ///
 /// Returns a raw IPC response, which reaches the frontend as an `ArrayBuffer`: no JSON
 /// array of numbers or base64, so even large PDFs cross the bridge cheaply.
+#[cfg(desktop)]
 #[tauri::command]
 fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::Response, String> {
-    let mut file = std::fs::File::open(PathBuf::from(&path))
-        .map_err(|e| format!("Failed to read '{path}': {e}"))?;
+    read_bytes(&file_path(&path), &path, max_bytes)
+}
+
+fn read_bytes(
+    local: &Path,
+    path: &str,
+    max_bytes: Option<u64>,
+) -> Result<tauri::ipc::Response, String> {
+    let mut file =
+        std::fs::File::open(local).map_err(|e| format!("Failed to read '{path}': {e}"))?;
     let mut bytes = Vec::new();
     match max_bytes {
         Some(limit) => file.take(limit).read_to_end(&mut bytes),
@@ -167,27 +214,111 @@ fn read_file_bytes(path: String, max_bytes: Option<u64>) -> Result<tauri::ipc::R
 }
 
 /// Write UTF-8 text to a file on disk (overwriting). Native side of the `FileWriter` port.
+#[cfg(desktop)]
 #[tauri::command]
 fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    std::fs::write(PathBuf::from(&path), contents)
-        .map_err(|e| format!("Failed to write '{path}': {e}"))
+    write_text(&file_path(&path), &path, contents)
+}
+
+fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> {
+    std::fs::write(local, contents).map_err(|e| format!("Failed to write '{path}': {e}"))
+}
+
+// ---- iPadOS file access ---------------------------------------------------------
+//
+// On iOS/iPadOS a picked file (e.g. in iCloud Drive) is reachable only through a
+// security-scoped bookmark, and may need downloading first. The mobile versions of the
+// file commands below ask the ipad-files plugin (ipad/tauri-plugin-ipad-files) to make the
+// file accessible, then read/write it like the desktop ones. They're `async` so the wait
+// for an iCloud download never blocks the main thread.
+
+/// The path to read or write now for a document the app knows by `path`.
+#[cfg(mobile)]
+fn accessible_path(app: &tauri::AppHandle, path: &str) -> Result<PathBuf, String> {
+    let local = file_path(path);
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files()
+            .access(&local.to_string_lossy())
+            .map(PathBuf::from)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Ok(local)
+    }
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn read_text_file(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    read_text(&accessible_path(&app, &path)?, &path)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn read_file_bytes(
+    app: tauri::AppHandle,
+    path: String,
+    max_bytes: Option<u64>,
+) -> Result<tauri::ipc::Response, String> {
+    read_bytes(&accessible_path(&app, &path)?, &path, max_bytes)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn write_text_file(
+    app: tauri::AppHandle,
+    path: String,
+    contents: String,
+) -> Result<(), String> {
+    write_text(&accessible_path(&app, &path)?, &path, contents)
+}
+
+/// Keep access to a document the user just picked, so it can be reopened after the app
+/// restarts (iPadOS bookmarks). Desktop apps can reopen any path: nothing to do there.
+#[tauri::command]
+async fn remember_document(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files()
+            .remember(&file_path(&path).to_string_lossy())
+            .map(|_| ())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, path);
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(PendingFiles::default())
-        .on_menu_event(|app, event| {
-            if event.id() == QUIT_MENU_ID {
-                let _ = app.emit("quit-requested", ());
-            }
-        })
+        .manage(PendingFiles::default());
+
+    // iPadOS document access (bookmarks, iCloud downloads); see accessible_path.
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_ipad_files::init());
+
+    // Menus are desktop-only (iPadOS apps have none); this is the ⌘Q item from install_menu.
+    #[cfg(desktop)]
+    let builder = builder.on_menu_event(|app, event| {
+        if event.id() == QUIT_MENU_ID {
+            let _ = app.emit("quit-requested", ());
+        }
+    });
+
+    builder
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             read_file_bytes,
             write_text_file,
+            remember_document,
             read_session,
             write_session,
             clear_session,
@@ -210,26 +341,30 @@ pub fn run() {
             }
 
             // A single watcher for all open files; emits changed paths to the frontend.
-            let handle = app.handle().clone();
-            let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-                if let Ok(event) = res {
-                    if matches!(
-                        event.kind,
-                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
-                    ) {
-                        let paths: Vec<String> = event
-                            .paths
-                            .iter()
-                            .map(|p| p.to_string_lossy().into_owned())
-                            .collect();
-                        if !paths.is_empty() {
-                            let _ = handle.emit("file-changed", paths);
+            #[cfg(desktop)]
+            {
+                let handle = app.handle().clone();
+                let watcher =
+                    notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+                        if let Ok(event) = res {
+                            if matches!(
+                                event.kind,
+                                EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                            ) {
+                                let paths: Vec<String> = event
+                                    .paths
+                                    .iter()
+                                    .map(|p| p.to_string_lossy().into_owned())
+                                    .collect();
+                                if !paths.is_empty() {
+                                    let _ = handle.emit("file-changed", paths);
+                                }
+                            }
                         }
-                    }
-                }
-            })
-            .map_err(|e| e.to_string())?;
-            app.manage(FileWatcher(Mutex::new(watcher)));
+                    })
+                    .map_err(|e| e.to_string())?;
+                app.manage(FileWatcher(Mutex::new(watcher)));
+            }
 
             #[cfg(target_os = "macos")]
             install_menu(app.handle())?;

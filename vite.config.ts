@@ -59,6 +59,10 @@ function pdfjsAssets(): Plugin {
 export default defineConfig(async () => ({
   plugins: [react(), pdfjsAssets()],
 
+  // Expose Tauri's build-time env (TAURI_ENV_PLATFORM etc.) to the app, e.g. to pick the
+  // iPadOS file adapter at the composition root. Unset in plain `vite`/test builds.
+  envPrefix: ["VITE_", "TAURI_ENV_"],
+
   build: {
     // Split the heavy math engines into their own chunks so they don't bloat the main
     // app chunk. MathJax (all TeX packages) is large but only the fallback renderer;
