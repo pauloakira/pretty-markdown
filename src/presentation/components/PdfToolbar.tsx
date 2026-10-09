@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import type { HighlightColor } from "../../domain/values/Highlight";
+import type { HighlightAvailability, PdfTool } from "../pdf/PdfViewer";
+import { HighlightControl } from "./HighlightControl";
 
 interface PdfToolbarProps {
   name: string;
@@ -14,9 +17,15 @@ interface PdfToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitWidth: () => void;
+  /** Null until the document has loaded. */
+  highlighting: HighlightAvailability | null;
+  tool: PdfTool;
+  highlightColor: HighlightColor;
+  onToolChange: (tool: PdfTool) => void;
+  onHighlightColorChange: (color: HighlightColor) => void;
 }
 
-/** Toolbar for a PDF tab: page indicator with go-to-page, and zoom controls. */
+/** Toolbar for a PDF tab: the highlighter, page indicator with go-to-page, and zoom. */
 export function PdfToolbar({
   name,
   title,
@@ -28,6 +37,11 @@ export function PdfToolbar({
   onZoomIn,
   onZoomOut,
   onFitWidth,
+  highlighting,
+  tool,
+  highlightColor,
+  onToolChange,
+  onHighlightColorChange,
 }: PdfToolbarProps) {
   const ready = pageCount !== null;
   // The field shows the current page until the user types; Enter jumps, Escape/blur reverts.
@@ -46,6 +60,13 @@ export function PdfToolbar({
         {name}
       </span>
       <div className="doctoolbar__actions">
+        <HighlightControl
+          availability={highlighting}
+          tool={tool}
+          color={highlightColor}
+          onToolChange={onToolChange}
+          onColorChange={onHighlightColorChange}
+        />
         <label className="pdftoolbar__page" title="Go to page">
           <input
             className="pdftoolbar__page-input"

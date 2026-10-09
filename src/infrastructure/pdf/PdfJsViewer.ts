@@ -7,12 +7,16 @@
  * version, which can lag behind what the modern build expects.
  */
 import {
+  AnnotationEditorParamsType,
+  AnnotationEditorType,
   AnnotationMode,
   getDocument,
   GlobalWorkerOptions,
   InvalidPDFException,
   OutputScale,
   PasswordException,
+  PermissionFlag,
+  type AnnotationEditorUIManager,
   type PDFDocumentProxy,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
@@ -23,9 +27,15 @@ import {
   RenderingStates,
 } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
+import { highlightColorList, highlightHex, type HighlightColor } from "../../domain/values/Highlight";
 import { err, ok, type Result } from "../../domain/values/Result";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
-import type { PdfMountOptions, PdfViewerHandle } from "../../presentation/pdf/PdfViewer";
+import type {
+  HighlightAvailability,
+  PdfMountOptions,
+  PdfTool,
+  PdfViewerHandle,
+} from "../../presentation/pdf/PdfViewer";
 import { preRenderPages } from "./preRender";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -84,6 +94,43 @@ interface ViewerInternals {
   readonly pagesCount: number;
 }
 
+/**
+ * Quiet period after the last highlight change before it's saved into the file. Short
+ * enough that a highlight is on disk almost at once; long enough that a burst of changes
+ * (highlight, recolour, undo) becomes one write.
+ */
+const AUTOSAVE_MS = 1000;
+
+/** Whether this document may be highlighted, and if not, why. */
+async function highlightAvailability(pdf: PDFDocumentProxy): Promise<HighlightAvailability> {
+  if (pdf.isPureXfa) {
+    return { allowed: false, reason: "Highlighting isn't available for this kind of PDF form (XFA)." };
+  }
+  // pdf.js turns its editor off for these documents; say why instead of a dead button.
+  const permissions = await pdf.getPermissions().catch(() => null);
+  if (permissions && !permissions.has(PermissionFlag.MODIFY_CONTENTS)) {
+    return { allowed: false, reason: "This PDF's permissions don't allow changes, so it can't be highlighted." };
+  }
+  // Saving into a signed PDF would make readers flag it as "modified after signing".
+  const signatures = await pdf.getSignatures().catch(() => null);
+  if (signatures && signatures.length > 0) {
+    return { allowed: false, reason: "This PDF is digitally signed: highlighting it would invalidate the signature." };
+  }
+  return { allowed: true };
+}
+
+/** A `PDFViewer` option the viewer reads but its type declarations leave out. */
+interface ExtraViewerOptions {
+  enableHighlightFloatingButton: boolean;
+}
+
+/** The annotation storage's change hooks (typed `null` in pdf.js's declarations). */
+interface StorageHooks {
+  onSetModified: (() => void) | null;
+  onResetModified: (() => void) | null;
+  onAnnotationEditor: (() => void) | null;
+}
+
 /** Outside-document links the app may open in the user's browser. */
 const EXTERNAL_LINK = /^(https?|mailto):/i;
 
@@ -126,20 +173,47 @@ export async function mountPdfJs(
     return err(describeLoadError(error));
   }
 
+  const highlighting = await highlightAvailability(pdf);
+
   const viewerEl = document.createElement("div");
   viewerEl.className = "pdfViewer";
   container.replaceChildren(viewerEl);
 
   const eventBus = new EventBus();
   const linkService = new PDFLinkService({ eventBus });
-  const viewer = new PDFViewer({
+  const viewerOptions: ConstructorParameters<typeof PDFViewer>[0] & ExtraViewerOptions = {
     container,
     viewer: viewerEl,
     eventBus,
     linkService,
-    annotationMode: AnnotationMode.ENABLE, // links, but no form filling or editing
-  });
+    annotationMode: AnnotationMode.ENABLE, // links, but no form filling
+    // The highlight editor: idle ("NONE") until the highlight tool is picked, but a text
+    // selection always offers a Highlight button. Off entirely when not allowed.
+    annotationEditorMode: highlighting.allowed ? AnnotationEditorType.NONE : AnnotationEditorType.DISABLE,
+    annotationEditorHighlightColors: highlightColorList(options.highlightColor),
+    enableHighlightFloatingButton: true,
+  };
+  const viewer = new PDFViewer(viewerOptions);
   linkService.setViewer(viewer);
+
+  // The editor's UI manager arrives through the event bus while the document loads.
+  let uiManager: AnnotationEditorUIManager | null = null;
+  const onUiManager = (event: { uiManager: AnnotationEditorUIManager }) => {
+    uiManager = event.uiManager;
+  };
+  eventBus.on("annotationeditoruimanager", onUiManager);
+
+  // The highlighter colour. pdf.js takes the default from the first colour in the list
+  // above, but only once per page load (it's static), so set it explicitly as well, once
+  // the editor types exist (they register with the first editor layer).
+  let highlightColor: HighlightColor = options.highlightColor;
+  const applyHighlightColor = () =>
+    uiManager?.updateParams(AnnotationEditorParamsType.HIGHLIGHT_COLOR, highlightHex(highlightColor));
+  const onFirstEditorLayer = () => {
+    eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);
+    applyHighlightColor();
+  };
+  eventBus.on("annotationeditorlayerrendered", onFirstEditorLayer);
 
   const pagesInit = new Promise<void>((resolve) => eventBus.on("pagesinit", () => resolve(), { once: true }));
   viewer.setDocument(pdf);
@@ -286,12 +360,69 @@ export async function mountPdfJs(
   };
   container.addEventListener("click", onClick, true);
 
+  // ---- Autosave -------------------------------------------------------------------
+  //
+  // Highlights live in pdf.js's annotation storage until saved. Every change (from a hook,
+  // an editor event, or just a pointer/key up over the pages: cheap, since a save with
+  // nothing new is skipped) schedules a save. A save writes the whole document via
+  // `saveDocument()`, an incremental update: the original bytes plus the changes. The
+  // storage's hash tells whether anything changed since the last successful save, which
+  // also covers removing the last new highlight (pdf.js then marks the storage
+  // *un*modified, though the file still has that highlight).
+  const storage = pdf.annotationStorage;
+  const storageHooks = storage as unknown as StorageHooks;
+  let savedHash = storage.serializable.hash;
+  let saveTimer = 0;
+  let saving: Promise<void> | null = null;
+
+  const saveNow = async (): Promise<void> => {
+    const hash = storage.serializable.hash;
+    if (hash === savedHash) return;
+    let bytes: Uint8Array;
+    try {
+      bytes = await pdf.saveDocument();
+    } catch (error) {
+      console.error("Couldn't prepare the highlights for saving:", error);
+      return;
+    }
+    const result = await options.onSave(bytes);
+    if (!result.ok) return; // the reader shows the error; retried on the next change
+    savedHash = hash;
+    // A change made while this save was running is newer than what was written.
+    if (storage.serializable.hash === hash) storage.resetModified();
+    else scheduleSave();
+  };
+  const runSave = (): Promise<void> => {
+    window.clearTimeout(saveTimer);
+    saveTimer = 0;
+    // One save at a time; a request during a save runs right after it.
+    const next = (saving ?? Promise.resolve()).then(saveNow);
+    saving = next.finally(() => {
+      if (saving === next) saving = null;
+    });
+    return next;
+  };
+  const scheduleSave = () => {
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => void runSave(), AUTOSAVE_MS);
+  };
+  if (highlighting.allowed) {
+    storageHooks.onSetModified = scheduleSave;
+    storageHooks.onResetModified = scheduleSave;
+    storageHooks.onAnnotationEditor = scheduleSave;
+    eventBus.on("switchannotationeditorparams", scheduleSave);
+    eventBus.on("editingstateschanged", scheduleSave);
+    container.addEventListener("pointerup", scheduleSave);
+    container.addEventListener("keyup", scheduleSave);
+  }
+
   const metadata = await pdf.getMetadata().catch(() => null);
   const rawTitle = (metadata?.info as { Title?: unknown } | undefined)?.Title;
   const title = typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim() : null;
 
   return ok({
     info: { pageCount: pdf.numPages, title },
+    highlighting,
     view,
     currentScale: () => viewer.currentScale,
     setZoom(next) {
@@ -301,7 +432,31 @@ export async function mountPdfJs(
     goToPage(page) {
       viewer.currentPageNumber = Math.min(Math.max(1, Math.round(page)), viewer.pagesCount);
     },
+    setTool(tool: PdfTool) {
+      if (!highlighting.allowed) return;
+      const mode = tool === "highlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.NONE;
+      viewer.annotationEditorMode = { mode };
+      if (tool === "highlight") applyHighlightColor();
+    },
+    setHighlightColor(color) {
+      highlightColor = color;
+      applyHighlightColor(); // recolours the selected highlight, if any: save that too
+      scheduleSave();
+    },
+    flush() {
+      return highlighting.allowed ? runSave() : Promise.resolve();
+    },
     destroy() {
+      window.clearTimeout(saveTimer);
+      storageHooks.onSetModified = null;
+      storageHooks.onResetModified = null;
+      storageHooks.onAnnotationEditor = null;
+      eventBus.off("switchannotationeditorparams", scheduleSave);
+      eventBus.off("editingstateschanged", scheduleSave);
+      eventBus.off("annotationeditoruimanager", onUiManager);
+      eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);
+      container.removeEventListener("pointerup", scheduleSave);
+      container.removeEventListener("keyup", scheduleSave);
       window.clearTimeout(timer);
       window.clearTimeout(preRenderTimer);
       container.removeEventListener("scroll", schedulePreRender);
