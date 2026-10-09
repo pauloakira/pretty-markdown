@@ -26,7 +26,7 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [ROADMAP.md](ROADMAP.md) | Milestone build plan |
 | [diagram/](diagram/) | Mermaid UML — use-case and sequence diagrams |
 | [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | Plan for PDF reading (planned, not started) — engine choice, layer-by-layer changes, phases |
-| [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | Plan for highlighting PDFs (planned, not started) — saved into the PDF, autosave, phases H1–H3 |
+| [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | Plan for highlighting PDFs (planned, not started) — saved into the PDF, autosave, Apple Pencil on iPad, phases H1–H4 |
 
 ## Architecture in one breath
 
