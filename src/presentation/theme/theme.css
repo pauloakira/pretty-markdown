@@ -1179,6 +1179,19 @@ body {
   cursor: crosshair;
 }
 
+.pdftoolbar__history-btn {
+  min-width: 2rem;
+  font-size: 0.95rem;
+  color: var(--fg);
+}
+.pdftoolbar__history-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pdftoolbar__history-btn + .pdftoolbar__history-btn {
+  border-left: 1px solid var(--border);
+}
+
 .pdftoolbar__page {
   display: inline-flex;
   align-items: center;

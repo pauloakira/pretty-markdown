@@ -320,6 +320,27 @@ export async function mountPdfJs(
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
   };
+  // No freehand highlights: in highlight mode pdf.js draws one when a press lands on
+  // empty space (its editor layer) rather than on text. On a touch screen that happened by
+  // accident, e.g. a stroke starting between lines. Highlights follow text, so such a press
+  // does nothing. (Presses on text, or on an existing highlight, aren't on the layer.)
+  const onEmptyPress = (event: PointerEvent) => {
+    const target = event.target as Element | null;
+    if (!target?.classList.contains("annotationEditorLayer")) return;
+    event.stopPropagation();
+    uiManager?.unselectAll(); // what a press on empty space is still for
+
+  };
+  container.addEventListener("pointerdown", onEmptyPress, true);
+
+  // Undo / redo, for the toolbar (the iPad has no ⌘Z without a keyboard).
+  const onEditingStates = (event: { details: { hasSomethingToUndo?: boolean; hasSomethingToRedo?: boolean } }) =>
+    options.onHistoryChange({
+      canUndo: event.details.hasSomethingToUndo === true,
+      canRedo: event.details.hasSomethingToRedo === true,
+    });
+  eventBus.on("editingstateschanged", onEditingStates);
+
   eventBus.on("showannotationeditorui", onModeRequest);
   eventBus.on("switchannotationeditormode", onModeRequest);
   eventBus.on("annotationeditormodechanged", onModeChanged);
@@ -664,6 +685,12 @@ export async function mountPdfJs(
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
     },
+    undo() {
+      uiManager?.undo();
+    },
+    redo() {
+      uiManager?.redo();
+    },
     find(listener) {
       findListener = listener;
       return {
@@ -704,6 +731,8 @@ export async function mountPdfJs(
       applyTouchHighlighting(false);
       container.removeEventListener("click", onButtonClick, true);
       eventBus.off("showannotationeditorui", onModeRequest);
+      eventBus.off("editingstateschanged", onEditingStates);
+      container.removeEventListener("pointerdown", onEmptyPress, true);
       eventBus.off("switchannotationeditormode", onModeRequest);
       eventBus.off("annotationeditormodechanged", onModeChanged);
       eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);

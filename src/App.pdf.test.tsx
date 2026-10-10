@@ -343,6 +343,31 @@ describe("PDF highlights", () => {
     expect(pressed(highlightButton())).toBe(false);
   });
 
+  it("undoes and redoes highlight changes from the toolbar, enabled as pdf.js reports", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+    expect(button("Undo").disabled).toBe(true);
+    expect(button("Redo").disabled).toBe(true);
+
+    await act(async () => viewer.reportHistory(true, false)); // a highlight was made
+    expect(button("Undo").disabled).toBe(false);
+    await act(async () => button("Undo").click());
+    await act(async () => viewer.reportHistory(false, true));
+    expect(button("Redo").disabled).toBe(false);
+    await act(async () => button("Redo").click());
+    expect(viewer.historyLog).toEqual(["undo", "redo"]);
+  });
+
+  it("has no undo buttons for a PDF that can't be highlighted", async () => {
+    const app = makeContainer();
+    await launch(app);
+    app.pdfViewer.highlighting = { allowed: false, reason: "signed" };
+    await openPdf(app);
+    expect(document.querySelector('[aria-label="Undo"]')).toBeNull();
+  });
+
   it("picks the colour from the menu, and remembers it for the next PDF", async () => {
     const app = makeContainer();
     await launch(app);

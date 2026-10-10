@@ -27,6 +27,13 @@ export interface PdfMountOptions {
    * double-clicking a highlight, enters highlight mode. Keeps the toolbar in step.
    */
   readonly onToolChange: (tool: PdfTool) => void;
+  /** Whether there are highlight changes to undo or redo (for the toolbar's buttons). */
+  readonly onHistoryChange: (history: EditHistory) => void;
+}
+
+export interface EditHistory {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
 }
 
 /**
@@ -60,6 +67,9 @@ export interface PdfViewerHandle {
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;
+  /** Undo or redo the last highlight change (adding, recolouring, deleting). */
+  undo(): void;
+  redo(): void;
   /** Search this document from the find bar; results go to `listener`. */
   find(listener: FindListener): FindTarget;
   /** Save any highlights not saved yet, now. Resolves once the save has finished. */
