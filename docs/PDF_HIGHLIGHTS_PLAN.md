@@ -1,10 +1,10 @@
 # PDF highlights — implementation plan
 
 > Status: **in progress.** Planned 2026-10-08, with Apple Pencil support added the same
-> day; a spike confirmed that the approach works (§2). **PR 1 (writing PDF files) and PR 2
-> (phases H1 and H2: highlighting and autosave) are done** (2026-10-09; §7). Next: the
-> Apple Pencil (H3). This plan supersedes the "sidecar file" idea in
-> [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
+> day; a spike confirmed that the approach works (§2). **Done:** PR 1 (writing PDF files)
+> and PR 2 (H1 + H2: highlighting and autosave) on 2026-10-09, and PR 3 (H3: drag to
+> highlight on iPad, finger and Pencil) on 2026-10-10 (§7). Left: H4, with PDF_PLAN Phase 3.
+> This plan supersedes the "sidecar file" idea in [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) as phases land.
 
 ## 1. Goal
@@ -493,7 +493,7 @@ Split out of H2 so the riskiest change, writing to the user's files, got its own
 - **Done when:** highlights survive closing and reopening, show up in Preview and on the
   iPad through iCloud, and never touch signed PDFs.
 
-### Phase H3: Drag to highlight on iPad (finger and Pencil) — built, device check pending (2026-10-10, PR 3)
+### Phase H3: Drag to highlight on iPad (finger and Pencil) ✅ (2026-10-10, PR 3)
 
 **Changed from the original plan (decided 2026-10-10):** after the long-press selection
 proved slow and inaccurate on the device, **a finger highlights too**, not just the Pencil.
@@ -534,7 +534,7 @@ fingers scroll. Outside the mode, nothing changes.
 - two fingers scroll in highlight mode;
 - normal one-finger scrolling outside the mode is unchanged;
 - 210 tests pass (`toWordEdge` unit tests included).
-- **The Pencil and double-tap need the real iPad:** the simulator has no Pencil.
+- **Real iPad (iPad Pro 12.9", Apple Pencil 2nd generation):** confirmed by the user, including the Pencil.
 
 **Original plan:**
 - **Step 1, a device check (a short spike on the real iPad):** confirm that WKWebView
