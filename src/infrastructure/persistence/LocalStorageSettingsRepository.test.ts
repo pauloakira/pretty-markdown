@@ -12,8 +12,17 @@ describe("LocalStorageSettingsRepository", () => {
   });
 
   it("round-trips saved settings", () => {
-    repo.save({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" });
-    expect(repo.load()).toEqual({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" });
+    const settings = { readingWidthRem: 60, fontScalePct: 120, theme: "dark", pdfHighlightColor: "green" } as const;
+    repo.save(settings);
+    expect(repo.load()).toEqual(settings);
+  });
+
+  it("backfills the highlight colour for settings saved before it existed", () => {
+    localStorage.setItem(
+      "pretty-markdown.settings.v1",
+      JSON.stringify({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" }),
+    );
+    expect(repo.load()?.pdfHighlightColor).toBe("yellow");
   });
 
   it("clamps and backfills partial/out-of-range stored data", () => {

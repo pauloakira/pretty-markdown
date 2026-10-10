@@ -1,3 +1,5 @@
+import { DEFAULT_HIGHLIGHT_COLOR, isHighlightColor, type HighlightColor } from "./Highlight";
+
 /** Which palette to use: follow the OS, or force light/dark. */
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -14,6 +16,8 @@ export interface Settings {
   fontScalePct: number;
   /** Palette preference; "system" follows the OS appearance. */
   theme: ThemePreference;
+  /** The PDF highlighter's colour: the last one picked. */
+  pdfHighlightColor: HighlightColor;
 }
 
 export const READING_WIDTH = { min: 32, max: 80, step: 2, default: 46 } as const;
@@ -23,6 +27,7 @@ export const defaultSettings: Settings = {
   readingWidthRem: READING_WIDTH.default,
   fontScalePct: FONT_SCALE.default,
   theme: "system",
+  pdfHighlightColor: DEFAULT_HIGHLIGHT_COLOR,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -36,5 +41,8 @@ export function clampSettings(s: Settings): Settings {
     readingWidthRem: clamp(Math.round(s.readingWidthRem), READING_WIDTH.min, READING_WIDTH.max),
     fontScalePct: clamp(Math.round(s.fontScalePct), FONT_SCALE.min, FONT_SCALE.max),
     theme: THEMES.includes(s.theme) ? s.theme : defaultSettings.theme,
+    pdfHighlightColor: isHighlightColor(s.pdfHighlightColor)
+      ? s.pdfHighlightColor
+      : defaultSettings.pdfHighlightColor,
   };
 }

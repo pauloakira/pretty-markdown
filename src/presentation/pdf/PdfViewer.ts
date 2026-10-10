@@ -1,3 +1,4 @@
+import type { HighlightColor } from "../../domain/values/Highlight";
 import type { Result } from "../../domain/values/Result";
 import type { PdfView, PdfZoom } from "../../domain/values/ViewState";
 
@@ -9,7 +10,31 @@ export interface PdfMountOptions {
   readonly onViewChange: (view: PdfView) => void;
   /** Called when a link to outside the document is clicked (open it in the browser). */
   readonly onExternalLink: (url: string) => void;
+  /** The highlighter's colour to start with. */
+  readonly highlightColor: HighlightColor;
+  /**
+   * Write the document, with the reader's highlights, back to its file. Called by the
+   * viewer's autosave shortly after each change, and by `flush()`. A failure keeps the
+   * changes pending, to be retried with the next change or flush.
+   */
+  readonly onSave: (bytes: Uint8Array) => Promise<Result<void>>;
+  /**
+   * The viewer switched tools by itself: the Highlight button next to a selection, or
+   * double-clicking a highlight, enters highlight mode. Keeps the toolbar in step.
+   */
+  readonly onToolChange: (tool: PdfTool) => void;
 }
+
+/**
+ * What a pointer does over the pages. "select" selects text (and offers a Highlight
+ * button next to a selection); "highlight" highlights every selection straight away.
+ */
+export type PdfTool = "select" | "highlight";
+
+/** Whether this document can be highlighted, and if not, why (for the toolbar tooltip). */
+export type HighlightAvailability =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly reason: string };
 
 /** What the mounted document reports about itself. */
 export interface PdfInfo {
@@ -21,13 +46,20 @@ export interface PdfInfo {
 /** A PDF shown in a container: controls for the toolbar and keyboard, plus teardown. */
 export interface PdfViewerHandle {
   readonly info: PdfInfo;
+  readonly highlighting: HighlightAvailability;
   /** Where the reader is now. */
   view(): PdfView;
   /** The scale actually in effect (resolves "page-width" to a number). */
   currentScale(): number;
   setZoom(zoom: PdfZoom): void;
   goToPage(page: number): void;
-  /** Release the document, its worker resources and the container's contents. */
+  setTool(tool: PdfTool): void;
+  /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
+  setHighlightColor(color: HighlightColor): void;
+  /** Save any highlights not saved yet, now. Resolves once the save has finished. */
+  flush(): Promise<void>;
+  /** Release the document, its worker resources and the container's contents. Call
+   * `flush()` first: unsaved highlights are lost. */
   destroy(): void;
 }
 

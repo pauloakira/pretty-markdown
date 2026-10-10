@@ -1,0 +1,31 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- iOS/iPadOS variant of app-icon.svg: the same artwork scaled to fill the whole
+       square (no transparent margin, no corner radius). iPadOS masks the corners itself,
+       and app icons must be opaque. Generated sets: src-tauri/icons/ios and
+       src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset. -->
+  <defs>
+    <linearGradient id="bg" x1="140" y1="120" x2="900" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6b8ff0"/>
+      <stop offset="0.55" stop-color="#3f6bc8"/>
+      <stop offset="1" stop-color="#264c92"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="100" x2="0" y2="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- The Mac icon's 824px square (at 100,100) scaled up to the full 1024px canvas. -->
+  <g transform="scale(1.2427184) translate(-100 -100)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#gloss)"/>
+
+    <polyline points="660,352 372,352 536,512 372,672 660,672"
+              fill="none" stroke="#16305e" stroke-opacity="0.28"
+              stroke-width="76" stroke-linecap="round" stroke-linejoin="round"
+              transform="translate(0,10)"/>
+    <polyline points="660,352 372,352 536,512 372,672 660,672"
+              fill="none" stroke="#ffffff"
+              stroke-width="76" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

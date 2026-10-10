@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
-import { initialPdfView, type PdfView } from "./domain/values/ViewState";
+import { initialPdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
 import { isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
 import { FindBar } from "./presentation/components/FindBar";
-import { PdfReader } from "./presentation/components/PdfReader";
+import { PdfReader, type PdfReaderControl } from "./presentation/components/PdfReader";
 import { QuitConfirm } from "./presentation/components/QuitConfirm";
 import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
@@ -95,8 +95,9 @@ export default function App() {
   const activeMarkdown = active && isMarkdown(active.document) ? active.document : null;
   const dirty = active ? isTabDirty(active) : false;
 
-  // The active PDF viewer's live position, for flushing before the session is saved.
-  const pdfViewRef = useRef<(() => PdfView) | null>(null);
+  // The PDF on screen: its live position (flushed before the session is saved) and its
+  // unsaved highlights (saved before quitting).
+  const pdfControlRef = useRef<PdfReaderControl | null>(null);
 
   // The active reader's live scroll lives in the DOM, not yet in view state (that's only
   // captured on unmount). Flush it before saving the session so the reading position is
@@ -104,7 +105,7 @@ export default function App() {
   const flushActiveScroll = useCallback(() => {
     if (!active) return;
     if (active.document.kind === "pdf") {
-      if (pdfViewRef.current) setPdfView(active.id, pdfViewRef.current());
+      if (pdfControlRef.current) setPdfView(active.id, pdfControlRef.current.view());
     } else if (mode === "reader" && readerRef.current) {
       persistScroll(active.id, readerRef.current.scrollTop);
     }
@@ -236,7 +237,9 @@ export default function App() {
             name={active.document.name}
             initialView={active.viewState.pdf ?? initialPdfView}
             onViewPersist={(view) => setPdfView(active.id, view)}
-            viewRef={pdfViewRef}
+            highlightColor={settings.pdfHighlightColor}
+            onHighlightColorChange={(pdfHighlightColor) => updateSettings({ pdfHighlightColor })}
+            controlRef={pdfControlRef}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (
@@ -294,10 +297,12 @@ export default function App() {
           dirtyCount={workspace.tabs.filter(isTabDirty).length}
           onRemember={async () => {
             flushActiveScroll();
+            await pdfControlRef.current?.flush();
             await persistSession();
             await quit();
           }}
           onForget={async () => {
+            await pdfControlRef.current?.flush();
             await clearSession();
             await quit();
           }}

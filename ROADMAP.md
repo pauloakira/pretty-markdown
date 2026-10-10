@@ -63,5 +63,8 @@ Reader-first build plan. Each milestone is independently shippable.
       - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
       - [x] Phase 2 — viewer: pdf.js (lazy), zoom/page controls, links, position memory.
       - [ ] Phase 3 — integration (find, file watching, file association) · [ ] Phase 4 — polish.
+- [ ] iPad version (personal install, same codebase via Tauri's iOS target) — see
+      [ipad/PLAN.md](ipad/PLAN.md). Spike done: it builds and renders markdown, math and PDFs
+      in the simulator; next is real iCloud file access.
 - [ ] Full TeX engine / TikZ (opt-in renderer).
 - [ ] Plugin/theme system.

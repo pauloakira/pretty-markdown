@@ -24,4 +24,18 @@ tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+percent-encoding = "2"
+
+# iPadOS document access (security-scoped bookmarks, iCloud downloads). iOS-only: the
+# desktop build never compiles it.
+[dev-dependencies]
+# Tauri's mock runtime, to test commands through the real IPC layer.
+tauri = { version = "2", features = ["test"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+tauri-plugin-ipad-files = { path = "../ipad/tauri-plugin-ipad-files" }
+
+# File watching (reload documents changed on disk) is desktop-only: iOS/iPadOS has no API
+# for watching arbitrary files.
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 notify = "6"

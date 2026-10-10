@@ -1,4 +1,5 @@
 import { DocumentService } from "../application/services/DocumentService";
+import { PdfSaver } from "../application/services/PdfSaver";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
 import type { AppWindow } from "../domain/ports/AppWindow";
@@ -7,6 +8,7 @@ import type { LinkOpener } from "../domain/ports/LinkOpener";
 import type { MacroMap } from "../domain/ports/MathRenderer";
 import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepository";
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
+import { IosFileSystem } from "../infrastructure/fs/IosFileSystem";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
 import { PrintDocumentExporter } from "../infrastructure/export/PrintDocumentExporter";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
@@ -43,6 +45,8 @@ export interface Container {
   readonly documentExporter: DocumentExporter;
   /** Renders PDF tabs; pdf.js itself loads on first use. */
   readonly pdfViewer: PdfViewerFactory;
+  /** Saves PDFs (e.g. with new highlights) and recognises those saves when watching. */
+  readonly pdfSaver: PdfSaver;
   readonly linkOpener: LinkOpener;
 }
 
@@ -54,7 +58,9 @@ export function createContainer(): Container {
   ]);
   const pipeline = new MarkdownPipeline(mathRenderer, DEFAULT_PREAMBLE);
 
-  const fileSystem = new TauriFileSystem();
+  // iPadOS opens files in place through security-scoped bookmarks; desktop uses paths.
+  const fileSystem =
+    import.meta.env.TAURI_ENV_PLATFORM === "ios" ? new IosFileSystem() : new TauriFileSystem();
   const documentService = new DocumentService(fileSystem, fileSystem, fileSystem);
   const tabManager = new TabManager();
   const settingsRepository = new LocalStorageSettingsRepository();
@@ -63,6 +69,7 @@ export function createContainer(): Container {
   const appWindow = new TauriAppWindow();
   const documentExporter = new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
+  const pdfSaver = new PdfSaver(fileSystem, fileSystem);
   const linkOpener = new TauriLinkOpener();
 
   return {
@@ -75,6 +82,7 @@ export function createContainer(): Container {
     appWindow,
     documentExporter,
     pdfViewer,
+    pdfSaver,
     linkOpener,
   };
 }
