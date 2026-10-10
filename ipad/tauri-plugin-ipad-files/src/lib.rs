@@ -1,5 +1,5 @@
-//! iPadOS document access for pretty-markdown (security-scoped bookmarks + iCloud
-//! downloads). See `ios/Sources/IpadFilesPlugin.swift` for the why.
+//! iPadOS support for pretty-markdown: document access (security-scoped bookmarks +
+//! iCloud downloads), plus the Apple Pencil double-tap for PDF highlighting. See `ios/Sources/IpadFilesPlugin.swift` for the why.
 //!
 //! The app depends on this crate only when building for iOS, so the desktop build never
 //! compiles it. Nothing here is callable from the webview: the app's own file commands

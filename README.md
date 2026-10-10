@@ -51,6 +51,8 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
 - **Highlight PDFs.** Select text and click the highlighter, or turn on highlight mode
   (`⌘⇧H`) to mark up a paper quickly, in five colours. Highlights are saved into the PDF
   itself, so Preview, the iPad and other readers see them too. Signed PDFs are left alone.
+  On iPad, in highlight mode, drag a finger or the Apple Pencil across text to highlight it
+  and scroll with two fingers; double-tap the Pencil (2nd generation) to toggle the mode.
 - **Tabs and tab groups.** Open several documents like browser tabs. Organize them into
   Chrome-style named, colored groups that you can collapse and drag, or group them by folder
   with one click.

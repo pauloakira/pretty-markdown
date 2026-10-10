@@ -177,6 +177,13 @@ export function PdfReader({
     if (handle) handle.setZoom(stepPdfZoom(handle.currentScale(), direction));
   }, []);
 
+  // Apple Pencil double-tap (iPad; sent by the native side) toggles highlight mode.
+  useEffect(() => {
+    const onDoubleTap = () => setTool(tool === "highlight" ? "select" : "highlight");
+    window.addEventListener("pencil-double-tap", onDoubleTap);
+    return () => window.removeEventListener("pencil-double-tap", onDoubleTap);
+  }, [setTool, tool]);
+
   // ⌘+ / ⌘− / ⌘0 and ⌘⇧H / Esc while this tab is showing (only the active tab is mounted).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
