@@ -315,21 +315,26 @@ export async function mountPdfJs(
       mustEnterInEditMode: event.mustEnterInEditMode ?? false,
     };
   };
+  let editorMode: number = AnnotationEditorType.NONE;
   const onModeChanged = (event: { mode: number }) => {
+    editorMode = event.mode;
     const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
   };
-  // No freehand highlights: in highlight mode pdf.js draws one when a press lands on
-  // empty space (its editor layer) rather than on text. On a touch screen that happened by
-  // accident, e.g. a stroke starting between lines. Highlights follow text, so such a press
-  // does nothing. (Presses on text, or on an existing highlight, aren't on the layer.)
+  // No freehand highlights. In highlight mode pdf.js draws one when a press lands on empty
+  // space instead of text: its text layer covers the page, and a press on the layer itself
+  // (between lines, past the text), on its images, or on the editor layer starts a
+  // freehand stroke. On a touch screen that happened by accident (a stroke starting just
+  // off the text). Highlights follow text, so such a press does nothing but deselect.
+  const EMPTY_SPACE = ".textLayer, .endOfContent, .textLayerImages, .textLayerImagePlaceholder, .annotationEditorLayer";
   const onEmptyPress = (event: PointerEvent) => {
+    if (editorMode !== AnnotationEditorType.HIGHLIGHT) return;
     const target = event.target as Element | null;
-    if (!target?.classList.contains("annotationEditorLayer")) return;
+    const onImage = target?.getAttribute("role") === "img" && target.closest(".textLayer");
+    if (!target || !(target.matches(EMPTY_SPACE) || onImage)) return;
     event.stopPropagation();
     uiManager?.unselectAll(); // what a press on empty space is still for
-
   };
   container.addEventListener("pointerdown", onEmptyPress, true);
 

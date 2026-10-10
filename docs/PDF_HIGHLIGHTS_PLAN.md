@@ -36,8 +36,8 @@ On the iPad, the **Apple Pencil is the main way to highlight**.
 
 ### Out of scope (for now)
 
-- Freehand highlighting on the Mac; on the iPad, the Pencil does freehand highlights over
-  figures and scans (§3.4).
+- Freehand highlighting (strokes not on text). Tried on the iPad, where it caused accidental
+  marks, so it's off everywhere (H3 follow-up).
 - Ink drawing, text notes or comments, stamps. pdf.js supports these too, so they're
   natural follow-ups (§8).
 - A sidebar listing all highlights, and exporting them as markdown (§8).
@@ -508,7 +508,8 @@ fingers scroll. Outside the mode, nothing changes.
   - a live preview in the highlighter colour shows the covered text;
   - lifting turns it into a pdf.js highlight: the stroke becomes the selection for a
     moment, then `uiManager.highlightSelection("drag")`;
-  - a stroke that starts off text (a figure, the margin) is left to pdf.js.
+  - a stroke that starts off text (a figure, the margin) does nothing (no freehand
+    highlights; see the 2026-10-10 follow-up below).
 - **Two-finger scrolling:**
   - The first attempt set WebKit's native scroll views to pan with two fingers
     (`minimumNumberOfTouches = 2` on `WKChildScrollView`, set from the plugin). It reached
@@ -526,6 +527,25 @@ fingers scroll. Outside the mode, nothing changes.
   - the Pencil hover cursor;
   - touch-sized editor controls (with ipad/PLAN.md Phase D);
   - verifying that a freehand stroke over a figure works by touch.
+
+**Follow-up (2026-10-10): no freehand highlights; Undo/Redo buttons.**
+- On the iPad, freehand highlights appeared by accident: a stroke starting just off the
+  text (between lines, the blank top of a page).
+  - In highlight mode pdf.js's text layer covers the page, and a press on its empty parts
+    (the layer itself, `endOfContent`, images) or on the editor layer starts a freehand
+    stroke.
+  - `PdfJsViewer` now stops such presses in highlight mode (`onEmptyPress`), leaving only
+    their deselecting effect. Highlights always follow text, on the Mac too.
+- **Undo and Redo buttons** in the PDF toolbar (the iPad has no ⌘Z without a keyboard).
+  They are enabled from pdf.js's `editingstateschanged` (`hasSomethingToUndo` /
+  `hasSomethingToRedo`) and call `uiManager.undo()` / `redo()`; autosave writes the
+  result.
+- Verified in the iPad simulator:
+  - two strokes from blank space in highlight mode made no highlight (before the fix,
+    both made freehand ones);
+  - a stroke on text still highlights;
+  - Undo removed it and saved the file back to its original size, and Redo restored and
+    saved it.
 
 **Tested in the iPad simulator, on the VEM paper:**
 - a one-finger drag highlights "We consider the discretization of a boundary", snapped

@@ -53,6 +53,7 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
   itself, so Preview, the iPad and other readers see them too. Signed PDFs are left alone.
   On iPad, in highlight mode, drag a finger or the Apple Pencil across text to highlight it
   and scroll with two fingers; double-tap the Pencil (2nd generation) to toggle the mode.
+  Undo and Redo are in the toolbar.
 - **Tabs and tab groups.** Open several documents like browser tabs. Organize them into
   Chrome-style named, colored groups that you can collapse and drag, or group them by folder
   with one click.
