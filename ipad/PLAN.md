@@ -86,9 +86,24 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
 - Handle URLs opened from Files, "Open in…", and the share sheet. On iOS the existing
   `RunEvent::Opened` delivers them.
 
-## Phase D: Touch and iPad UX
+## Phase D: Touch and iPad UX (in progress)
 
-- **Long-press** for the tab and chip menus (right-click doesn't exist on iPad).
+- ✅ **Tabs and tab groups by touch** (2026-10-10). On iPad a long-press sent no
+  `contextmenu`, so the tab menu (Add to group, Group tabs by folder) never opened, and a
+  tab drag was taken over by the strip's own scrolling (`pointercancel`). Now it works like
+  Safari's tabs on iPad (`TabBar.tsx`):
+  - **tap** opens a tab, and **swipe** scrolls the strip (it no longer activates the tab
+    under the finger);
+  - **hold** (450 ms) opens the tab's menu, or a group chip's editor;
+  - **hold and drag** moves a tab (into or out of groups) or a whole group; the menu
+    closes as the drag starts, and the strip doesn't scroll meanwhile (a non-passive
+    `touchmove`);
+  - mouse and trackpad are unchanged.
+  - Tested: 5 app tests (`App.tabs.test.tsx`), and in the iPad simulator with real touches
+    — hold → menu → Group tabs by folder; hold-drag a PDF into another group; hold the
+    chip → editor; tap the chip → collapse.
+- ✅ **Text selection and highlighting by touch** in PDFs: see docs/PDF_HIGHLIGHTS_PLAN.md
+  (H3 and the iPad fixes).
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.

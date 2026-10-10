@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -67,6 +68,18 @@ interface DropSpot {
 /** Past the last tab by this much counts as empty bar space. */
 const OUTSIDE_MARGIN = 12;
 
+/*
+ * Touch (iPad) has no right-click, and a quick swipe on a tab is the strip scrolling, so
+ * touch works like Safari's tabs on iPad: tap opens a tab; hold opens its menu (a group
+ * chip: its editor); keep holding and drag to move it (the menu closes as the drag starts).
+ */
+const isTouch = (e: ReactPointerEvent<HTMLElement>) => e.pointerType === "touch" || e.pointerType === "pen";
+
+/** How long a touch must be held to open the menu and allow dragging. */
+const HOLD_MS = 450;
+/** Movement before the hold that makes it a swipe: the strip scrolls instead. */
+const SWIPE_TOLERANCE = 10;
+
 interface DropHint {
   x: number;
   text: string;
@@ -122,6 +135,8 @@ export function TabBar({
   const [groupDrag, setGroupDrag] = useState<{ groupId: GroupId; gap: number } | null>(null);
   // A chip drag ends in a click on the chip; this swallows it so it doesn't also collapse.
   const swallowClickRef = useRef(false);
+  // The touch press being held (see HOLD_MS); `held` once the hold has fired.
+  const holdRef = useRef<{ pointerId: number; x: number; y: number; timer: number; held: boolean } | null>(null);
 
   const editing = findGroup(workspace, editingId);
   const overflow = useTabStrip(listRef, activeTabId, workspace);
@@ -180,7 +195,64 @@ export function TabBar({
     };
   };
 
+  const cancelHold = () => {
+    if (holdRef.current) window.clearTimeout(holdRef.current.timer);
+    holdRef.current = null;
+  };
+
+  /** Start a touch hold; `onHold` runs if it's held still for HOLD_MS. */
+  const startHold = (e: ReactPointerEvent<HTMLElement>, onHold: (x: number, y: number) => void) => {
+    cancelHold();
+    const element = e.currentTarget;
+    const hold = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, timer: 0, held: false };
+    hold.timer = window.setTimeout(() => {
+      hold.held = true;
+      try {
+        element.setPointerCapture(hold.pointerId);
+      } catch {
+        // the touch already ended
+      }
+      onHold(hold.x, hold.y);
+    }, HOLD_MS);
+    holdRef.current = hold;
+  };
+
+  /**
+   * A touch move: before the hold fires, too much movement is a swipe (let the strip
+   * scroll); after it, `onDragStart` runs once the touch moves far enough to be a drag.
+   * Returns true when the move is left to the drag code.
+   */
+  const continueHold = (e: ReactPointerEvent<HTMLElement>, onDragStart: () => void): boolean => {
+    const hold = holdRef.current;
+    if (!hold || e.pointerId !== hold.pointerId) return true;
+    if (!hold.held) {
+      if (Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > SWIPE_TOLERANCE) cancelHold();
+      return false;
+    }
+    if (Math.abs(e.clientX - hold.x) >= DRAG_THRESHOLD) onDragStart();
+    return true;
+  };
+
+  // While a touch hold is on, the strip mustn't scroll under the finger: dragging moves
+  // the tab instead. (Needs a non-passive listener, so not React's onTouchMove.)
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (holdRef.current?.held) e.preventDefault();
+    };
+    list.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => list.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
   const onTabPointerDown = (e: ReactPointerEvent<HTMLDivElement>, id: TabId) => {
+    if (isTouch(e)) {
+      startHold(e, (x, y) => {
+        setMenu({ tabId: id, x, y });
+        dragRef.current = { id, startX: x, pointerId: e.pointerId, dragging: false };
+      });
+      return;
+    }
     if (e.button === 1) {
       onClose(id);
       return;
@@ -192,6 +264,7 @@ export function TabBar({
   };
 
   const onTabPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!continueHold(e, () => setMenu(null))) return;
     const drag = dragRef.current;
     if (!drag) return;
     if (!drag.dragging) {
@@ -218,6 +291,23 @@ export function TabBar({
     setHint(null);
   };
 
+  const onTabPointerUp = (e: ReactPointerEvent<HTMLDivElement>, id: TabId) => {
+    const hold = holdRef.current;
+    if (hold && e.pointerId === hold.pointerId) {
+      cancelHold();
+      if (!hold.held) {
+        onSelect(id); // a tap
+        return;
+      }
+    }
+    endDrag(e);
+  };
+
+  const onTabPointerCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
+    cancelHold(); // the strip took the touch (a swipe)
+    endDrag(e);
+  };
+
   /** Slot among the units other than `groupId` for a pointer x, by unit midpoints. */
   const unitGapAt = (clientX: number, groupId: GroupId): number => {
     const list = listRef.current;
@@ -231,12 +321,21 @@ export function TabBar({
 
   const onChipPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, groupId: GroupId) => {
     swallowClickRef.current = false;
+    if (isTouch(e)) {
+      startHold(e, (x) => {
+        swallowClickRef.current = true; // a hold isn't a click (collapse)
+        setEditingId(groupId);
+        groupDragRef.current = { groupId, startX: x, dragging: false };
+      });
+      return;
+    }
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     groupDragRef.current = { groupId, startX: e.clientX, dragging: false };
   };
 
   const onChipPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!continueHold(e, () => setEditingId(null))) return;
     const drag = groupDragRef.current;
     if (!drag) return;
     if (!drag.dragging) {
@@ -247,6 +346,7 @@ export function TabBar({
   };
 
   const endChipDrag = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    cancelHold(); // a tap: the click toggles the group
     const drag = groupDragRef.current;
     groupDragRef.current = null;
     try {
@@ -312,8 +412,8 @@ export function TabBar({
         title={tab.document.path ?? tab.document.name}
         onPointerDown={(e) => onTabPointerDown(e, tab.id)}
         onPointerMove={onTabPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerUp={(e) => onTabPointerUp(e, tab.id)}
+        onPointerCancel={onTabPointerCancel}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenu({ tabId: tab.id, x: e.clientX, y: e.clientY });
@@ -371,7 +471,7 @@ export function TabBar({
             data-group-id={group.id}
             aria-expanded={!group.collapsed}
             aria-label={`${groupLabel(group)}, ${members.length} tab${members.length === 1 ? "" : "s"}`}
-            title={`${groupLabel(group)} — click to ${group.collapsed ? "expand" : "collapse"}, drag to move, right-click to edit`}
+            title={`${groupLabel(group)} — click to ${group.collapsed ? "expand" : "collapse"}, drag to move, right-click (or hold) to edit`}
             onPointerDown={(e) => onChipPointerDown(e, group.id)}
             onPointerMove={onChipPointerMove}
             onPointerUp={endChipDrag}
