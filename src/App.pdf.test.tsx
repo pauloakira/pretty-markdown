@@ -15,7 +15,7 @@ import {
   type TestContainer,
   WRITTEN,
 } from "./test/appHarness";
-import { disk } from "./test/tauriMock";
+import { disk, emitEvent } from "./test/tauriMock";
 
 /*
  * PDF tabs in the running app, with a fake viewer standing in for pdf.js (the real
@@ -96,6 +96,60 @@ describe("PDF tabs", () => {
     await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     expect(viewer.current.page).toBe(7);
     expect(toolbar().page).toBe("7");
+  });
+
+  it("searches the PDF from the find bar (⌘F), with counts as pdf.js reports them", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+
+    await act(async () => shortcut("KeyF"));
+    const input = document.querySelector<HTMLInputElement>(".findbar__input");
+    expect(input).not.toBeNull();
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(input, "basis");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(viewer.findLog).toEqual(["search:basis"]);
+
+    // pdf.js searches page after page: the count grows as it goes.
+    await act(async () => viewer.reportFind({ count: 2, index: 0 }));
+    expect(document.querySelector(".findbar__count")?.textContent).toBe("1/2");
+    await act(async () => viewer.reportFind({ count: 5, index: 0 }));
+    expect(document.querySelector(".findbar__count")?.textContent).toBe("1/5");
+
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+    });
+    expect(viewer.findLog.slice(1)).toEqual(["next", "previous"]);
+
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(document.querySelector(".findbar")).toBeNull();
+    expect(viewer.findLog[viewer.findLog.length - 1]).toBe("clear");
+  });
+
+  it("re-runs an open search on a PDF once it has loaded", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await settle();
+    await act(async () => shortcut("KeyF"));
+    const input = document.querySelector<HTMLInputElement>(".findbar__input")!;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(input, "intro");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await openPdf(app); // switching to a PDF that still has to load
+    expect(app.pdfViewer.latest.findLog).toContain("search:intro");
   });
 
   it("ignores edit, save and export shortcuts", async () => {
@@ -182,6 +236,64 @@ describe("PDF tabs", () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(
       "This PDF is password-protected. Opening protected PDFs isn't supported yet.",
     );
+  });
+});
+
+describe("PDF files changing on disk", () => {
+  it("shows the new file when another app changes it, at the same place", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    await act(async () => app.pdfViewer.latest.moveTo({ page: 3, pageOffset: 0.25, zoom: 1.25 }));
+
+    // e.g. LaTeX recompiled the paper
+    WRITTEN.set(PDF, new TextEncoder().encode("%PDF-1.7 recompiled"));
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await act(async () => emitEvent("file-changed", [PDF])); // a burst: checked once
+    await wait(300);
+    await settle();
+
+    expect(app.pdfViewer.mounts).toHaveLength(2);
+    expect(app.pdfViewer.mounts[0].destroyed).toBe(true);
+    expect(app.pdfViewer.latest.current).toEqual({ page: 3, pageOffset: 0.25, zoom: 1.25 });
+    expect(app.pdfViewer.forgotten).toEqual([PDF]); // the kept parsed copy is stale
+  });
+
+  it("keeps parsed PDFs only for open tabs", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await openPdf(app);
+    expect(app.pdfViewer.retained[app.pdfViewer.retained.length - 1]).toEqual([PDF]);
+
+    const pdfTab = app.tabManager.getSnapshot().tabs.find((t) => t.document.kind === "pdf")!;
+    await act(async () => app.tabManager.closeTab(pdfTab.id));
+    expect(app.pdfViewer.retained[app.pdfViewer.retained.length - 1]).toEqual([]);
+  });
+
+  it("ignores its own saves of highlights", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    app.pdfViewer.latest.highlight();
+    await act(async () => app.pdfViewer.latest.flush()); // writes the file
+
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await wait(300);
+    await settle();
+
+    expect(app.pdfViewer.mounts).toHaveLength(1);
+    expect(app.pdfViewer.latest.destroyed).toBe(false);
+  });
+
+  it("leaves a PDF alone when the change event was spurious (same bytes)", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await wait(300);
+    await settle();
+    expect(app.pdfViewer.mounts).toHaveLength(1);
   });
 });
 

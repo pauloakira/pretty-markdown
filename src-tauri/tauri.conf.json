@@ -31,6 +31,13 @@
         "ext": ["md", "markdown"],
         "name": "Markdown Document",
         "role": "Viewer"
+      },
+      {
+        "ext": ["pdf"],
+        "contentTypes": ["com.adobe.pdf"],
+        "name": "PDF Document",
+        "role": "Viewer",
+        "rank": "Alternate"
       }
     ],
     "icon": [

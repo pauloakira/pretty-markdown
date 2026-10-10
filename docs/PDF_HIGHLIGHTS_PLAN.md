@@ -3,7 +3,7 @@
 > Status: **in progress.** Planned 2026-10-08, with Apple Pencil support added the same
 > day; a spike confirmed that the approach works (§2). **Done:** PR 1 (writing PDF files)
 > and PR 2 (H1 + H2: highlighting and autosave) on 2026-10-09, and PR 3 (H3: drag to
-> highlight on iPad, finger and Pencil) on 2026-10-10 (§7). Left: H4, with PDF_PLAN Phase 3.
+> highlight on iPad, finger and Pencil) on 2026-10-10 (§7), and H4 with PDF_PLAN Phase 3.
 > This plan supersedes the "sidecar file" idea in [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) as phases land.
 
@@ -551,7 +551,12 @@ fingers scroll. Outside the mode, nothing changes.
   - outside the mode, the Pencil and fingers behave as before;
   - the highlights save to iCloud and appear on the Mac.
 
-### Phase H4: Integration with PDF reload
+### Phase H4: Integration with PDF reload ✅ (2026-10-10, with PDF_PLAN Phase 3)
+- Built in PDF_PLAN Phase 3: the watcher reloads a changed PDF unless the bytes are
+  `PdfSaver`'s own last write. Verified live: a highlight save didn't reload; replacing
+  the file did, at the same page.
+
+**Original plan:**
 - When PDF_PLAN Phase 3's reload-on-change lands (or as part of it), skip our own writes,
   and reload cleanly after external changes.
 - Update the docs: PDF_PLAN §1 "Out of scope", DESIGN.md, the README feature list, and

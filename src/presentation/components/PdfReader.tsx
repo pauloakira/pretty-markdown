@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import { useContainer } from "../../composition/ContainerContext";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
 import { PdfToolbar } from "./PdfToolbar";
 
@@ -14,6 +15,8 @@ export interface PdfReaderControl {
   view(): PdfView;
   /** Save highlights not saved yet. */
   flush(): Promise<void>;
+  /** Search the document (the find bar). */
+  find(listener: FindListener): FindTarget;
 }
 
 interface PdfReaderProps {
@@ -27,6 +30,8 @@ interface PdfReaderProps {
   onHighlightColorChange: (color: HighlightColor) => void;
   /** Filled while a document is showing, so the app can flush it before quitting. */
   controlRef: MutableRefObject<PdfReaderControl | null>;
+  /** The document is showing (e.g. to re-run an open search on it). */
+  onReady?: () => void;
 }
 
 type Status =
@@ -53,6 +58,7 @@ export function PdfReader({
   highlightColor,
   onHighlightColorChange,
   controlRef,
+  onReady,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -65,12 +71,17 @@ export function PdfReader({
   const [tool, setToolState] = useState<PdfTool>("select");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Latest props for the mount effect, which only re-runs when the file changes.
+  // Latest props for the mount effect, which only re-runs when the file changes. The view
+  // is read when the viewer mounts, after the file has loaded: a remount (the file changed
+  // on disk) gets the position the previous viewer recorded as it went away.
   const initialViewRef = useRef(initialView);
+  initialViewRef.current = initialView;
   const persistRef = useRef(onViewPersist);
   persistRef.current = onViewPersist;
   const colorRef = useRef(highlightColor);
   colorRef.current = highlightColor;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -97,21 +108,23 @@ export function PdfReader({
       return result;
     };
 
+    // Read only when the viewer needs the bytes (not when it still has this PDF parsed).
+    const source = {
+      key: path,
+      load: async () => {
+        // If this PDF was just closed with highlights still saving, read it after that save.
+        await pdfSaver.settled(path);
+        const data = await documentService.loadPdfData(path);
+        // Before pdf.js takes ownership of the bytes (they move to its worker).
+        if (data.ok) pdfSaver.opened(path, data.value);
+        return data;
+      },
+    };
+
     setStatus({ kind: "loading" });
     void (async () => {
-      // If this PDF was just closed with highlights still saving, read it after that save.
-      await pdfSaver.settled(path);
-      if (cancelled) return;
-      const data = await documentService.loadPdfData(path);
-      if (cancelled) return;
-      if (!data.ok) {
-        setStatus({ kind: "error", message: data.error });
-        return;
-      }
-      // Before mounting: pdf.js takes ownership of the bytes (they move to its worker).
-      pdfSaver.opened(path, data.value);
-      const mounted = await pdfViewer.mount(container, data.value, {
-        initialView: initialViewRef.current,
+      const mounted = await pdfViewer.mount(container, source, {
+        initialView: () => initialViewRef.current,
         onViewChange,
         onExternalLink: (url) => void linkOpener.openExternal(url),
         highlightColor: colorRef.current,
@@ -131,8 +144,13 @@ export function PdfReader({
       handle = mounted.value;
       handleRef.current = handle;
       const shown = handle;
-      controlRef.current = { view: () => shown.view(), flush: () => shown.flush() };
+      controlRef.current = {
+        view: () => shown.view(),
+        flush: () => shown.flush(),
+        find: (listener) => shown.find(listener),
+      };
       setStatus({ kind: "ready", info: handle.info, highlighting: handle.highlighting });
+      onReadyRef.current?.();
       setZoomPercent(Math.round(handle.currentScale() * 100));
       setPage(handle.view().page);
     })();

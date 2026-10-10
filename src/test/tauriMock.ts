@@ -20,4 +20,19 @@ export const tauriCore = {
   }),
 };
 
-export const tauriEvent = { listen: vi.fn(async () => () => {}) };
+/** The app's event listeners, by event name, so tests can emit events to it. */
+export const listeners = new Map<string, (event: { payload: unknown }) => void>();
+
+export const tauriEvent = {
+  listen: vi.fn(async (name: string, handler: (event: { payload: unknown }) => void) => {
+    listeners.set(name, handler);
+    return () => {
+      if (listeners.get(name) === handler) listeners.delete(name);
+    };
+  }),
+};
+
+/** Deliver an event from the native side, as `emit` in Rust would. */
+export function emitEvent(name: string, payload: unknown) {
+  listeners.get(name)?.({ payload });
+}

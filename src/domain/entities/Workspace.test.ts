@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMarkdownDocument } from "./Document";
+import { createMarkdownDocument, createPdfDocument } from "./Document";
 import { createTab, type Tab } from "./Tab";
 import * as W from "./Workspace";
 
@@ -106,6 +106,15 @@ describe("Workspace", () => {
     expect(t?.revision).toBe(1); // forces the editor to remount
     // no-op when content already matches and is clean
     expect(W.reloadContent(reloaded, "a", "# from disk")).toBe(reloaded);
+  });
+
+  it("reloads a PDF tab by bumping its revision, and ignores markdown tabs", () => {
+    const ws = workspaceOf(tab("a", "/a.md"));
+    expect(W.reloadPdf(ws, "a")).toBe(ws);
+    const withPdf = W.addTab(ws, createTab("p", createPdfDocument("/p.pdf")));
+    const reloaded = W.reloadPdf(withPdf, "p");
+    expect(reloaded.tabs.find((t) => t.id === "p")?.revision).toBe(1);
+    expect(reloaded.tabs.find((t) => t.id === "a")?.revision).toBe(0);
   });
 
   describe("mergeRestored", () => {

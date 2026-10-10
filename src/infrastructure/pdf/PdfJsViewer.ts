@@ -17,11 +17,13 @@ import {
   PasswordException,
   PermissionFlag,
   type AnnotationEditorUIManager,
+  type PDFDocumentLoadingTask,
   type PDFDocumentProxy,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
   EventBus,
+  PDFFindController,
   PDFLinkService,
   PDFViewer,
   RenderingStates,
@@ -31,9 +33,11 @@ import { highlightColorList, highlightHex, type HighlightColor } from "../../dom
 import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
   HighlightAvailability,
   PdfMountOptions,
+  PdfSource,
   PdfTool,
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
@@ -42,6 +46,29 @@ import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+
+/**
+ * pdf.js reads a page's text with `for await (… of readableStream)` (getTextContent, used
+ * by find), and WebKit (Safari 18, so our WKWebView on macOS and iPadOS) can't iterate a
+ * ReadableStream that way: find silently matched nothing. Add the iterator where missing.
+ * (The text layer streams text another way, so selection always worked.)
+ */
+type IterableStream = ReadableStream & { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> };
+const streamProto = ReadableStream.prototype as IterableStream;
+if (typeof streamProto[Symbol.asyncIterator] !== "function") {
+  streamProto[Symbol.asyncIterator] = async function* (this: ReadableStream) {
+    const reader = this.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        yield value;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  };
+}
 
 /**
  * Draw pages at no less than 2× pixel density. On a standard (1×) display pdf.js drew
@@ -144,14 +171,56 @@ function describeLoadError(error: unknown): string {
   return `Couldn't open this PDF: ${error instanceof Error ? error.message : String(error)}`;
 }
 
-/** Load `data` and show it in `container` (an empty, absolutely positioned scroller). */
-export async function mountPdfJs(
-  container: HTMLDivElement,
-  data: Uint8Array,
-  options: PdfMountOptions,
-): Promise<Result<PdfViewerHandle>> {
-  const loadingTask = getDocument({
-    data,
+// ---- Kept documents ---------------------------------------------------------------
+//
+// Switching back to a PDF tab used to re-read and re-parse the whole file (256 ms for a
+// 969-page book). The parsed documents of the last few PDFs shown are kept instead, least
+// recently used first, and destroyed when they fall out, when their file changes, or when
+// their tab closes. A document with highlight edits isn't kept: its file now has them, so
+// it's read again (pdf.js's in-memory edits belong to the viewer that made them).
+
+/** How many parsed documents to keep (docs/PDF_PLAN.md §5). */
+const KEEP_DOCUMENTS = 3;
+
+interface KeptDocument {
+  readonly key: string;
+  readonly task: PDFDocumentLoadingTask;
+  readonly pdf: PDFDocumentProxy;
+}
+
+const kept: KeptDocument[] = [];
+
+function takeKept(key: string): KeptDocument | null {
+  const index = kept.findIndex((entry) => entry.key === key);
+  return index === -1 ? null : kept.splice(index, 1)[0];
+}
+
+function keep(entry: KeptDocument): void {
+  const stale = takeKept(entry.key); // the same file shown twice at once: keep the newer
+  if (stale) void stale.task.destroy();
+  kept.push(entry);
+  while (kept.length > KEEP_DOCUMENTS) void kept.shift()?.task.destroy();
+}
+
+/** Drop the kept document for `key`, e.g. because its file changed on disk. */
+export function forgetDocument(key: string): void {
+  const entry = takeKept(key);
+  if (entry) void entry.task.destroy();
+}
+
+/** Drop kept documents whose key isn't in `keys` (their tabs were closed). */
+export function retainDocuments(keys: ReadonlySet<string>): void {
+  for (const entry of [...kept]) {
+    if (!keys.has(entry.key)) forgetDocument(entry.key);
+  }
+}
+
+/** Load a source's bytes and parse them. */
+async function openDocument(source: PdfSource): Promise<Result<KeptDocument>> {
+  const data = await source.load();
+  if (!data.ok) return data;
+  const task = getDocument({
+    data: data.value,
     cMapUrl: assetUrl("cmaps"),
     cMapPacked: true,
     standardFontDataUrl: assetUrl("standard_fonts"),
@@ -165,13 +234,27 @@ export async function mountPdfJs(
     // and PDF JavaScript stays off because the viewer has no scripting manager.
   });
 
-  let pdf: PDFDocumentProxy;
   try {
-    pdf = await loadingTask.promise;
+    return ok({ key: source.key, task, pdf: await task.promise });
   } catch (error) {
-    void loadingTask.destroy();
+    void task.destroy();
     return err(describeLoadError(error));
   }
+}
+
+/** Show `source` in `container` (an empty, absolutely positioned scroller). */
+export async function mountPdfJs(
+  container: HTMLDivElement,
+  source: PdfSource,
+  options: PdfMountOptions,
+): Promise<Result<PdfViewerHandle>> {
+  let shown = takeKept(source.key);
+  if (!shown) {
+    const opened = await openDocument(source);
+    if (!opened.ok) return opened;
+    shown = opened.value;
+  }
+  const { pdf } = shown;
 
   const highlighting = await highlightAvailability(pdf);
 
@@ -181,11 +264,16 @@ export async function mountPdfJs(
 
   const eventBus = new EventBus();
   const linkService = new PDFLinkService({ eventBus });
+  // Find in the document: pdf.js searches page after page in the background and reports
+  // the match count as it goes (`updatefindmatchescount`), highlighting matches in the
+  // text layer and scrolling to the current one.
+  const findController = new PDFFindController({ linkService, eventBus, updateMatchesCountOnProgress: true });
   const viewerOptions: ConstructorParameters<typeof PDFViewer>[0] & ExtraViewerOptions = {
     container,
     viewer: viewerEl,
     eventBus,
     linkService,
+    findController,
     annotationMode: AnnotationMode.ENABLE, // links, but no form filling
     // The highlight editor: idle ("NONE") until the highlight tool is picked, but a text
     // selection always offers a Highlight button. Off entirely when not allowed.
@@ -304,9 +392,11 @@ export async function mountPdfJs(
   const pagesInit = new Promise<void>((resolve) => eventBus.on("pagesinit", () => resolve(), { once: true }));
   viewer.setDocument(pdf);
   linkService.setDocument(pdf, null);
+  findController.setDocument(pdf);
   await pagesInit;
 
-  let zoom: PdfZoom = options.initialView.zoom;
+  const startView = normalizePdfView(options.initialView());
+  let zoom: PdfZoom = startView.zoom;
 
   /** Top and height of page `index` (0-based) in the container's scroll coordinates. */
   const pageBox = (index: number) => {
@@ -319,7 +409,7 @@ export async function mountPdfJs(
   // The last position measured. Used when the container can't be measured: once React
   // has detached it (a tab switch records the final view after the DOM is gone) or while
   // it has no size, every page measures 0 and the walk below would land on the last page.
-  let lastView = normalizePdfView(options.initialView);
+  let lastView = startView;
 
   const view = (): PdfView => {
     if (!container.isConnected || container.clientHeight === 0) return lastView;
@@ -333,7 +423,16 @@ export async function mountPdfJs(
     let box = pageBox(index);
     while (box && index > 0 && probe < box.top) box = pageBox(--index);
     while (box && index < count - 1 && probe >= box.top + box.height) box = pageBox(++index);
-    const pageOffset = box && box.height > 0 ? (scrollTop - box.top) / box.height : 0;
+    let pageOffset = box && box.height > 0 ? (scrollTop - box.top) / box.height : 0;
+    // Scrolled to the very end, the last page is on screen even when an earlier one is at
+    // the top (zoomed out, several pages fit): it's the current page then. Saving the top
+    // of the last page also restores to the end, which is where a saved page beyond a
+    // shortened PDF lands too.
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    if (maxScroll > 0 && scrollTop >= maxScroll - 1 && index < count - 1) {
+      index = count - 1;
+      pageOffset = 0;
+    }
     lastView = normalizePdfView({ page: index + 1, pageOffset, zoom });
     return lastView;
   };
@@ -347,7 +446,7 @@ export async function mountPdfJs(
   // (a hidden window), wait for the first real size instead of fitting to zero.
   const applyInitialView = () => {
     applyScale();
-    const initial = normalizePdfView(options.initialView);
+    const initial = startView;
     const target = pageBox(Math.min(initial.page, viewer.pagesCount) - 1);
     if (target) container.scrollTop = target.top + initial.pageOffset * target.height;
   };
@@ -448,6 +547,28 @@ export async function mountPdfJs(
   };
   container.addEventListener("click", onClick, true);
 
+  // ---- Find ------------------------------------------------------------------------
+  let findListener: FindListener | null = null;
+  let findQuery = "";
+  const onFindCount = (event: { matchesCount: { current: number; total: number } }) => {
+    const { current, total } = event.matchesCount;
+    findListener?.({ count: total, index: total > 0 && current > 0 ? current - 1 : -1 });
+  };
+  eventBus.on("updatefindmatchescount", onFindCount);
+  eventBus.on("updatefindcontrolstate", onFindCount);
+  const dispatchFind = (type: "" | "again", findPrevious: boolean) =>
+    eventBus.dispatch("find", {
+      source: null,
+      type,
+      query: findQuery,
+      caseSensitive: false,
+      entireWord: false,
+      highlightAll: true,
+      findPrevious,
+      matchDiacritics: false,
+    });
+  const clearFind = () => eventBus.dispatch("findbarclose", { source: null });
+
   // ---- Autosave -------------------------------------------------------------------
   //
   // Highlights live in pdf.js's annotation storage until saved. Every change (from a hook,
@@ -543,6 +664,31 @@ export async function mountPdfJs(
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
     },
+    find(listener) {
+      findListener = listener;
+      return {
+        search(query) {
+          findQuery = query;
+          if (!query) {
+            clearFind();
+            listener({ count: 0, index: -1 });
+            return;
+          }
+          dispatchFind("", false);
+        },
+        next() {
+          if (findQuery) dispatchFind("again", false);
+        },
+        previous() {
+          if (findQuery) dispatchFind("again", true);
+        },
+        clear() {
+          findQuery = "";
+          clearFind();
+          if (findListener === listener) findListener = null;
+        },
+      };
+    },
     destroy() {
       window.clearTimeout(saveTimer);
       for (const timer of strayTimers) window.clearTimeout(timer);
@@ -571,10 +717,14 @@ export async function mountPdfJs(
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
       eventBus.off("updateviewarea", reportView);
+      eventBus.off("updatefindmatchescount", onFindCount);
+      eventBus.off("updatefindcontrolstate", onFindCount);
       eventBus.off("scalechanging", reportView);
       viewer.setDocument(null as unknown as PDFDocumentProxy);
       linkService.setDocument(null);
-      void loadingTask.destroy();
+      findController.setDocument(null as unknown as PDFDocumentProxy);
+      if (storage.size === 0) keep(shown);
+      else void shown.task.destroy();
       container.replaceChildren();
     },
   });

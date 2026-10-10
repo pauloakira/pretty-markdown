@@ -18,15 +18,18 @@ import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRende
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import type { HighlightColor } from "../domain/values/Highlight";
+import type { FindState } from "../presentation/find/FindController";
+import type { FindListener, FindTarget } from "../presentation/find/FindTarget";
 import type {
   HighlightAvailability,
   PdfInfo,
   PdfMountOptions,
+  PdfSource,
   PdfTool,
   PdfViewerFactory,
   PdfViewerHandle,
 } from "../presentation/pdf/PdfViewer";
-import { disk } from "./tauriMock";
+import { disk, listeners } from "./tauriMock";
 
 /*
  * Shared harness for App-level tests: the real App and services wired to in-memory fakes
@@ -81,7 +84,7 @@ export class FakePdfHandle implements PdfViewerHandle {
     private readonly options: PdfMountOptions,
     readonly highlighting: HighlightAvailability,
   ) {
-    this.current = options.initialView;
+    this.current = options.initialView();
     this.color = options.highlightColor;
   }
   setTool(tool: PdfTool) {
@@ -89,6 +92,23 @@ export class FakePdfHandle implements PdfViewerHandle {
   }
   setHighlightColor(color: HighlightColor) {
     this.color = color;
+  }
+  /** What the find bar asked of this PDF, in order (e.g. "search:basis", "next"). */
+  readonly findLog: string[] = [];
+  private findListener: FindListener | null = null;
+  find(listener: FindListener): FindTarget {
+    this.findListener = listener;
+    const log = this.findLog;
+    return {
+      search: (query) => log.push(`search:${query}`),
+      next: () => log.push("next"),
+      previous: () => log.push("previous"),
+      clear: () => log.push("clear"),
+    };
+  }
+  /** Simulate pdf.js reporting matches as it searches. */
+  reportFind(state: FindState) {
+    this.findListener?.(state);
   }
   /** Simulate pdf.js switching tools itself (e.g. the Highlight button by a selection). */
   switchToolItself(tool: PdfTool) {
@@ -139,16 +159,30 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
   info: PdfInfo = { pageCount: 12, title: "A Paper on Things" };
   highlighting: HighlightAvailability = { allowed: true };
 
+  /** Calls to `forget` and the key sets passed to `retain`, in order. */
+  readonly forgotten: string[] = [];
+  readonly retained: string[][] = [];
+
   async mount(
     container: HTMLDivElement,
-    _data: Uint8Array,
+    source: PdfSource,
     options: PdfMountOptions,
   ): Promise<Result<PdfViewerHandle>> {
+    const data = await source.load();
+    if (!data.ok) return data;
     if (this.failWith) return err(this.failWith);
     container.textContent = "[pdf pages]";
     const handle = new FakePdfHandle(this.info, options, this.highlighting);
     this.mounts.push(handle);
     return ok(handle);
+  }
+
+  forget(key: string) {
+    this.forgotten.push(key);
+  }
+
+  retain(keys: ReadonlySet<string>) {
+    this.retained.push([...keys].sort());
   }
 
   /** The most recently mounted viewer. */
@@ -294,6 +328,7 @@ export function useAppHarness() {
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     disk.session = null;
     WRITTEN.clear();
+    listeners.clear();
   });
   afterEach(async () => {
     await quit();

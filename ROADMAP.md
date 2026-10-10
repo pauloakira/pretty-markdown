@@ -58,11 +58,14 @@ Reader-first build plan. Each milestone is independently shippable.
 - [x] Links in markdown: web/mail links open in the default browser (never navigate the
       app), `#heading` links scroll within the document (GitHub-style heading ids).
       *(Not yet: open relative `.md` links as a new tab.)*
-- [ ] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
-      restore, file watching. Planned in phases; see [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
+- [x] PDF reading — open PDFs in tabs (pdf.js): zoom, page navigation, find, links, session
+      restore, file watching. See [docs/PDF_PLAN.md](docs/PDF_PLAN.md).
       - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
       - [x] Phase 2 — viewer: pdf.js (lazy), zoom/page controls, links, position memory.
-      - [ ] Phase 3 — integration (find, file watching, file association) · [ ] Phase 4 — polish.
+      - [x] Phase 3 — integration: find, file watching, file association, document cache.
+      - [ ] Phase 4 — polish (outline sidebar, thumbnails, dark pages).
+      - [x] Highlights, saved into the PDF; drag to highlight on iPad
+        ([docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md)).
 - [ ] iPad version (personal install, same codebase via Tauri's iOS target) — see
       [ipad/PLAN.md](ipad/PLAN.md). Spike done: it builds and renders markdown, math and PDFs
       in the simulator; next is real iCloud file access.
