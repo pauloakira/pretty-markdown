@@ -28,7 +28,7 @@ import type {
   PdfViewerFactory,
   PdfViewerHandle,
 } from "../presentation/pdf/PdfViewer";
-import { disk } from "./tauriMock";
+import { disk, listeners } from "./tauriMock";
 
 /*
  * Shared harness for App-level tests: the real App and services wired to in-memory fakes
@@ -313,6 +313,7 @@ export function useAppHarness() {
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     disk.session = null;
     WRITTEN.clear();
+    listeners.clear();
   });
   afterEach(async () => {
     await quit();

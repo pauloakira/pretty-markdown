@@ -140,6 +140,11 @@ export class TabManager {
     this.commit(W.reloadContent(this.workspace, id, content));
   }
 
+  /** The PDF behind a tab changed on disk: show the new file. */
+  reloadPdf(id: TabId): void {
+    this.commit(W.reloadPdf(this.workspace, id));
+  }
+
   /**
    * Bring the saved session back on launch, merged with anything already open. Each
    * entry's `group` indexes into `groups`; groups left without tabs are dropped.

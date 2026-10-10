@@ -4,17 +4,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useContainer } from "../../composition/ContainerContext";
 import type { Tab, TabId } from "../../domain/entities/Tab";
 
+/** Quiet period after a PDF's last change event before it's checked (see below). */
+const PDF_SETTLE_MS = 250;
+
 /**
  * Watches the open files and reacts to external changes:
  * - a clean tab is silently reloaded from disk;
  * - a tab with unsaved edits is flagged as a conflict (its new disk content is kept so the
- *   UI can offer Reload / Keep).
+ *   UI can offer Reload / Keep);
+ * - a PDF is shown again from disk (at the same position), unless the change is the app's
+ *   own save of its highlights.
  *
  * Our own saves are ignored automatically: the on-disk content then equals the tab's
  * content, so there's nothing to reload.
  */
 export function useFileWatch(tabs: readonly Tab[]) {
-  const { documentService, tabManager } = useContainer();
+  const { documentService, pdfSaver, tabManager } = useContainer();
   const [conflicts, setConflicts] = useState<Record<TabId, string>>({});
   const watchedRef = useRef<Set<string>>(new Set());
 
@@ -42,12 +47,37 @@ export function useFileWatch(tabs: readonly Tab[]) {
     let unlisten: (() => void) | undefined;
     let disposed = false;
 
+    // A PDF that changed on disk is shown again, unless the change is our own save (its
+    // highlights, written by PdfSaver). A write arrives as a burst of events, possibly
+    // while the file is still being written, so check once things have settled.
+    const pdfTimers = new Map<string, number>();
+    const schedulePdfCheck = (path: string) => {
+      window.clearTimeout(pdfTimers.get(path));
+      pdfTimers.set(
+        path,
+        window.setTimeout(() => {
+          pdfTimers.delete(path);
+          void checkPdf(path);
+        }, PDF_SETTLE_MS),
+      );
+    };
+    const checkPdf = async (path: string) => {
+      const data = await documentService.loadPdfData(path);
+      if (disposed || !data.ok) return; // gone or mid-write: a later event follows
+      if (pdfSaver.isOwnWrite(path, data.value)) return;
+      const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
+      if (tab?.document.kind === "pdf") tabManager.reloadPdf(tab.id);
+    };
+
     void (async () => {
       const un = await listen<string[]>("file-changed", async (event) => {
         for (const path of event.payload) {
           const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
-          // PDF tabs aren't reloaded yet (docs/PDF_PLAN.md, Phase 3).
-          if (!tab || tab.document.kind !== "markdown") continue;
+          if (!tab) continue;
+          if (tab.document.kind === "pdf") {
+            schedulePdfCheck(path);
+            continue;
+          }
           const outcome = await documentService.load(path);
           if (outcome.kind !== "opened" || outcome.document.kind !== "markdown") continue;
           const disk = outcome.document.content;
@@ -66,9 +96,10 @@ export function useFileWatch(tabs: readonly Tab[]) {
 
     return () => {
       disposed = true;
+      for (const timer of pdfTimers.values()) window.clearTimeout(timer);
       unlisten?.();
     };
-  }, [documentService, tabManager]);
+  }, [documentService, pdfSaver, tabManager]);
 
   const reloadConflict = useCallback(
     (id: TabId) => {

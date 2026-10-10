@@ -71,8 +71,11 @@ export function PdfReader({
   const [tool, setToolState] = useState<PdfTool>("select");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Latest props for the mount effect, which only re-runs when the file changes.
+  // Latest props for the mount effect, which only re-runs when the file changes. The view
+  // is read when the viewer mounts, after the file has loaded: a remount (the file changed
+  // on disk) gets the position the previous viewer recorded as it went away.
   const initialViewRef = useRef(initialView);
+  initialViewRef.current = initialView;
   const persistRef = useRef(onViewPersist);
   persistRef.current = onViewPersist;
   const colorRef = useRef(highlightColor);

@@ -541,6 +541,14 @@ export function reloadContent(ws: Workspace, id: TabId, content: string): Worksp
   };
 }
 
+/** Reload a PDF tab from disk (the file changed): bumps the revision so the viewer
+ * remounts and reads the file again, keeping the tab's position. No-op for markdown. */
+export function reloadPdf(ws: Workspace, id: TabId): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.document.kind !== "pdf") return ws;
+  return { ...ws, tabs: ws.tabs.map((t) => (t.id === id ? { ...t, revision: t.revision + 1 } : t)) };
+}
+
 /** Mark a markdown tab as saved to `path`: updates the path/name and the dirty baseline.
  * No-op for a PDF (PDFs are never written). */
 export function markSaved(

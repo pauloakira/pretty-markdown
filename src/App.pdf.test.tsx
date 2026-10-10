@@ -15,7 +15,7 @@ import {
   type TestContainer,
   WRITTEN,
 } from "./test/appHarness";
-import { disk } from "./test/tauriMock";
+import { disk, emitEvent } from "./test/tauriMock";
 
 /*
  * PDF tabs in the running app, with a fake viewer standing in for pdf.js (the real
@@ -236,6 +236,51 @@ describe("PDF tabs", () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(
       "This PDF is password-protected. Opening protected PDFs isn't supported yet.",
     );
+  });
+});
+
+describe("PDF files changing on disk", () => {
+  it("shows the new file when another app changes it, at the same place", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    await act(async () => app.pdfViewer.latest.moveTo({ page: 3, pageOffset: 0.25, zoom: 1.25 }));
+
+    // e.g. LaTeX recompiled the paper
+    WRITTEN.set(PDF, new TextEncoder().encode("%PDF-1.7 recompiled"));
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await act(async () => emitEvent("file-changed", [PDF])); // a burst: checked once
+    await wait(300);
+    await settle();
+
+    expect(app.pdfViewer.mounts).toHaveLength(2);
+    expect(app.pdfViewer.mounts[0].destroyed).toBe(true);
+    expect(app.pdfViewer.latest.current).toEqual({ page: 3, pageOffset: 0.25, zoom: 1.25 });
+  });
+
+  it("ignores its own saves of highlights", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    app.pdfViewer.latest.highlight();
+    await act(async () => app.pdfViewer.latest.flush()); // writes the file
+
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await wait(300);
+    await settle();
+
+    expect(app.pdfViewer.mounts).toHaveLength(1);
+    expect(app.pdfViewer.latest.destroyed).toBe(false);
+  });
+
+  it("leaves a PDF alone when the change event was spurious (same bytes)", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    await act(async () => emitEvent("file-changed", [PDF]));
+    await wait(300);
+    await settle();
+    expect(app.pdfViewer.mounts).toHaveLength(1);
   });
 });
 
