@@ -14,12 +14,14 @@ import Foundation
 import SwiftRs
 import Tauri
 import UIKit
+import WebKit
 
 class PathArgs: Decodable {
   let path: String
 }
 
-class IpadFilesPlugin: Plugin {
+
+class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
   /// Bookmarks by the path the app knows the document under.
   private let bookmarksKey = "pretty-markdown.bookmarks"
   /// Files we've started security-scoped access to. Access is kept for the app's lifetime
@@ -28,6 +30,23 @@ class IpadFilesPlugin: Plugin {
   private let lock = NSLock()
   /// Off the main thread: a coordinated read blocks while iCloud downloads the file.
   private let work = DispatchQueue(label: "pretty-markdown.ipad-files", qos: .userInitiated)
+
+  private weak var webView: WKWebView?
+
+  override func load(webview: WKWebView) {
+    webView = webview
+    // Apple Pencil double-tap (2nd generation / Pro): tell the page, which toggles
+    // highlight mode on the PDF on screen.
+    let pencil = UIPencilInteraction()
+    pencil.delegate = self
+    webview.addInteraction(pencil)
+  }
+
+  func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+    // Respect the user's choice in Settings → Apple Pencil (e.g. "Ignore").
+    guard UIPencilInteraction.preferredTapAction != .ignore else { return }
+    webView?.evaluateJavaScript("window.dispatchEvent(new Event('pencil-double-tap'))")
+  }
 
   private func loadBookmarks() -> [String: Data] {
     UserDefaults.standard.dictionary(forKey: bookmarksKey) as? [String: Data] ?? [:]

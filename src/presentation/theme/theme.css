@@ -1133,6 +1133,39 @@ body {
 .pdf-reader__scroll .textLayer:has(> .editToolbar) {
   z-index: 3;
 }
+/*
+ * Highlight mode on a touch screen: one finger (or the Pencil) highlights and two fingers
+ * scroll, both handled in dragHighlight.ts, so native panning is off. Long-press text
+ * selection (and its callout) is off too, except for the instant a stroke becomes a
+ * highlight.
+ */
+.pdf-reader__scroll.pdf-touch-highlighting {
+  touch-action: none;
+}
+.pdf-reader__scroll.pdf-touch-highlighting .textLayer,
+.pdf-reader__scroll.pdf-touch-highlighting .textLayer span {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.pdf-reader__scroll.pdf-touch-highlighting.pdf-drag-committing .textLayer,
+.pdf-reader__scroll.pdf-touch-highlighting.pdf-drag-committing .textLayer span {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* The live preview of a highlighter stroke (viewport coordinates, see dragHighlight.ts). */
+.pdf-drag-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+.pdf-drag-preview > div {
+  position: fixed;
+  border-radius: 2px;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
 /* In highlight mode, the pointer over text says "highlighter", not "text cursor". */
 .pdf-reader__stage--highlighting .textLayer {
   cursor: crosshair;

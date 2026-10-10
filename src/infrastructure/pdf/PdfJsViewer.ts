@@ -38,6 +38,7 @@ import type {
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
 import { preRenderPages } from "./preRender";
+import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -202,6 +203,17 @@ export async function mountPdfJs(
   };
   eventBus.on("annotationeditoruimanager", onUiManager);
 
+  // Highlight mode on a touch screen (iPad): drag a finger or the Pencil across text to
+  // highlight it, and scroll with two fingers (dragHighlight.ts). Native panning and
+  // long-press text selection are off meanwhile (CSS on `pdf-touch-highlighting`).
+  const touchScreen = navigator.maxTouchPoints > 0;
+  let touchHighlighting = false;
+  const applyTouchHighlighting = (on: boolean) => {
+    if (!touchScreen || on === touchHighlighting) return;
+    touchHighlighting = on;
+    container.classList.toggle("pdf-touch-highlighting", on);
+  };
+
   // pdf.js's editor asks its host app to change modes through the event bus: the
   // Highlight button next to a selection asks for highlight mode and creates the highlight
   // once it's in; double-clicking a highlight asks to edit it. pdf.js's own viewer app
@@ -215,8 +227,11 @@ export async function mountPdfJs(
       mustEnterInEditMode: event.mustEnterInEditMode ?? false,
     };
   };
-  const onModeChanged = (event: { mode: number }) =>
-    options.onToolChange(event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select");
+  const onModeChanged = (event: { mode: number }) => {
+    const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
+    applyTouchHighlighting(tool === "highlight");
+    options.onToolChange(tool);
+  };
   eventBus.on("showannotationeditorui", onModeRequest);
   eventBus.on("switchannotationeditormode", onModeRequest);
   eventBus.on("annotationeditormodechanged", onModeChanged);
@@ -245,6 +260,23 @@ export async function mountPdfJs(
   };
   container.addEventListener("pointerdown", onButtonPress, true);
   container.addEventListener("click", onButtonClick, true);
+
+  // Drag to highlight by touch (see applyTouchHighlighting above).
+  const detachDragHighlight = attachDragHighlight(container, {
+    isActive: () => touchHighlighting,
+    color: () => highlightHex(highlightColor),
+    commit: (range) => {
+      if (!uiManager) return;
+      // pdf.js highlights the document's selection: make the stroke the selection. The
+      // text layer is unselectable in this mode, so lift that for the moment.
+      container.classList.add("pdf-drag-committing");
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      uiManager.highlightSelection("drag");
+      container.classList.remove("pdf-drag-committing");
+    },
+  });
 
   // Touch selection lands where the finger is (iPadOS's own doesn't, over pdf.js's text
   // layer): long-press picks the word under the finger, handles move where dragged.
@@ -522,6 +554,8 @@ export async function mountPdfJs(
       eventBus.off("annotationeditoruimanager", onUiManager);
       container.removeEventListener("pointerdown", onButtonPress, true);
       detachTouchSelection();
+      detachDragHighlight();
+      applyTouchHighlighting(false);
       container.removeEventListener("click", onButtonClick, true);
       eventBus.off("showannotationeditorui", onModeRequest);
       eventBus.off("switchannotationeditormode", onModeRequest);

@@ -493,7 +493,50 @@ Split out of H2 so the riskiest change, writing to the user's files, got its own
 - **Done when:** highlights survive closing and reopening, show up in Preview and on the
   iPad through iCloud, and never touch signed PDFs.
 
-### Phase H3: Apple Pencil on iPad
+### Phase H3: Drag to highlight on iPad (finger and Pencil) — built, device check pending (2026-10-10, PR 3)
+
+**Changed from the original plan (decided 2026-10-10):** after the long-press selection
+proved slow and inaccurate on the device, **a finger highlights too**, not just the Pencil.
+In highlight mode, one finger or the Pencil drags across text to highlight it, and two
+fingers scroll. Outside the mode, nothing changes.
+
+**As built:**
+- **`dragHighlight.ts`** (active only on touch screens, and only in highlight mode):
+  - a stroke that starts on text (within 14 px) is the app's; pdf.js doesn't see it;
+  - a press that moves less than 6 px is a tap, left to pdf.js (selecting a highlight);
+  - the stroke snaps to whole words (`toWordEdge`) and stays on the page it started on;
+  - a live preview in the highlighter colour shows the covered text;
+  - lifting turns it into a pdf.js highlight: the stroke becomes the selection for a
+    moment, then `uiManager.highlightSelection("drag")`;
+  - a stroke that starts off text (a figure, the margin) is left to pdf.js.
+- **Two-finger scrolling:**
+  - The first attempt set WebKit's native scroll views to pan with two fingers
+    (`minimumNumberOfTouches = 2` on `WKChildScrollView`, set from the plugin). It reached
+    the right views, but WebKit never started the two-finger pan.
+  - So in this mode native panning is off (`touch-action: none`), and `dragHighlight.ts`
+    scrolls by the two fingers' midpoint itself.
+  - Momentum: the speed over the last 100 ms (capped at 4 px/ms), decaying 5% per frame.
+  - The same swipe scrolled 1,071 px this way and 1,096 px natively.
+- **Long-press selection is off in this mode** (`user-select: none`, no callout), since
+  dragging highlights.
+- **Pencil double-tap toggles highlight mode** (Apple Pencil 2nd generation). The plugin
+  adds a `UIPencilInteraction` to the web view and, unless the user's preferred tap action
+  is "Ignore", dispatches `pencil-double-tap` to the page.
+- **Not done:**
+  - the Pencil hover cursor;
+  - touch-sized editor controls (with ipad/PLAN.md Phase D);
+  - verifying that a freehand stroke over a figure works by touch.
+
+**Tested in the iPad simulator, on the VEM paper:**
+- a one-finger drag highlights "We consider the discretization of a boundary", snapped
+  to words, with no scrolling;
+- a two-line stroke highlights exactly the lines crossed;
+- two fingers scroll in highlight mode;
+- normal one-finger scrolling outside the mode is unchanged;
+- 210 tests pass (`toWordEdge` unit tests included).
+- **The Pencil and double-tap need the real iPad:** the simulator has no Pencil.
+
+**Original plan:**
 - **Step 1, a device check (a short spike on the real iPad):** confirm that WKWebView
   reports `touchType: "stylus"` and `pointerType: "pen"`. Confirm that cancelling a stylus
   `touchstart` stops scrolling without breaking finger scrolling.

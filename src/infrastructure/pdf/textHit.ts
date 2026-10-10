@@ -73,8 +73,9 @@ function pageSpansAt(x: number, y: number): HTMLElement[] {
  * The caret position nearest to (x, y): in the text under the point, or else in the
  * nearest line of text on that page (dragging a selection handle often passes between
  * lines or past the end of one). Before or after a character, whichever half is nearer.
+ * With `maxDistance`, null when no text is that close (a point on a figure or margin).
  */
-export function caretAt(x: number, y: number): TextPoint | null {
+export function caretAt(x: number, y: number, maxDistance = Infinity): TextPoint | null {
   let best: { node: Text; distance: number } | null = null;
   for (const span of pageSpansAt(x, y)) {
     const node = span.firstChild;
@@ -87,7 +88,7 @@ export function caretAt(x: number, y: number): TextPoint | null {
     const distance = dy * 4 + dx;
     if (!best || distance < best.distance) best = { node, distance };
   }
-  if (!best) return null;
+  if (!best || best.distance > maxDistance) return null;
   const { node } = best;
   const range = document.createRange();
   for (let i = 0; i < node.data.length; i += 1) {
@@ -97,4 +98,19 @@ export function caretAt(x: number, y: number): TextPoint | null {
     if (x < box.left + box.width / 2) return { node, offset: i };
   }
   return { node, offset: node.data.length };
+}
+
+/**
+ * Widen a caret position to the edge of the word it's in: back to the word's start
+ * (`edge` "start") or on to its end ("end"). A highlighter stroke covers whole words.
+ */
+export function toWordEdge(point: TextPoint, edge: "start" | "end"): TextPoint {
+  if (!(point.node instanceof Text)) return point;
+  const text = point.node.data;
+  // The character the caret touches on the side being widened.
+  const index = edge === "start" ? point.offset : point.offset - 1;
+  const bounds = wordBounds(text, index) ?? wordBounds(text, edge === "start" ? point.offset - 1 : point.offset);
+  if (!bounds) return point;
+  const offset = edge === "start" ? Math.min(bounds[0], point.offset) : Math.max(bounds[1], point.offset);
+  return { node: point.node, offset };
 }

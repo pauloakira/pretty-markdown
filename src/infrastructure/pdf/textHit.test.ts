@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wordBounds } from "./textHit";
+import { toWordEdge, wordBounds } from "./textHit";
 
 const word = (text: string, index: number) => {
   const bounds = wordBounds(text, index);
@@ -35,5 +35,28 @@ describe("wordBounds", () => {
     expect(word("the method's accuracy", 6)).toBe("method's");
     expect(word("'quoted' text", 3)).toBe("quoted");
     expect(word("the L² projection", 4)).toBe("L²");
+  });
+});
+
+describe("toWordEdge", () => {
+  const node = document.createTextNode("We consider the discretization");
+  const at = (offset: number) => ({ node, offset });
+
+  it("widens a stroke's start back to the beginning of its word", () => {
+    expect(toWordEdge(at(6), "start")).toEqual(at(3)); // con|sider → |consider
+    expect(toWordEdge(at(3), "start")).toEqual(at(3)); // already at the start
+    expect(toWordEdge(at(1), "start")).toEqual(at(0)); // W|e → |We
+  });
+
+  it("widens a stroke's end on to the end of its word", () => {
+    expect(toWordEdge(at(6), "end")).toEqual(at(11)); // con|sider → consider|
+    expect(toWordEdge(at(11), "end")).toEqual(at(11)); // already at the end
+    expect(toWordEdge(at(20), "end")).toEqual(at(30)); // discr|etization → …tion|
+  });
+
+  it("leaves a position between words alone", () => {
+    const spaced = document.createTextNode("a  b");
+    expect(toWordEdge({ node: spaced, offset: 2 }, "start")).toEqual({ node: spaced, offset: 2 });
+    expect(toWordEdge({ node: spaced, offset: 2 }, "end")).toEqual({ node: spaced, offset: 2 });
   });
 });
