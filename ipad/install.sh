@@ -39,7 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT
 xcrun devicectl list devices --json-output "$DEVICES_JSON" >/dev/null
-# Prints "<devicectl id> <hardware udid> <name>" for the requested or first connected iPad.
+# Prints "<devicectl id> <hardware udid> <name>" for the requested or first reachable iPad.
 read -r DEVICE_ID UDID NAME < <(python3 - "$DEVICES_JSON" "${1:-}" <<'EOF'
 import json, sys
 devices = json.load(open(sys.argv[1]))["result"]["devices"]
@@ -49,7 +49,11 @@ for d in devices:
     name = props.get("name", "")
     if wanted and wanted not in (name, d.get("identifier"), hw.get("udid")):
         continue
-    if not wanted and (hw.get("deviceType") != "iPad" or d.get("connectionProperties", {}).get("tunnelState") != "connected"):
+    # Reachable: paired, and "connected" or "disconnected" (devicectl connects on demand),
+    # as opposed to "unavailable" (not plugged in or not on the network).
+    conn = d.get("connectionProperties", {})
+    reachable = conn.get("pairingState") == "paired" and conn.get("tunnelState") not in (None, "unavailable")
+    if not wanted and (hw.get("deviceType") != "iPad" or not reachable):
         continue
     print(d["identifier"], hw.get("udid", ""), name.replace(" ", "_"))
     break
