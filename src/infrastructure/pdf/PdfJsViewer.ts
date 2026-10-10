@@ -222,6 +222,31 @@ export async function mountPdfJs(
   eventBus.on("switchannotationeditormode", onModeRequest);
   eventBus.on("annotationeditormodechanged", onModeChanged);
 
+  // iPadOS clears the text selection when it turns a tap on the floating Highlight button
+  // into mouse events, just before the button's click handler runs, so pdf.js found
+  // nothing to highlight. Remember the selection when the button is pressed and put it
+  // back for the click (capture phase: before pdf.js's own handler on the button).
+  let pressedSelection: Range | null = null;
+  const isHighlightButton = (target: EventTarget | null) =>
+    target instanceof Element && target.closest(".editToolbar .highlightButton") !== null;
+  const onButtonPress = (event: Event) => {
+    if (!isHighlightButton(event.target)) return;
+    const selection = document.getSelection();
+    pressedSelection =
+      selection && !selection.isCollapsed && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+  };
+  const onButtonClick = (event: Event) => {
+    if (!pressedSelection || !isHighlightButton(event.target)) return;
+    const selection = document.getSelection();
+    if (selection?.isCollapsed) {
+      selection.removeAllRanges();
+      selection.addRange(pressedSelection);
+    }
+    pressedSelection = null;
+  };
+  container.addEventListener("pointerdown", onButtonPress, true);
+  container.addEventListener("click", onButtonClick, true);
+
   // The highlighter colour. pdf.js takes the default from the first colour in the list
   // above, but only once per page load (it's static), so set it explicitly as well, once
   // the editor types exist (they register with the first editor layer).
@@ -432,10 +457,20 @@ export async function mountPdfJs(
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void runSave(), AUTOSAVE_MS);
   };
+  // pdf.js clears the selection once it has turned it into a highlight, but on iPadOS the
+  // still-running selection gesture then puts back a selection reaching to the end of the
+  // page. Clear it again for a moment after each highlight is created.
+  const strayTimers: number[] = [];
+  const onEditorAdded = () => {
+    scheduleSave();
+    for (const ms of [30, 150, 400]) {
+      strayTimers.push(window.setTimeout(() => document.getSelection()?.removeAllRanges(), ms));
+    }
+  };
   if (highlighting.allowed) {
     storageHooks.onSetModified = scheduleSave;
     storageHooks.onResetModified = scheduleSave;
-    storageHooks.onAnnotationEditor = scheduleSave;
+    storageHooks.onAnnotationEditor = onEditorAdded;
     eventBus.on("switchannotationeditorparams", scheduleSave);
     eventBus.on("editingstateschanged", scheduleSave);
     container.addEventListener("pointerup", scheduleSave);
@@ -473,12 +508,15 @@ export async function mountPdfJs(
     },
     destroy() {
       window.clearTimeout(saveTimer);
+      for (const timer of strayTimers) window.clearTimeout(timer);
       storageHooks.onSetModified = null;
       storageHooks.onResetModified = null;
       storageHooks.onAnnotationEditor = null;
       eventBus.off("switchannotationeditorparams", scheduleSave);
       eventBus.off("editingstateschanged", scheduleSave);
       eventBus.off("annotationeditoruimanager", onUiManager);
+      container.removeEventListener("pointerdown", onButtonPress, true);
+      container.removeEventListener("click", onButtonClick, true);
       eventBus.off("showannotationeditorui", onModeRequest);
       eventBus.off("switchannotationeditormode", onModeRequest);
       eventBus.off("annotationeditormodechanged", onModeChanged);

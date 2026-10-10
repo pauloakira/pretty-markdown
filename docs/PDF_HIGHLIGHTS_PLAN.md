@@ -391,6 +391,20 @@ Shipped together: highlights that vanish on close would have confused daily use.
   a link under it (a citation) took the click and jumped pages. While the button shows, a
   CSS rule (`.textLayer:has(> .editToolbar)`) lifts the text layer above the link layer.
 
+- **iPad fixes, found on the device and reproduced in the simulator with logged touch
+  events:**
+  - iPadOS clears the text selection when it turns a tap on the floating button into
+    mouse events, just before the button's click handler runs, so nothing was highlighted.
+    The viewer remembers the selection on `pointerdown` and restores it in a capture-phase
+    `click` listener, before pdf.js's own handler.
+  - After pdf.js turns a touch selection into a highlight and clears the selection, the
+    still-running selection gesture puts back a selection reaching to the end of the page.
+    It is cleared again for a moment (30, 150 and 400 ms) after each new highlight.
+  - With a finger in highlight mode, a long-press highlights a single word straight away
+    (there's no time to drag the handles first). For longer passages: long-press in select
+    mode, drag the handles, then tap the floating button. Dragging across text is the
+    Pencil's job (H3).
+
 **Tested:**
 - 189 unit and app tests. The app tests cover:
   - toolbar, ⌘⇧H and Esc;
@@ -421,9 +435,13 @@ Shipped together: highlights that vanish on close would have confused daily use.
   - The saved file was checked with **pypdf** (two `/Highlight` annotations, right colours,
     original bytes intact) and rendered by **macOS Quick Look** (PDFKit): both highlights
     show, so Preview sees them too.
+- **iPad simulator, with real taps:**
+  - long-press, then tap the floating button: highlighted;
+  - highlight mode, then long-press: highlighted, with no stray selection;
+  - autosave wrote the file (135,272 → 136,340 bytes).
 - **Still to check by hand:**
   - ⌘Z through the native Edit menu, in the packaged Mac app;
-  - touch highlighting on the real iPad.
+  - the same touch flows on the real iPad.
 
 ### Phase H1: Highlighting in the viewer (planned)
 - Enable the editor in `PdfJsViewer`.
