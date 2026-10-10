@@ -19,7 +19,7 @@ const PDF_SETTLE_MS = 250;
  * content, so there's nothing to reload.
  */
 export function useFileWatch(tabs: readonly Tab[]) {
-  const { documentService, pdfSaver, tabManager } = useContainer();
+  const { documentService, pdfSaver, pdfViewer, tabManager } = useContainer();
   const [conflicts, setConflicts] = useState<Record<TabId, string>>({});
   const watchedRef = useRef<Set<string>>(new Set());
 
@@ -66,7 +66,9 @@ export function useFileWatch(tabs: readonly Tab[]) {
       if (disposed || !data.ok) return; // gone or mid-write: a later event follows
       if (pdfSaver.isOwnWrite(path, data.value)) return;
       const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
-      if (tab?.document.kind === "pdf") tabManager.reloadPdf(tab.id);
+      if (tab?.document.kind !== "pdf") return;
+      pdfViewer.forget(path); // the kept parsed copy is out of date
+      tabManager.reloadPdf(tab.id);
     };
 
     void (async () => {
@@ -99,7 +101,7 @@ export function useFileWatch(tabs: readonly Tab[]) {
       for (const timer of pdfTimers.values()) window.clearTimeout(timer);
       unlisten?.();
     };
-  }, [documentService, pdfSaver, tabManager]);
+  }, [documentService, pdfSaver, pdfViewer, tabManager]);
 
   const reloadConflict = useCallback(
     (id: TabId) => {

@@ -256,6 +256,19 @@ describe("PDF files changing on disk", () => {
     expect(app.pdfViewer.mounts).toHaveLength(2);
     expect(app.pdfViewer.mounts[0].destroyed).toBe(true);
     expect(app.pdfViewer.latest.current).toEqual({ page: 3, pageOffset: 0.25, zoom: 1.25 });
+    expect(app.pdfViewer.forgotten).toEqual([PDF]); // the kept parsed copy is stale
+  });
+
+  it("keeps parsed PDFs only for open tabs", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await openPdf(app);
+    expect(app.pdfViewer.retained[app.pdfViewer.retained.length - 1]).toEqual([PDF]);
+
+    const pdfTab = app.tabManager.getSnapshot().tabs.find((t) => t.document.kind === "pdf")!;
+    await act(async () => app.tabManager.closeTab(pdfTab.id));
+    expect(app.pdfViewer.retained[app.pdfViewer.retained.length - 1]).toEqual([]);
   });
 
   it("ignores its own saves of highlights", async () => {

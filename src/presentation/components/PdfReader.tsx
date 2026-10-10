@@ -108,21 +108,23 @@ export function PdfReader({
       return result;
     };
 
+    // Read only when the viewer needs the bytes (not when it still has this PDF parsed).
+    const source = {
+      key: path,
+      load: async () => {
+        // If this PDF was just closed with highlights still saving, read it after that save.
+        await pdfSaver.settled(path);
+        const data = await documentService.loadPdfData(path);
+        // Before pdf.js takes ownership of the bytes (they move to its worker).
+        if (data.ok) pdfSaver.opened(path, data.value);
+        return data;
+      },
+    };
+
     setStatus({ kind: "loading" });
     void (async () => {
-      // If this PDF was just closed with highlights still saving, read it after that save.
-      await pdfSaver.settled(path);
-      if (cancelled) return;
-      const data = await documentService.loadPdfData(path);
-      if (cancelled) return;
-      if (!data.ok) {
-        setStatus({ kind: "error", message: data.error });
-        return;
-      }
-      // Before mounting: pdf.js takes ownership of the bytes (they move to its worker).
-      pdfSaver.opened(path, data.value);
-      const mounted = await pdfViewer.mount(container, data.value, {
-        initialView: initialViewRef.current,
+      const mounted = await pdfViewer.mount(container, source, {
+        initialView: () => initialViewRef.current,
         onViewChange,
         onExternalLink: (url) => void linkOpener.openExternal(url),
         highlightColor: colorRef.current,

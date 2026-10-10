@@ -24,6 +24,7 @@ import type {
   HighlightAvailability,
   PdfInfo,
   PdfMountOptions,
+  PdfSource,
   PdfTool,
   PdfViewerFactory,
   PdfViewerHandle,
@@ -83,7 +84,7 @@ export class FakePdfHandle implements PdfViewerHandle {
     private readonly options: PdfMountOptions,
     readonly highlighting: HighlightAvailability,
   ) {
-    this.current = options.initialView;
+    this.current = options.initialView();
     this.color = options.highlightColor;
   }
   setTool(tool: PdfTool) {
@@ -158,16 +159,30 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
   info: PdfInfo = { pageCount: 12, title: "A Paper on Things" };
   highlighting: HighlightAvailability = { allowed: true };
 
+  /** Calls to `forget` and the key sets passed to `retain`, in order. */
+  readonly forgotten: string[] = [];
+  readonly retained: string[][] = [];
+
   async mount(
     container: HTMLDivElement,
-    _data: Uint8Array,
+    source: PdfSource,
     options: PdfMountOptions,
   ): Promise<Result<PdfViewerHandle>> {
+    const data = await source.load();
+    if (!data.ok) return data;
     if (this.failWith) return err(this.failWith);
     container.textContent = "[pdf pages]";
     const handle = new FakePdfHandle(this.info, options, this.highlighting);
     this.mounts.push(handle);
     return ok(handle);
+  }
+
+  forget(key: string) {
+    this.forgotten.push(key);
+  }
+
+  retain(keys: ReadonlySet<string>) {
+    this.retained.push([...keys].sort());
   }
 
   /** The most recently mounted viewer. */

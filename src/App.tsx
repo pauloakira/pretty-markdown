@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useContainer } from "./composition/ContainerContext";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
 import { initialPdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
@@ -80,6 +81,15 @@ export default function App() {
   useFileOpen(openRecent);
   // Reload documents that change on disk (or flag a conflict if they have unsaved edits).
   const fileWatch = useFileWatch(workspace.tabs);
+
+  // Parsed PDFs are kept for quick tab switches; release those whose tabs have closed.
+  const { pdfViewer } = useContainer();
+  const openPdfPaths = workspace.tabs
+    .flatMap((t) => (t.document.kind === "pdf" ? [t.document.path] : []))
+    .join("\n");
+  useEffect(() => {
+    pdfViewer.retain(new Set(openPdfPaths ? openPdfPaths.split("\n") : []));
+  }, [pdfViewer, openPdfPaths]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Dirty tabs waiting for a save prompt, one at a time (closing a group or "other tabs"
   // can queue several).
