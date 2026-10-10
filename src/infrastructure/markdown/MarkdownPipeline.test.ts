@@ -18,7 +18,7 @@ function makeFallbackPipeline(): MarkdownPipeline {
 describe("MarkdownPipeline", () => {
   it("renders standard markdown", () => {
     const html = makePipeline().render("# Title\n\nHello **world**.");
-    expect(html).toContain("<h1>Title</h1>");
+    expect(html).toContain('<h1 id="user-content-title">Title</h1>');
     expect(html).toContain("<strong>world</strong>");
   });
 
@@ -102,5 +102,21 @@ describe("MarkdownPipeline — LaTeX-style delimiters", () => {
   it("keeps $...$ and \\(...\\) working in the same document", () => {
     const html = makePipeline().render("Both $a$ and \\(b\\) render.");
     expect((html.match(/class="pm-math"/g) ?? []).length).toBe(2);
+  });
+
+  it("gives headings GitHub-style ids for in-document links", () => {
+    const html = makePipeline().render(
+      "# Getting Started\n\n## The `render()` call — notes!\n\n## Getting Started\n\n## Proof of $\\alpha$",
+    );
+    expect(html).toContain('<h1 id="user-content-getting-started">');
+    expect(html).toContain('<h2 id="user-content-the-render-call--notes">');
+    expect(html).toContain('<h2 id="user-content-getting-started-1">'); // repeat gets a suffix
+    expect(html).toContain('<h2 id="user-content-proof-of">'); // math left out of the slug
+  });
+
+  it("starts heading ids afresh for each document", () => {
+    const pipeline = makePipeline();
+    pipeline.render("# Intro");
+    expect(pipeline.render("# Intro")).toContain('id="user-content-intro"');
   });
 });

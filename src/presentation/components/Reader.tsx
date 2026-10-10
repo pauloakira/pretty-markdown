@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useDocumentLinks } from "../hooks/useDocumentLinks";
 
 /** Quiet period after the last scroll event before the position is recorded. */
 const SCROLL_SETTLE_MS = 400;
@@ -29,6 +30,7 @@ export function Reader({ html, initialScrollTop, onScrollPersist, containerRef }
   const localRef = useRef<HTMLDivElement>(null);
   const scrollRef = containerRef ?? localRef;
   const articleRef = useRef<HTMLElement>(null);
+  useDocumentLinks(scrollRef);
 
   useLayoutEffect(() => {
     if (articleRef.current) articleRef.current.innerHTML = html;

@@ -28,6 +28,7 @@ import {
 } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { highlightColorList, highlightHex, type HighlightColor } from "../../domain/values/Highlight";
+import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type {
@@ -131,9 +132,6 @@ interface StorageHooks {
   onResetModified: (() => void) | null;
   onAnnotationEditor: (() => void) | null;
 }
-
-/** Outside-document links the app may open in the user's browser. */
-const EXTERNAL_LINK = /^(https?|mailto):/i;
 
 function describeLoadError(error: unknown): string {
   if (error instanceof PasswordException) {
@@ -409,10 +407,12 @@ export async function mountPdfJs(
   const onClick = (event: MouseEvent) => {
     const anchor = (event.target as Element | null)?.closest?.("a[href]");
     const href = anchor?.getAttribute("href");
-    if (!href || href.startsWith("#")) return;
+    if (!href) return;
+    const link = classifyLink(href);
+    if (link.kind === "fragment") return;
     event.preventDefault();
     event.stopPropagation();
-    if (EXTERNAL_LINK.test(href)) options.onExternalLink(href);
+    if (link.kind === "external") options.onExternalLink(link.url);
   };
   container.addEventListener("click", onClick, true);
 
