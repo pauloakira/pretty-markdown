@@ -1,5 +1,6 @@
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { Result } from "../../domain/values/Result";
+import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { PdfView, PdfZoom } from "../../domain/values/ViewState";
 
 /** Options for mounting a PDF into a container element. */
@@ -56,6 +57,8 @@ export interface PdfViewerHandle {
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;
+  /** Search this document from the find bar; results go to `listener`. */
+  find(listener: FindListener): FindTarget;
   /** Save any highlights not saved yet, now. Resolves once the save has finished. */
   flush(): Promise<void>;
   /** Release the document, its worker resources and the container's contents. Call

@@ -1,39 +1,42 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { FindController, type FindState } from "../find/FindController";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FindState } from "../find/FindController";
+import type { FindListener, FindTarget } from "../find/FindTarget";
+
+const NO_RESULT: FindState = { count: 0, index: -1 };
 
 /**
- * Drives find-in-page for the active document. Binds a FindController to the current
- * reader element (looked up via `rootRef`) and re-runs on tab switch so the search
- * follows whichever document is showing.
+ * Drives find-in-page for the active document. `getTarget` makes a FindTarget for
+ * whatever is showing (the markdown reader, or a PDF), wired to report its results here;
+ * it returns null when nothing can be searched yet (e.g. a PDF still loading; call
+ * `refresh` once it's ready). The search follows tab switches.
  */
-export function useFind(rootRef: RefObject<HTMLElement | null>, activeId: string | null) {
+export function useFind(getTarget: (listener: FindListener) => FindTarget | null, activeId: string | null) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<FindState>({ count: 0, index: -1 });
-  const controllerRef = useRef<FindController | null>(null);
+  const [result, setResult] = useState<FindState>(NO_RESULT);
+  const targetRef = useRef<FindTarget | null>(null);
+  const getTargetRef = useRef(getTarget);
+  getTargetRef.current = getTarget;
 
-  const runSearch = useCallback(
-    (q: string) => {
-      const root = rootRef.current;
-      if (!root) {
-        setResult({ count: 0, index: -1 });
-        return;
-      }
-      const controller = new FindController(root);
-      controllerRef.current = controller;
-      setResult(controller.search(q));
-    },
-    [rootRef],
-  );
+  const runSearch = useCallback((q: string) => {
+    targetRef.current?.clear();
+    const target = getTargetRef.current(setResult);
+    targetRef.current = target;
+    if (!target) {
+      setResult(NO_RESULT);
+      return;
+    }
+    target.search(q);
+  }, []);
 
   const openFind = useCallback(() => setOpen(true), []);
 
   const closeFind = useCallback(() => {
-    controllerRef.current?.clear();
-    controllerRef.current = null;
+    targetRef.current?.clear();
+    targetRef.current = null;
     setOpen(false);
     setQuery("");
-    setResult({ count: 0, index: -1 });
+    setResult(NO_RESULT);
   }, []);
 
   const changeQuery = useCallback(
@@ -44,26 +47,29 @@ export function useFind(rootRef: RefObject<HTMLElement | null>, activeId: string
     [runSearch],
   );
 
-  const next = useCallback(() => {
-    if (controllerRef.current) setResult(controllerRef.current.next());
-  }, []);
+  const next = useCallback(() => targetRef.current?.next(), []);
+  const previous = useCallback(() => targetRef.current?.previous(), []);
 
-  const previous = useCallback(() => {
-    if (controllerRef.current) setResult(controllerRef.current.previous());
-  }, []);
+  // Re-run the current search on whatever is showing now: after a tab switch, or when a
+  // PDF has finished loading.
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const refresh = useCallback(() => {
+    if (openRef.current) runSearch(queryRef.current);
+  }, [runSearch]);
 
-  // Switching tabs swaps the reader element: re-run on the new document, or close if the
-  // last document was closed.
+  // Switching tabs swaps the document: re-run on the new one, or close if the last
+  // document was closed.
   useEffect(() => {
-    if (!open) return;
+    if (!openRef.current) return;
     if (!activeId) {
       closeFind();
       return;
     }
-    runSearch(query);
-    // `query` intentionally excluded — changes flow through changeQuery.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId]);
+    refresh();
+  }, [activeId, closeFind, refresh]);
 
-  return { open, query, result, openFind, closeFind, changeQuery, next, previous };
+  return { open, query, result, openFind, closeFind, changeQuery, next, previous, refresh };
 }

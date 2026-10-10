@@ -16,6 +16,7 @@ import { Welcome } from "./presentation/components/Welcome";
 import { useFileOpen } from "./presentation/hooks/useFileOpen";
 import { useFileWatch } from "./presentation/hooks/useFileWatch";
 import { useFind } from "./presentation/hooks/useFind";
+import { HtmlFindTarget, type FindListener, type FindTarget } from "./presentation/find/FindTarget";
 import { useLatexCopy } from "./presentation/hooks/useLatexCopy";
 import { useQuitGuard } from "./presentation/hooks/useQuitGuard";
 import { useRecentFiles } from "./presentation/hooks/useRecentFiles";
@@ -86,7 +87,18 @@ export default function App() {
   const [quitPromptOpen, setQuitPromptOpen] = useState(false);
 
   const readerRef = useRef<HTMLDivElement>(null);
-  const find = useFind(readerRef, active?.id ?? null);
+  // The PDF on screen: its live position (flushed before the session is saved), its
+  // unsaved highlights (saved before quitting), and its search.
+  const pdfControlRef = useRef<PdfReaderControl | null>(null);
+  const activeKind = active?.document.kind ?? null;
+  const getFindTarget = useCallback(
+    (listener: FindListener): FindTarget | null => {
+      if (activeKind === "pdf") return pdfControlRef.current?.find(listener) ?? null;
+      return readerRef.current ? new HtmlFindTarget(readerRef.current, listener) : null;
+    },
+    [activeKind],
+  );
+  const find = useFind(getFindTarget, active?.id ?? null);
   const { openFind, closeFind } = find;
 
   const mode = active?.viewState.mode ?? "reader";
@@ -95,9 +107,6 @@ export default function App() {
   const activeMarkdown = active && isMarkdown(active.document) ? active.document : null;
   const dirty = active ? isTabDirty(active) : false;
 
-  // The PDF on screen: its live position (flushed before the session is saved) and its
-  // unsaved highlights (saved before quitting).
-  const pdfControlRef = useRef<PdfReaderControl | null>(null);
 
   // The active reader's live scroll lives in the DOM, not yet in view state (that's only
   // captured on unmount). Flush it before saving the session so the reading position is
@@ -154,14 +163,14 @@ export default function App() {
       focusSibling,
       activateIndex,
       openFind: () => {
-        if (activeMarkdown && mode === "reader") openFind();
+        if (activeKind === "pdf" || (activeMarkdown && mode === "reader")) openFind();
       },
       save: saveActive,
       saveAs: saveActiveAs,
       toggleMode: toggleActiveMode,
       exportPdf: exportActive,
     }),
-    [openViaDialog, closeActive, focusSibling, activateIndex, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
+    [openViaDialog, closeActive, focusSibling, activateIndex, activeKind, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
   );
   useTabKeyboard(shortcuts);
 
@@ -219,7 +228,7 @@ export default function App() {
             </span>
           </div>
         )}
-        {activeMarkdown && find.open && mode === "reader" && (
+        {find.open && (activeKind === "pdf" || (activeMarkdown && mode === "reader")) && (
           <FindBar
             query={find.query}
             count={find.result.count}
@@ -240,6 +249,7 @@ export default function App() {
             highlightColor={settings.pdfHighlightColor}
             onHighlightColorChange={(pdfHighlightColor) => updateSettings({ pdfHighlightColor })}
             controlRef={pdfControlRef}
+            onReady={find.refresh}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (

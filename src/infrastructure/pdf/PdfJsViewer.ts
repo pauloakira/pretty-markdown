@@ -22,6 +22,7 @@ import {
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
   EventBus,
+  PDFFindController,
   PDFLinkService,
   PDFViewer,
   RenderingStates,
@@ -31,6 +32,7 @@ import { highlightColorList, highlightHex, type HighlightColor } from "../../dom
 import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
   HighlightAvailability,
   PdfMountOptions,
@@ -42,6 +44,29 @@ import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
+
+/**
+ * pdf.js reads a page's text with `for await (… of readableStream)` (getTextContent, used
+ * by find), and WebKit (Safari 18, so our WKWebView on macOS and iPadOS) can't iterate a
+ * ReadableStream that way: find silently matched nothing. Add the iterator where missing.
+ * (The text layer streams text another way, so selection always worked.)
+ */
+type IterableStream = ReadableStream & { [Symbol.asyncIterator]?: () => AsyncIterator<unknown> };
+const streamProto = ReadableStream.prototype as IterableStream;
+if (typeof streamProto[Symbol.asyncIterator] !== "function") {
+  streamProto[Symbol.asyncIterator] = async function* (this: ReadableStream) {
+    const reader = this.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        yield value;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  };
+}
 
 /**
  * Draw pages at no less than 2× pixel density. On a standard (1×) display pdf.js drew
@@ -181,11 +206,16 @@ export async function mountPdfJs(
 
   const eventBus = new EventBus();
   const linkService = new PDFLinkService({ eventBus });
+  // Find in the document: pdf.js searches page after page in the background and reports
+  // the match count as it goes (`updatefindmatchescount`), highlighting matches in the
+  // text layer and scrolling to the current one.
+  const findController = new PDFFindController({ linkService, eventBus, updateMatchesCountOnProgress: true });
   const viewerOptions: ConstructorParameters<typeof PDFViewer>[0] & ExtraViewerOptions = {
     container,
     viewer: viewerEl,
     eventBus,
     linkService,
+    findController,
     annotationMode: AnnotationMode.ENABLE, // links, but no form filling
     // The highlight editor: idle ("NONE") until the highlight tool is picked, but a text
     // selection always offers a Highlight button. Off entirely when not allowed.
@@ -304,6 +334,7 @@ export async function mountPdfJs(
   const pagesInit = new Promise<void>((resolve) => eventBus.on("pagesinit", () => resolve(), { once: true }));
   viewer.setDocument(pdf);
   linkService.setDocument(pdf, null);
+  findController.setDocument(pdf);
   await pagesInit;
 
   let zoom: PdfZoom = options.initialView.zoom;
@@ -448,6 +479,28 @@ export async function mountPdfJs(
   };
   container.addEventListener("click", onClick, true);
 
+  // ---- Find ------------------------------------------------------------------------
+  let findListener: FindListener | null = null;
+  let findQuery = "";
+  const onFindCount = (event: { matchesCount: { current: number; total: number } }) => {
+    const { current, total } = event.matchesCount;
+    findListener?.({ count: total, index: total > 0 && current > 0 ? current - 1 : -1 });
+  };
+  eventBus.on("updatefindmatchescount", onFindCount);
+  eventBus.on("updatefindcontrolstate", onFindCount);
+  const dispatchFind = (type: "" | "again", findPrevious: boolean) =>
+    eventBus.dispatch("find", {
+      source: null,
+      type,
+      query: findQuery,
+      caseSensitive: false,
+      entireWord: false,
+      highlightAll: true,
+      findPrevious,
+      matchDiacritics: false,
+    });
+  const clearFind = () => eventBus.dispatch("findbarclose", { source: null });
+
   // ---- Autosave -------------------------------------------------------------------
   //
   // Highlights live in pdf.js's annotation storage until saved. Every change (from a hook,
@@ -543,6 +596,31 @@ export async function mountPdfJs(
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
     },
+    find(listener) {
+      findListener = listener;
+      return {
+        search(query) {
+          findQuery = query;
+          if (!query) {
+            clearFind();
+            listener({ count: 0, index: -1 });
+            return;
+          }
+          dispatchFind("", false);
+        },
+        next() {
+          if (findQuery) dispatchFind("again", false);
+        },
+        previous() {
+          if (findQuery) dispatchFind("again", true);
+        },
+        clear() {
+          findQuery = "";
+          clearFind();
+          if (findListener === listener) findListener = null;
+        },
+      };
+    },
     destroy() {
       window.clearTimeout(saveTimer);
       for (const timer of strayTimers) window.clearTimeout(timer);
@@ -571,6 +649,8 @@ export async function mountPdfJs(
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
       eventBus.off("updateviewarea", reportView);
+      eventBus.off("updatefindmatchescount", onFindCount);
+      eventBus.off("updatefindcontrolstate", onFindCount);
       eventBus.off("scalechanging", reportView);
       viewer.setDocument(null as unknown as PDFDocumentProxy);
       linkService.setDocument(null);

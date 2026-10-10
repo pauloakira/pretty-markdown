@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import { useContainer } from "../../composition/ContainerContext";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
 import { PdfToolbar } from "./PdfToolbar";
 
@@ -14,6 +15,8 @@ export interface PdfReaderControl {
   view(): PdfView;
   /** Save highlights not saved yet. */
   flush(): Promise<void>;
+  /** Search the document (the find bar). */
+  find(listener: FindListener): FindTarget;
 }
 
 interface PdfReaderProps {
@@ -27,6 +30,8 @@ interface PdfReaderProps {
   onHighlightColorChange: (color: HighlightColor) => void;
   /** Filled while a document is showing, so the app can flush it before quitting. */
   controlRef: MutableRefObject<PdfReaderControl | null>;
+  /** The document is showing (e.g. to re-run an open search on it). */
+  onReady?: () => void;
 }
 
 type Status =
@@ -53,6 +58,7 @@ export function PdfReader({
   highlightColor,
   onHighlightColorChange,
   controlRef,
+  onReady,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -71,6 +77,8 @@ export function PdfReader({
   persistRef.current = onViewPersist;
   const colorRef = useRef(highlightColor);
   colorRef.current = highlightColor;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -131,8 +139,13 @@ export function PdfReader({
       handle = mounted.value;
       handleRef.current = handle;
       const shown = handle;
-      controlRef.current = { view: () => shown.view(), flush: () => shown.flush() };
+      controlRef.current = {
+        view: () => shown.view(),
+        flush: () => shown.flush(),
+        find: (listener) => shown.find(listener),
+      };
       setStatus({ kind: "ready", info: handle.info, highlighting: handle.highlighting });
+      onReadyRef.current?.();
       setZoomPercent(Math.round(handle.currentScale() * 100));
       setPage(handle.view().page);
     })();

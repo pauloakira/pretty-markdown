@@ -18,6 +18,8 @@ import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRende
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import type { HighlightColor } from "../domain/values/Highlight";
+import type { FindState } from "../presentation/find/FindController";
+import type { FindListener, FindTarget } from "../presentation/find/FindTarget";
 import type {
   HighlightAvailability,
   PdfInfo,
@@ -89,6 +91,23 @@ export class FakePdfHandle implements PdfViewerHandle {
   }
   setHighlightColor(color: HighlightColor) {
     this.color = color;
+  }
+  /** What the find bar asked of this PDF, in order (e.g. "search:basis", "next"). */
+  readonly findLog: string[] = [];
+  private findListener: FindListener | null = null;
+  find(listener: FindListener): FindTarget {
+    this.findListener = listener;
+    const log = this.findLog;
+    return {
+      search: (query) => log.push(`search:${query}`),
+      next: () => log.push("next"),
+      previous: () => log.push("previous"),
+      clear: () => log.push("clear"),
+    };
+  }
+  /** Simulate pdf.js reporting matches as it searches. */
+  reportFind(state: FindState) {
+    this.findListener?.(state);
   }
   /** Simulate pdf.js switching tools itself (e.g. the Highlight button by a selection). */
   switchToolItself(tool: PdfTool) {

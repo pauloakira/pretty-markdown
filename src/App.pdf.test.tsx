@@ -98,6 +98,60 @@ describe("PDF tabs", () => {
     expect(toolbar().page).toBe("7");
   });
 
+  it("searches the PDF from the find bar (⌘F), with counts as pdf.js reports them", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+
+    await act(async () => shortcut("KeyF"));
+    const input = document.querySelector<HTMLInputElement>(".findbar__input");
+    expect(input).not.toBeNull();
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(input, "basis");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(viewer.findLog).toEqual(["search:basis"]);
+
+    // pdf.js searches page after page: the count grows as it goes.
+    await act(async () => viewer.reportFind({ count: 2, index: 0 }));
+    expect(document.querySelector(".findbar__count")?.textContent).toBe("1/2");
+    await act(async () => viewer.reportFind({ count: 5, index: 0 }));
+    expect(document.querySelector(".findbar__count")?.textContent).toBe("1/5");
+
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true }));
+    });
+    expect(viewer.findLog.slice(1)).toEqual(["next", "previous"]);
+
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(document.querySelector(".findbar")).toBeNull();
+    expect(viewer.findLog[viewer.findLog.length - 1]).toBe("clear");
+  });
+
+  it("re-runs an open search on a PDF once it has loaded", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await settle();
+    await act(async () => shortcut("KeyF"));
+    const input = document.querySelector<HTMLInputElement>(".findbar__input")!;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(input, "intro");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await openPdf(app); // switching to a PDF that still has to load
+    expect(app.pdfViewer.latest.findLog).toContain("search:intro");
+  });
+
   it("ignores edit, save and export shortcuts", async () => {
     const app = makeContainer();
     await launch(app);

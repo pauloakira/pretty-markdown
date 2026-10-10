@@ -47,7 +47,7 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
 - **Edit with live preview.** A CodeMirror source pane sits next to a live preview with
   synced scrolling. Save / Save As is available, and unsaved changes are marked on the tab.
 - **Reads PDFs too.** Open PDFs in the same tabs as your notes, with zoom, fit to width,
-  page navigation, and working links. Search inside PDFs is coming next.
+  page navigation, working links, and search (`⌘F`).
 - **Highlight PDFs.** Select text and click the highlighter, or turn on highlight mode
   (`⌘⇧H`) to mark up a paper quickly, in five colours. Highlights are saved into the PDF
   itself, so Preview, the iPad and other readers see them too. Signed PDFs are left alone.
