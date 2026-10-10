@@ -400,6 +400,12 @@ Shipped together: highlights that vanish on close would have confused daily use.
   - After pdf.js turns a touch selection into a highlight and clears the selection, the
     still-running selection gesture puts back a selection reaching to the end of the page.
     It is cleared again for a moment (30, 150 and 400 ms) after each new highlight.
+  - **iPadOS's long-press picks the wrong word** over pdf.js's text layer: on "We" it
+    selected "Abstract. W", reproduced in the simulator. `textHit.ts` finds the word under
+    a point by measuring each character's on-screen box with a `Range`. While a touch
+    press turns into a selection (until 400 ms after the lift, since iPadOS re-applies its
+    own selection when the finger lifts), the viewer replaces it with that word.
+    Dragging the handles afterwards is left alone.
   - With a finger in highlight mode, a long-press highlights a single word straight away
     (there's no time to drag the handles first). For longer passages: long-press in select
     mode, drag the handles, then tap the floating button. Dragging across text is the

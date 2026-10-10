@@ -37,6 +37,7 @@ import type {
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
 import { preRenderPages } from "./preRender";
+import { wordRangeAt } from "./textHit";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -246,6 +247,48 @@ export async function mountPdfJs(
   };
   container.addEventListener("pointerdown", onButtonPress, true);
   container.addEventListener("click", onButtonClick, true);
+
+  // A long-press on iPad selects the wrong word over pdf.js's text layer (on "We" it
+  // selected "Abstract. W"; see textHit.ts). While a touch press is turning into a
+  // selection, keep replacing it with the word actually under the finger: iPadOS applies
+  // its own selection again when the finger lifts. After that, selection changes come
+  // from dragging the selection handles, which are the user's.
+  let press: { x: number; y: number; word: Range | null | undefined } | null = null;
+  const MOVE_TOLERANCE = 10;
+  const SETTLE_MS = 400;
+  const onTouchPress = (event: PointerEvent) => {
+    press = event.pointerType === "mouse" ? null : { x: event.clientX, y: event.clientY, word: undefined };
+  };
+  const onTouchMove = (event: PointerEvent) => {
+    if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > MOVE_TOLERANCE) press = null;
+  };
+  const onTouchRelease = () => {
+    const released = press;
+    window.setTimeout(() => {
+      if (press === released) press = null;
+    }, SETTLE_MS);
+  };
+  const onSelectionChange = () => {
+    if (!press) return;
+    const selection = document.getSelection();
+    if (!selection || selection.isCollapsed || !container.contains(selection.anchorNode)) return;
+    if (press.word === undefined) press.word = wordRangeAt(press.x, press.y);
+    const word = press.word;
+    if (!word) return; // not on a word: leave iPadOS's selection alone
+    const current = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const same =
+      current !== null &&
+      current.compareBoundaryPoints(Range.START_TO_START, word) === 0 &&
+      current.compareBoundaryPoints(Range.END_TO_END, word) === 0;
+    if (same) return;
+    selection.removeAllRanges();
+    selection.addRange(word.cloneRange());
+  };
+  container.addEventListener("pointerdown", onTouchPress, true);
+  container.addEventListener("pointermove", onTouchMove, true);
+  container.addEventListener("pointerup", onTouchRelease, true);
+  container.addEventListener("pointercancel", onTouchRelease, true);
+  document.addEventListener("selectionchange", onSelectionChange);
 
   // The highlighter colour. pdf.js takes the default from the first colour in the list
   // above, but only once per page load (it's static), so set it explicitly as well, once
@@ -516,6 +559,11 @@ export async function mountPdfJs(
       eventBus.off("editingstateschanged", scheduleSave);
       eventBus.off("annotationeditoruimanager", onUiManager);
       container.removeEventListener("pointerdown", onButtonPress, true);
+      container.removeEventListener("pointerdown", onTouchPress, true);
+      container.removeEventListener("pointermove", onTouchMove, true);
+      container.removeEventListener("pointerup", onTouchRelease, true);
+      container.removeEventListener("pointercancel", onTouchRelease, true);
+      document.removeEventListener("selectionchange", onSelectionChange);
       container.removeEventListener("click", onButtonClick, true);
       eventBus.off("showannotationeditorui", onModeRequest);
       eventBus.off("switchannotationeditormode", onModeRequest);
