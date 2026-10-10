@@ -17,9 +17,12 @@ import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
+import type { HighlightColor } from "../domain/values/Highlight";
 import type {
+  HighlightAvailability,
   PdfInfo,
   PdfMountOptions,
+  PdfTool,
   PdfViewerFactory,
   PdfViewerHandle,
 } from "../presentation/pdf/PdfViewer";
@@ -45,6 +48,9 @@ export const PDFS: Record<string, string> = {
   "/papers/quad/paper.pdf": "%PDF-1.7\n%âãÏÓ\n1 0 obj",
 };
 
+/** Bytes written to the fake disk (by PDF saves), by path. Read back before `PDFS`. */
+export const WRITTEN = new Map<string, Uint8Array>();
+
 export class FakeAppWindow implements AppWindow {
   handler: (() => void) | null = null;
   closed = 0;
@@ -61,11 +67,44 @@ export class FakeAppWindow implements AppWindow {
 export class FakePdfHandle implements PdfViewerHandle {
   destroyed = false;
   current: PdfView;
+  tool: PdfTool = "select";
+  color: HighlightColor;
+  /** Highlights not saved yet (the fake's stand-in for pdf.js's annotation storage). */
+  unsaved = 0;
+  /** Highlights in the document, saved or not. */
+  highlights = 0;
+  /** Calls to `flush`, and whether `destroy` came after the last one finished. */
+  flushes = 0;
+  destroyedAfterFlush = false;
   constructor(
     readonly info: PdfInfo,
     private readonly options: PdfMountOptions,
+    readonly highlighting: HighlightAvailability,
   ) {
     this.current = options.initialView;
+    this.color = options.highlightColor;
+  }
+  setTool(tool: PdfTool) {
+    this.tool = tool;
+  }
+  setHighlightColor(color: HighlightColor) {
+    this.color = color;
+  }
+  /** Simulate pdf.js switching tools itself (e.g. the Highlight button by a selection). */
+  switchToolItself(tool: PdfTool) {
+    this.tool = tool;
+    this.options.onToolChange(tool);
+  }
+  /** Simulate the reader highlighting a passage. */
+  highlight() {
+    this.highlights += 1;
+    this.unsaved += 1;
+  }
+  async flush() {
+    this.flushes += 1;
+    if (this.unsaved === 0) return;
+    const result = await this.options.onSave(new TextEncoder().encode(`%PDF-1.7 highlights=${this.highlights}`));
+    if (result.ok) this.unsaved = 0;
   }
   view() {
     return this.current;
@@ -89,6 +128,7 @@ export class FakePdfHandle implements PdfViewerHandle {
   }
   destroy() {
     this.destroyed = true;
+    this.destroyedAfterFlush = this.flushes > 0;
   }
 }
 
@@ -97,6 +137,7 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
   /** Set to make the next mounts fail with this message. */
   failWith: string | null = null;
   info: PdfInfo = { pageCount: 12, title: "A Paper on Things" };
+  highlighting: HighlightAvailability = { allowed: true };
 
   async mount(
     container: HTMLDivElement,
@@ -105,7 +146,7 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
   ): Promise<Result<PdfViewerHandle>> {
     if (this.failWith) return err(this.failWith);
     container.textContent = "[pdf pages]";
-    const handle = new FakePdfHandle(this.info, options);
+    const handle = new FakePdfHandle(this.info, options, this.highlighting);
     this.mounts.push(handle);
     return ok(handle);
   }
@@ -140,6 +181,8 @@ export function makeContainer(): TestContainer {
       return path in FILES ? ok(FILES[path]) : err("missing");
     },
     async readBytes(path, maxBytes) {
+      const written = WRITTEN.get(path);
+      if (written) return ok(maxBytes === undefined ? written : written.slice(0, maxBytes));
       const text = PDFS[path] ?? FILES[path];
       if (text === undefined) return err(`Failed to read '${path}': No such file`);
       const bytes = new TextEncoder().encode(text);
@@ -158,7 +201,8 @@ export function makeContainer(): TestContainer {
     async writeTextFile() {
       return ok(undefined);
     },
-    async writeBytes() {
+    async writeBytes(path, bytes) {
+      WRITTEN.set(path, bytes);
       return ok(undefined);
     },
   };
@@ -173,7 +217,7 @@ export function makeContainer(): TestContainer {
     appWindow: new FakeAppWindow(),
     documentExporter: { exportPdf: async () => {} },
     pdfViewer: new FakePdfViewerFactory(),
-    pdfSaver: new PdfSaver(writer),
+    pdfSaver: new PdfSaver(reader, writer),
     linkOpener: new FakeLinkOpener(),
     picks,
   };
@@ -249,6 +293,7 @@ export function useAppHarness() {
     vi.stubGlobal("ResizeObserver", NoopResizeObserver);
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     disk.session = null;
+    WRITTEN.clear();
   });
   afterEach(async () => {
     await quit();

@@ -13,13 +13,14 @@ describe("Settings", () => {
   });
 
   it("clamps out-of-range values", () => {
-    const clamped = clampSettings({ readingWidthRem: 999, fontScalePct: 5, theme: "dark" });
+    const clamped = clampSettings({ ...defaultSettings, readingWidthRem: 999, fontScalePct: 5, theme: "dark" });
     expect(clamped.readingWidthRem).toBe(READING_WIDTH.max);
     expect(clamped.fontScalePct).toBe(FONT_SCALE.min);
   });
 
   it("rounds and coerces invalid numbers", () => {
     const clamped = clampSettings({
+      ...defaultSettings,
       readingWidthRem: 46.7,
       fontScalePct: Number.NaN,
       theme: "system",
@@ -35,5 +36,14 @@ describe("Settings", () => {
       typeof clampSettings
     >[0];
     expect(clampSettings(bogus).theme).toBe("system");
+  });
+
+  it("keeps a palette highlight colour and falls back on anything else", () => {
+    expect(defaultSettings.pdfHighlightColor).toBe("yellow");
+    expect(clampSettings({ ...defaultSettings, pdfHighlightColor: "pink" }).pdfHighlightColor).toBe("pink");
+    const bogus = { ...defaultSettings, pdfHighlightColor: "purple" } as unknown as Parameters<
+      typeof clampSettings
+    >[0];
+    expect(clampSettings(bogus).pdfHighlightColor).toBe("yellow");
   });
 });

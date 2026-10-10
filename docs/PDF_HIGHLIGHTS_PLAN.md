@@ -1,8 +1,9 @@
 # PDF highlights — implementation plan
 
 > Status: **in progress.** Planned 2026-10-08, with Apple Pencil support added the same
-> day; a spike confirmed that the approach works (§2). **PR 1, writing PDF files, is done**
-> (2026-10-09; §7). This plan supersedes the "sidecar file" idea in
+> day; a spike confirmed that the approach works (§2). **PR 1 (writing PDF files) and PR 2
+> (phases H1 and H2: highlighting and autosave) are done** (2026-10-09; §7). Next: the
+> Apple Pencil (H3). This plan supersedes the "sidecar file" idea in
 > [PDF_PLAN.md §10](PDF_PLAN.md#10-future). Record decisions in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log) as phases land.
 
@@ -353,7 +354,102 @@ infrastructure, and the presentation layer only sees the `PdfViewer` contract.
 
 ## 7. Phases
 
-### Phase H1: Highlighting in the viewer (no saving yet)
+### Phases H1 + H2: Highlighting and saving ✅ (2026-10-09, PR 2)
+Shipped together: highlights that vanish on close would have confused daily use.
+
+**As built:**
+- **`PdfViewer` contract:**
+  - `highlighting` (allowed, or not with a reason);
+  - `setTool("select" | "highlight")`, `setHighlightColor`, `flush()`;
+  - `onSave` and `onToolChange` options.
+- **`PdfJsViewer`:**
+  - pdf.js's editor runs in `NONE` mode (idle) with the floating Highlight button. It is
+    `DISABLE`d for signed PDFs (`getSignatures()`), PDFs whose permissions forbid changes
+    (`MODIFY_CONTENTS`), and XFA forms.
+  - **Autosave:** a change schedules a save 1 s later, using pdf.js's storage hooks, its
+    editor events, and pointer/key up over the pages. A save writes `saveDocument()` only
+    if the annotation storage's hash changed since the last successful save.
+  - Removing the last new highlight makes pdf.js mark the storage *un*modified, but the
+    file still has that highlight; the hash comparison catches this.
+  - One save at a time; a change made during a save is saved right after.
+- **pdf.js asks its host app to change modes**: the floating button sends
+  `showannotationeditorui`, and double-clicking a highlight sends
+  `switchannotationeditormode`. pdf.js's own viewer app answers these; ours now does too,
+  for `NONE` and `HIGHLIGHT` only, and reports mode changes back to the toolbar.
+- **The toolbar colour is for new highlights:** the viewer deselects before setting it.
+  pdf.js's own toolbar on a highlight recolours that one.
+- **`PdfSaver`:**
+  - before writing, it re-reads the file and refuses if it no longer matches what was
+    loaded or last saved (§5.2), showing a banner;
+  - `finishLater` / `settled` let a reopened PDF wait for the closing viewer's last save.
+- **`PdfReader`:**
+  - Highlight toggle and colour menu (`HighlightControl`); ⌘⇧H toggles, Esc leaves.
+  - The colour is the `pdfHighlightColor` setting.
+  - Flushes on unmount (then destroys), on quit (both answers of the quit prompt), and
+    when the app is hidden (iPad app switching).
+- **Fix found live:** the floating button lives in the text layer, under the link layer, so
+  a link under it (a citation) took the click and jumped pages. While the button shows, a
+  CSS rule (`.textLayer:has(> .editToolbar)`) lifts the text layer above the link layer.
+
+- **iPad fixes, found on the device and reproduced in the simulator with logged touch
+  events:**
+  - iPadOS clears the text selection when it turns a tap on the floating button into
+    mouse events, just before the button's click handler runs, so nothing was highlighted.
+    The viewer remembers the selection on `pointerdown` and restores it in a capture-phase
+    `click` listener, before pdf.js's own handler.
+  - After pdf.js turns a touch selection into a highlight and clears the selection, the
+    still-running selection gesture puts back a selection reaching to the end of the page.
+    It is cleared again for a moment (30, 150 and 400 ms) after each new highlight.
+  - **iPadOS's long-press picks the wrong word** over pdf.js's text layer: on "We" it
+    selected "Abstract. W", reproduced in the simulator. `textHit.ts` finds the word under
+    a point by measuring each character's on-screen box with a `Range`. While a touch
+    press turns into a selection (until 400 ms after the lift, since iPadOS re-applies its
+    own selection when the finger lifts), the viewer replaces it with that word.
+    Dragging the handles afterwards is left alone.
+  - With a finger in highlight mode, a long-press highlights a single word straight away
+    (there's no time to drag the handles first). For longer passages: long-press in select
+    mode, drag the handles, then tap the floating button. Dragging across text is the
+    Pencil's job (H3).
+
+**Tested:**
+- 189 unit and app tests. The app tests cover:
+  - toolbar, ⌘⇧H and Esc;
+  - colour menu and its persistence;
+  - disabled-with-reason;
+  - flush on tab switch, before destroy;
+  - flush on quit (both answers);
+  - flush on hide;
+  - the changed-on-disk banner;
+  - the toolbar following the viewer.
+- **Live, in the browser** (the real app with Tauri's IPC mocked, a real paper):
+  - floating button and highlight mode;
+  - colour menu;
+  - Backspace delete and ⌘Z undo, both saved;
+  - close and reopen, with the highlights rendered from the file;
+  - deleting a highlight that came from the file;
+  - the changed-on-disk guard.
+  - Every save was checked by re-reading the bytes with pdf.js: the right highlights and
+    colours, and the original bytes intact.
+- **Fixtures generated with pypdf and pyHanko:**
+  - a **signed** PDF and a **permissions-locked** PDF: both disabled with their reason,
+    and never written;
+  - an **encrypted PDF that allows changes**: it saves, and reads back with the highlight.
+- **Live in the real Mac app (WKWebView)**, with a temporary probe on a copy of a paper:
+  - floating button → highlight → toolbar in highlight mode;
+  - a second highlight in a newly picked colour;
+  - autosave to the real file.
+  - The saved file was checked with **pypdf** (two `/Highlight` annotations, right colours,
+    original bytes intact) and rendered by **macOS Quick Look** (PDFKit): both highlights
+    show, so Preview sees them too.
+- **iPad simulator, with real taps:**
+  - long-press, then tap the floating button: highlighted;
+  - highlight mode, then long-press: highlighted, with no stray selection;
+  - autosave wrote the file (135,272 → 136,340 bytes).
+- **Still to check by hand:**
+  - ⌘Z through the native Edit menu, in the packaged Mac app;
+  - the same touch flows on the real iPad.
+
+### Phase H1: Highlighting in the viewer (planned)
 - Enable the editor in `PdfJsViewer`.
 - Extend the `PdfViewer` contract.
 - Add the toolbar marker button and colour menu, plus the shortcuts.

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createMarkdownDocument, createPdfDocument } from "./domain/entities/Document";
+import { CHANGED_ON_DISK } from "./application/services/PdfSaver";
 import {
   button,
   FILES,
@@ -12,6 +13,7 @@ import {
   shortcut,
   useAppHarness,
   type TestContainer,
+  WRITTEN,
 } from "./test/appHarness";
 import { disk } from "./test/tauriMock";
 
@@ -34,7 +36,7 @@ function toolbar() {
     page: document.querySelector<HTMLInputElement>(".pdftoolbar__page-input")?.value,
     of: document.querySelector(".pdftoolbar__page-count")?.textContent,
     zoom: document.querySelector(".pdftoolbar__zoom")?.textContent,
-    fitWidth: document.querySelector("[aria-pressed]")?.getAttribute("aria-pressed") === "true",
+    fitWidth: button("Fit width").getAttribute("aria-pressed") === "true",
   };
 }
 
@@ -180,5 +182,151 @@ describe("PDF tabs", () => {
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(
       "This PDF is password-protected. Opening protected PDFs isn't supported yet.",
     );
+  });
+});
+
+describe("PDF highlights", () => {
+  const highlightButton = () => button("Highlight");
+  const pressed = (b: HTMLButtonElement) => b.getAttribute("aria-pressed") === "true";
+  const savedText = () => new TextDecoder().decode(WRITTEN.get(PDF));
+
+  it("turns highlight mode on and off from the toolbar, ⌘⇧H and Esc", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+    expect(viewer.tool).toBe("select");
+    expect(pressed(highlightButton())).toBe(false);
+
+    await act(async () => highlightButton().click());
+    expect(viewer.tool).toBe("highlight");
+    expect(pressed(highlightButton())).toBe(true);
+    expect(document.querySelector(".pdf-reader__stage--highlighting")).not.toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyH", metaKey: true, shiftKey: true }));
+    });
+    expect(viewer.tool).toBe("select");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyH", metaKey: true, shiftKey: true }));
+    });
+    expect(viewer.tool).toBe("highlight");
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape" }));
+    });
+    expect(viewer.tool).toBe("select");
+    expect(pressed(highlightButton())).toBe(false);
+  });
+
+  it("follows the viewer when it enters highlight mode by itself", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    // The Highlight button next to a selection puts pdf.js in highlight mode.
+    await act(async () => app.pdfViewer.latest.switchToolItself("highlight"));
+    expect(pressed(highlightButton())).toBe(true);
+    await act(async () => highlightButton().click());
+    expect(app.pdfViewer.latest.tool).toBe("select");
+    expect(pressed(highlightButton())).toBe(false);
+  });
+
+  it("picks the colour from the menu, and remembers it for the next PDF", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    expect(app.pdfViewer.latest.color).toBe("yellow");
+
+    await act(async () => button("Highlight colour").click());
+    await act(async () => button("Green").click());
+    expect(app.pdfViewer.latest.color).toBe("green");
+    expect(document.querySelector('[role="menu"]')).toBeNull(); // closed after picking
+
+    // A PDF opened later starts with the new colour.
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await act(async () => app.tabManager.activateTab(app.tabManager.getSnapshot().tabs[0].id));
+    await settle();
+    expect(app.pdfViewer.mounts).toHaveLength(2);
+    expect(app.pdfViewer.latest.color).toBe("green");
+  });
+
+  it("is disabled, with the reason, for a PDF that can't be highlighted", async () => {
+    const app = makeContainer();
+    await launch(app);
+    const reason = "This PDF is digitally signed: highlighting it would invalidate the signature.";
+    app.pdfViewer.highlighting = { allowed: false, reason };
+    await openPdf(app);
+
+    expect(highlightButton().disabled).toBe(true);
+    expect(highlightButton().title).toBe(reason);
+    expect(button("Highlight colour").disabled).toBe(true);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyH", metaKey: true, shiftKey: true }));
+    });
+    expect(app.pdfViewer.latest.tool).toBe("select");
+  });
+
+  it("saves pending highlights into the file when switching tabs, before releasing the viewer", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await act(async () => app.tabManager.openDocument(createMarkdownDocument(NOTE, FILES[NOTE])));
+    await openPdf(app);
+    const viewer = app.pdfViewer.latest;
+    viewer.highlight();
+
+    await act(async () => app.tabManager.activateTab(app.tabManager.getSnapshot().tabs[0].id));
+    await settle();
+    expect(savedText()).toBe("%PDF-1.7 highlights=1");
+    expect(viewer.destroyed).toBe(true);
+    expect(viewer.destroyedAfterFlush).toBe(true);
+
+    // Reopening reads the saved file, and its next save goes through.
+    await act(async () => app.tabManager.activateTab(app.tabManager.getSnapshot().tabs[1].id));
+    await settle();
+    const reopened = app.pdfViewer.latest;
+    reopened.highlight();
+    reopened.highlight();
+    await act(async () => reopened.flush());
+    expect(savedText()).toBe("%PDF-1.7 highlights=2");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("saves pending highlights when quitting, whichever way the prompt is answered", async () => {
+    for (const answer of ["Reopen next time", "Don't reopen"]) {
+      WRITTEN.clear();
+      const app = makeContainer();
+      await launch(app);
+      await openPdf(app);
+      app.pdfViewer.latest.highlight();
+      await quitVia(app, answer);
+      expect(savedText()).toBe("%PDF-1.7 highlights=1");
+      await quit();
+    }
+  });
+
+  it("saves when the app goes to the background", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    app.pdfViewer.latest.highlight();
+
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    await settle();
+    expect(savedText()).toBe("%PDF-1.7 highlights=1");
+  });
+
+  it("won't overwrite a PDF that changed on disk, and says so", async () => {
+    const app = makeContainer();
+    await launch(app);
+    await openPdf(app);
+    // Another app replaces the file while it's open (e.g. LaTeX recompiled it).
+    WRITTEN.set(PDF, new TextEncoder().encode("%PDF-1.7 recompiled"));
+    app.pdfViewer.latest.highlight();
+    await act(async () => app.pdfViewer.latest.flush());
+
+    expect(savedText()).toBe("%PDF-1.7 recompiled");
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(CHANGED_ON_DISK);
+    expect(app.pdfViewer.latest.unsaved).toBe(1); // kept, not marked as saved
   });
 });

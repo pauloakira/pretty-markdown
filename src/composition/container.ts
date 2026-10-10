@@ -69,7 +69,7 @@ export function createContainer(): Container {
   const appWindow = new TauriAppWindow();
   const documentExporter = new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
-  const pdfSaver = new PdfSaver(fileSystem);
+  const pdfSaver = new PdfSaver(fileSystem, fileSystem);
   const linkOpener = new TauriLinkOpener();
 
   return {
