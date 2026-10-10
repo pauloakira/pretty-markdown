@@ -56,3 +56,45 @@ export function wordRangeAt(x: number, y: number): Range | null {
   range.setEnd(node, bounds[1]);
   return range;
 }
+
+/** A position in the text layer: a text node and an offset into it. */
+export interface TextPoint {
+  readonly node: Node;
+  readonly offset: number;
+}
+
+/** The text-layer spans of the page under (x, y). */
+function pageSpansAt(x: number, y: number): HTMLElement[] {
+  const page = document.elementsFromPoint(x, y).find((el) => el.classList.contains("page"));
+  return page ? Array.from(page.querySelectorAll<HTMLElement>(".textLayer span")) : [];
+}
+
+/**
+ * The caret position nearest to (x, y): in the text under the point, or else in the
+ * nearest line of text on that page (dragging a selection handle often passes between
+ * lines or past the end of one). Before or after a character, whichever half is nearer.
+ */
+export function caretAt(x: number, y: number): TextPoint | null {
+  let best: { node: Text; distance: number } | null = null;
+  for (const span of pageSpansAt(x, y)) {
+    const node = span.firstChild;
+    if (!(node instanceof Text) || node.data.trim().length === 0) continue;
+    const box = span.getBoundingClientRect();
+    if (box.height === 0) continue;
+    // Vertical distance counts much more: stay on the line the point is on.
+    const dy = y < box.top ? box.top - y : y > box.bottom ? y - box.bottom : 0;
+    const dx = x < box.left ? box.left - x : x > box.right ? x - box.right : 0;
+    const distance = dy * 4 + dx;
+    if (!best || distance < best.distance) best = { node, distance };
+  }
+  if (!best) return null;
+  const { node } = best;
+  const range = document.createRange();
+  for (let i = 0; i < node.data.length; i += 1) {
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    const box = range.getBoundingClientRect();
+    if (x < box.left + box.width / 2) return { node, offset: i };
+  }
+  return { node, offset: node.data.length };
+}

@@ -405,7 +405,19 @@ Shipped together: highlights that vanish on close would have confused daily use.
     a point by measuring each character's on-screen box with a `Range`. While a touch
     press turns into a selection (until 400 ms after the lift, since iPadOS re-applies its
     own selection when the finger lifts), the viewer replaces it with that word.
-    Dragging the handles afterwards is left alone.
+  - **Dragging a selection handle was just as wrong:** onto the next line, the *other* end
+    jumped back to "Abstract", or the handle wouldn't leave the line. Switching off the
+    text layer's `scaleX` stretch didn't help, so it isn't the transform; iPadOS's selection
+    is unreliable over pdf.js's absolutely positioned spans in general.
+  - **Fix (`touchSelection.ts`):** pointer events still arrive during a handle drag, so the
+    app decides the selection itself:
+    - a touch that starts near an end of the selection drags that end and keeps the other;
+    - the moving end goes to `caretAt(finger − initial offset)`, measured in the text
+      layer (the nearest line when between lines);
+    - whenever iPadOS applies its own selection, it's replaced again.
+    - iPadOS still draws the selection, its handles and its menu.
+    - Verified in the simulator on the reported paper: the end handle onto the next line,
+      the start handle onto the previous line, then highlighting the result.
   - With a finger in highlight mode, a long-press highlights a single word straight away
     (there's no time to drag the handles first). For longer passages: long-press in select
     mode, drag the handles, then tap the floating button. Dragging across text is the
