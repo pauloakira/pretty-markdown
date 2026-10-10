@@ -26,8 +26,8 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [ROADMAP.md](ROADMAP.md) | Milestone build plan |
 | [diagram/](diagram/) | Mermaid UML — use-case and sequence diagrams |
 | [ipad/](ipad/) | iPad version (same codebase, Tauri iOS target): [plan](ipad/PLAN.md) and [how to run/install](ipad/README.md). Keep the Mac build unaffected: fence platform code with `cfg(desktop)`/`cfg(mobile)` |
-| [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | Plan for PDF reading (planned, not started) — engine choice, layer-by-layer changes, phases |
-| [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | Plan for highlighting PDFs (planned, not started) — saved into the PDF, autosave, Apple Pencil on iPad, phases H1–H4 |
+| [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | PDF reading (Phases 1–3 done) — engine choice, layer-by-layer changes, phases, measurements |
+| [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | PDF highlights (done, H1–H4) — saved into the PDF, autosave, drag to highlight on iPad (finger and Pencil) |
 
 ## Architecture in one breath
 

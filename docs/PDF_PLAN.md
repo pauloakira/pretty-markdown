@@ -1,6 +1,7 @@
 # PDF reading — implementation plan
 
-> Status: **Phases 1–2 done** (2026-10-05); Phases 3–4 not started. Decisions are recorded in
+> Status: **Phases 1–3 done** (Phases 1–2 on 2026-10-05, Phase 3 on 2026-10-10); Phase 4
+> (polish) not started. Decisions are recorded in
 > [ARCHITECTURE.md §9](ARCHITECTURE.md#9-decision-log). Update
 > [DESIGN.md](../DESIGN.md) and [ROADMAP.md](../ROADMAP.md) as each phase lands.
 
@@ -291,7 +292,69 @@ commit-at-checkpoints convention).
 - **Known edge case (Phase 3):** an out-of-range saved page (the PDF got shorter) clamps to
   the last page in Chromium but landed a few pages earlier in WKWebView.
 
-### Phase 3: Integration
+### Phase 3: Integration ✅ (2026-10-10)
+
+**As built:**
+- **Search (⌘F):**
+  - `FindTarget` (`presentation/find/FindTarget.ts`) with a listener for results:
+    `HtmlFindTarget` wraps the markdown `FindController`; a PDF's comes from its viewer.
+  - The PDF target drives pdf.js's `PDFFindController`. Results arrive as it searches page
+    after page (the count grows); matches are highlighted and the current one is scrolled
+    to. An open search re-runs when a PDF finishes loading (`PdfReader.onReady`).
+  - **Found live:** in WebKit (our WKWebView on macOS and iPadOS) pdf.js's
+    `getTextContent` threw (`for await` over a `ReadableStream` isn't supported), so search
+    matched nothing. Unit tests with the fake viewer passed. `PdfJsViewer` now polyfills
+    `ReadableStream.prototype[Symbol.asyncIterator]` where it's missing.
+- **File watching (also the highlights plan's H4):**
+  - PDF tabs are reloaded when their file changes: after events settle (250 ms), the file
+    is read; unless its bytes are what `PdfSaver` last loaded or saved (our own highlight
+    save), the tab's revision is bumped and the viewer remounts.
+  - The start view is now read when the document is ready (`initialView` is a getter), so
+    the new viewer opens where the old one left off.
+- **File association:** `.pdf` (`com.adobe.pdf`) as a **Viewer** with rank **Alternate**,
+  so the app appears in Finder's Open With without becoming the default PDF app.
+  (Opening from the iPad's Files app is ipad/PLAN.md Phase C.)
+- **Document cache:**
+  - `PdfViewerFactory.mount` takes a `PdfSource` (key + `load`).
+  - The adapter keeps the parsed documents of the 3 most recently shown PDFs and reuses
+    them on remount. A document with highlight edits isn't kept: its file is re-read.
+  - Kept documents are dropped when their file changes (`forget`), and released when
+    their tab closes (`retain`, from the open tabs).
+- **Out-of-range restore:** not a wrong landing. Zoomed out, several pages fit, so at the
+  end of the document an earlier page was at the top and was reported as current. Now,
+  scrolled to the very end, the last page is the current page.
+
+**Measured** in a production build (minified front end, real WKWebView), with real books
+from iCloud:
+
+| Target (§5) | Result |
+|---|---|
+| A 300-page PDF opens within 1 s | 300 pages: 185 ms to the first page drawn. *Algorithms* (969 pages, 13 MB): 360–460 ms ✅ |
+| Scrolling at 60 fps | 78 fps average while scrolling 3 s through the 969-page book; 95th-percentile frame 15–17 ms ✅ |
+| Switching to a cached PDF tab under 100 ms | 24 pages: 120 → **60 ms**. 300 pages: 143 → **75 ms** ✅. 969 pages: 256 → **149 ms** ⚠ |
+
+For a very long book, the remaining cost is pdf.js building a placeholder for every page
+and drawing a dense page. Keeping whole drawn viewers would be the next step, at a real
+memory cost (on iPad especially), so it's left for now.
+
+**Tested:**
+- 217 tests. New ones cover:
+  - PDF find with progressive counts, next and previous, and closing;
+  - a re-run search once a PDF loads;
+  - reload on external change, at the same place;
+  - no reload for our own save or for a spurious event;
+  - the cache's forget and retain.
+- **Live, in the real app** (temporary probes):
+  - search: 17 matches for "polynomial", next/previous, no match, and closing clears the
+    highlights;
+  - an own highlight save didn't reload, and replacing the file from the terminal
+    reloaded it at the same page;
+  - `open -a` with a PDF opened it at launch and while running, and Launch Services lists
+    the app for PDFs with the default unchanged;
+  - the out-of-range restore at 50% and 25%;
+  - the performance numbers above.
+
+**Original plan:**
 - `FindTarget` refactor plus PDF find, file watching, file association, the document
   cache, and the out-of-range restore edge case above. (Page/zoom persistence through tab
   switches and quit/relaunch already landed in Phase 2. Recent files work for PDFs opened
