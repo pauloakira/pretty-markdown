@@ -93,6 +93,18 @@ export class FakePdfHandle implements PdfViewerHandle {
   setHighlightColor(color: HighlightColor) {
     this.color = color;
   }
+  /** Undo/redo requests, in order. */
+  readonly historyLog: string[] = [];
+  undo() {
+    this.historyLog.push("undo");
+  }
+  redo() {
+    this.historyLog.push("redo");
+  }
+  /** Simulate pdf.js reporting what can be undone or redone. */
+  reportHistory(canUndo: boolean, canRedo: boolean) {
+    this.options.onHistoryChange({ canUndo, canRedo });
+  }
   /** What the find bar asked of this PDF, in order (e.g. "search:basis", "next"). */
   readonly findLog: string[] = [];
   private findListener: FindListener | null = null;

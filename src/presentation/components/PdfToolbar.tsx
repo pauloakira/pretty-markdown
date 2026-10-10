@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { HighlightColor } from "../../domain/values/Highlight";
-import type { HighlightAvailability, PdfTool } from "../pdf/PdfViewer";
+import type { EditHistory, HighlightAvailability, PdfTool } from "../pdf/PdfViewer";
 import { HighlightControl } from "./HighlightControl";
 
 interface PdfToolbarProps {
@@ -23,6 +23,9 @@ interface PdfToolbarProps {
   highlightColor: HighlightColor;
   onToolChange: (tool: PdfTool) => void;
   onHighlightColorChange: (color: HighlightColor) => void;
+  history: EditHistory;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 /** Toolbar for a PDF tab: the highlighter, page indicator with go-to-page, and zoom. */
@@ -42,6 +45,9 @@ export function PdfToolbar({
   highlightColor,
   onToolChange,
   onHighlightColorChange,
+  history,
+  onUndo,
+  onRedo,
 }: PdfToolbarProps) {
   const ready = pageCount !== null;
   // The field shows the current page until the user types; Enter jumps, Escape/blur reverts.
@@ -67,6 +73,28 @@ export function PdfToolbar({
           onToolChange={onToolChange}
           onColorChange={onHighlightColorChange}
         />
+        {highlighting?.allowed && (
+          <div className="segmented" role="group" aria-label="Highlight history">
+            <button
+              className="segmented__btn pdftoolbar__history-btn"
+              onClick={onUndo}
+              disabled={!history.canUndo}
+              aria-label="Undo"
+              title="Undo highlight change (⌘Z)"
+            >
+              ↶
+            </button>
+            <button
+              className="segmented__btn pdftoolbar__history-btn"
+              onClick={onRedo}
+              disabled={!history.canRedo}
+              aria-label="Redo"
+              title="Redo (⌘⇧Z)"
+            >
+              ↷
+            </button>
+          </div>
+        )}
         <label className="pdftoolbar__page" title="Go to page">
           <input
             className="pdftoolbar__page-input"

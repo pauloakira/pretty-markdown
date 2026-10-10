@@ -3,7 +3,7 @@ import { useContainer } from "../../composition/ContainerContext";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener, FindTarget } from "../find/FindTarget";
-import type { HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
+import type { EditHistory, HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
 import { PdfToolbar } from "./PdfToolbar";
 
 /** Quiet period after the last scroll/zoom before the position is recorded (as Reader). */
@@ -70,6 +70,7 @@ export function PdfReader({
   const [fitWidth, setFitWidth] = useState(initialView.zoom === "page-width");
   const [tool, setToolState] = useState<PdfTool>("select");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [history, setHistory] = useState<EditHistory>({ canUndo: false, canRedo: false });
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -131,6 +132,9 @@ export function PdfReader({
         onSave,
         onToolChange: (next) => {
           if (!cancelled) setToolState(next);
+        },
+        onHistoryChange: (next) => {
+          if (!cancelled) setHistory(next);
         },
       });
       if (!mounted.ok) {
@@ -249,6 +253,9 @@ export function PdfReader({
         highlightColor={highlightColor}
         onToolChange={setTool}
         onHighlightColorChange={onHighlightColorChange}
+        history={history}
+        onUndo={() => handleRef.current?.undo()}
+        onRedo={() => handleRef.current?.redo()}
       />
       {saveError && (
         <div className="banner banner--error" role="alert">

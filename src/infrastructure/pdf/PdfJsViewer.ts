@@ -315,11 +315,37 @@ export async function mountPdfJs(
       mustEnterInEditMode: event.mustEnterInEditMode ?? false,
     };
   };
+  let editorMode: number = AnnotationEditorType.NONE;
   const onModeChanged = (event: { mode: number }) => {
+    editorMode = event.mode;
     const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
   };
+  // No freehand highlights. In highlight mode pdf.js draws one when a press lands on empty
+  // space instead of text: its text layer covers the page, and a press on the layer itself
+  // (between lines, past the text), on its images, or on the editor layer starts a
+  // freehand stroke. On a touch screen that happened by accident (a stroke starting just
+  // off the text). Highlights follow text, so such a press does nothing but deselect.
+  const EMPTY_SPACE = ".textLayer, .endOfContent, .textLayerImages, .textLayerImagePlaceholder, .annotationEditorLayer";
+  const onEmptyPress = (event: PointerEvent) => {
+    if (editorMode !== AnnotationEditorType.HIGHLIGHT) return;
+    const target = event.target as Element | null;
+    const onImage = target?.getAttribute("role") === "img" && target.closest(".textLayer");
+    if (!target || !(target.matches(EMPTY_SPACE) || onImage)) return;
+    event.stopPropagation();
+    uiManager?.unselectAll(); // what a press on empty space is still for
+  };
+  container.addEventListener("pointerdown", onEmptyPress, true);
+
+  // Undo / redo, for the toolbar (the iPad has no ⌘Z without a keyboard).
+  const onEditingStates = (event: { details: { hasSomethingToUndo?: boolean; hasSomethingToRedo?: boolean } }) =>
+    options.onHistoryChange({
+      canUndo: event.details.hasSomethingToUndo === true,
+      canRedo: event.details.hasSomethingToRedo === true,
+    });
+  eventBus.on("editingstateschanged", onEditingStates);
+
   eventBus.on("showannotationeditorui", onModeRequest);
   eventBus.on("switchannotationeditormode", onModeRequest);
   eventBus.on("annotationeditormodechanged", onModeChanged);
@@ -664,6 +690,12 @@ export async function mountPdfJs(
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
     },
+    undo() {
+      uiManager?.undo();
+    },
+    redo() {
+      uiManager?.redo();
+    },
     find(listener) {
       findListener = listener;
       return {
@@ -704,6 +736,8 @@ export async function mountPdfJs(
       applyTouchHighlighting(false);
       container.removeEventListener("click", onButtonClick, true);
       eventBus.off("showannotationeditorui", onModeRequest);
+      eventBus.off("editingstateschanged", onEditingStates);
+      container.removeEventListener("pointerdown", onEmptyPress, true);
       eventBus.off("switchannotationeditormode", onModeRequest);
       eventBus.off("annotationeditormodechanged", onModeChanged);
       eventBus.off("annotationeditorlayerrendered", onFirstEditorLayer);
