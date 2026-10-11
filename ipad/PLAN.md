@@ -1,7 +1,7 @@
 # iPad version — plan
 
-> Status: **Phase A (spike) done** (2026-10-06); **Phases B and C implemented**
-> (2026-10-07, 2026-10-10), pending a real-device check; Phase D in progress. Same codebase as the Mac app; see
+> Status: **Phase A (spike) done** (2026-10-06); **Phase B implemented** (2026-10-07);
+> **Phase C done** (2026-10-10, verified on the iPad); Phase D in progress. Same codebase as the Mac app; see
 > [README.md](README.md) for running it. Record decisions in
 > [ARCHITECTURE.md §9](../docs/ARCHITECTURE.md#9-decision-log).
 
@@ -79,7 +79,7 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   store an opaque document reference instead of assuming a path. The domain stays
   unchanged.
 
-## Phase C: Open from Files and the share sheet ✅ (2026-10-10; device check pending)
+## Phase C: Open from Files and the share sheet ✅ (2026-10-10)
 
 **As built:**
 - **Document types for iPad** in iOS-only config, so the Mac's associations are unchanged:
@@ -103,8 +103,8 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     with math rendered;
   - the tab's path is the original file in Files storage (no Inbox copy), and the hook
     stores its bookmark.
-- **Real-device check still to do:** the simulator doesn't enforce the sandbox, so open
-  a file from iCloud Drive on the iPad, force-quit, and check it reopens.
+- **Verified on the iPad** (2026-10-10), where the sandbox is enforced: files shared from
+  iCloud Drive open, and reopen after a force-quit.
 
 ## Phase D: Touch and iPad UX (in progress)
 
