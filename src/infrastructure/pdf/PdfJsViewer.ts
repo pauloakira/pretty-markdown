@@ -106,6 +106,18 @@ const REPORT_INTERVAL_MS = 100;
 const PRERENDER_AHEAD = 4;
 const PRERENDER_BEHIND = 1;
 
+/**
+ * Largest page canvas on a touch device (iPad), in pixels. pdf.js caps iOS at 5.2 MP; a
+ * fit-width book page on a 12.9" Retina iPad is ~5.8 MP, so every page was drawn twice: a
+ * quarter-resolution copy plus a sharp "detail" canvas of the visible part, which pdf.js
+ * redraws as the view moves, i.e. all through a scroll. 12 MP draws fit-width pages whole
+ * in either orientation (landscape A4 is ~10 MP); zoomed further, the detail canvases
+ * return. Measured in the simulator on a 323-page book: main-thread stalls per 1000 px
+ * scrolled 162 → 75 ms. Memory: pdf.js keeps ~10 drawn pages (~220 MB at fit-width).
+ * (iOS allows up to 16.7 MP per canvas; the Mac keeps pdf.js's 33 MP.)
+ */
+const TOUCH_MAX_CANVAS_PIXELS = 12 * 2 ** 20;
+
 /** The slice of PDFViewer's (semi-internal) API the pre-renderer uses; pdfjs-dist is pinned. */
 interface VisiblePage {
   readonly id: number;
@@ -280,6 +292,7 @@ export async function mountPdfJs(
     annotationEditorMode: highlighting.allowed ? AnnotationEditorType.NONE : AnnotationEditorType.DISABLE,
     annotationEditorHighlightColors: highlightColorList(options.highlightColor),
     enableHighlightFloatingButton: true,
+    maxCanvasPixels: navigator.maxTouchPoints > 0 ? TOUCH_MAX_CANVAS_PIXELS : undefined,
   };
   const viewer = new PDFViewer(viewerOptions);
   linkService.setViewer(viewer);

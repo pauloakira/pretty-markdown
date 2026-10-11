@@ -124,6 +124,9 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     chip → editor; tap the chip → collapse.
 - ✅ **Text selection and highlighting by touch** in PDFs: see docs/PDF_HIGHLIGHTS_PLAN.md
   (H3 and the iPad fixes).
+- ✅ **Smoother PDF scrolling** (2026-10-11): page canvases up to 12 MP, so each page is
+  drawn once instead of as a low-resolution copy plus a sharp part redrawn while
+  scrolling. Main-thread stalls are about half. Details in docs/PDF_PLAN.md §5.
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.

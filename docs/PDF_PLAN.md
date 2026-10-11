@@ -175,6 +175,26 @@ framework imports, pdf.js stays in infrastructure, and adapters are wired up onl
 - **Rendering:** pdf.js's `PDFViewer` renders only visible (and nearby) pages and frees
   canvases that scroll far away. Keep its defaults unless profiling says otherwise.
 - **Parsing** happens in the pdf.js web worker, so the UI thread stays free.
+- **iPad canvas size** (2026-10-11): pdf.js caps page canvases on iOS at 5.2 MP. A
+  fit-width book page on a 12.9" Retina iPad is ~5.8 MP, so pdf.js drew every page twice:
+  a quarter-resolution copy plus a sharp "detail" canvas of the visible part, redrawn as
+  the view moved, i.e. all through a scroll. On touch devices we allow 12 MP
+  (`TOUCH_MAX_CANVAS_PIXELS`), so fit-width pages are drawn once, whole, in either
+  orientation.
+  - Measured with a temporary probe in the iPad simulator, flicking through a 323-page
+    book (main-thread time blocked per 1000 px scrolled):
+
+    | Variant | Blocked per 1000 px | Canvas memory |
+    |---|---|---|
+    | pdf.js default | 162 ms | 21 MP |
+    | 12 MP pages (shipped) | 75–88 ms | 55 MP (~220 MB) |
+    | + no pre-drawing | 62 ms | 55 MP |
+    | pdf.js partial rendering | 164 ms | 12 MP |
+
+  - We kept pre-drawing: it's only a small gain to drop, and pages would show up blank.
+  - Most of what's left is pdf.js building the text layer: without it, 22 ms. The text
+    layer is needed for selection, highlights and find. Our `:has()` CSS rule isn't a
+    factor (no change without it).
 - **Memory:** cap the cache at 3 parsed documents and call `destroy()` on eviction and
   when a tab closes.
 - **Startup:** no cost for markdown users, thanks to the lazy chunk.
