@@ -1,7 +1,7 @@
 # iPad version — plan
 
-> Status: **Phase A (spike) done** (2026-10-06); **Phase B implemented** (2026-10-07),
-> pending a real-device check. Same codebase as the Mac app; see
+> Status: **Phase A (spike) done** (2026-10-06); **Phases B and C implemented**
+> (2026-10-07, 2026-10-10), pending a real-device check; Phase D in progress. Same codebase as the Mac app; see
 > [README.md](README.md) for running it. Record decisions in
 > [ARCHITECTURE.md §9](../docs/ARCHITECTURE.md#9-decision-log).
 
@@ -79,12 +79,32 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   store an opaque document reference instead of assuming a path. The domain stays
   unchanged.
 
-## Phase C: Open from Files and the share sheet
+## Phase C: Open from Files and the share sheet ✅ (2026-10-10; device check pending)
 
-- Declare markdown and PDF document types, with `LSSupportsOpeningDocumentsInPlace`
-  (Xcode already warns that it's missing).
-- Handle URLs opened from Files, "Open in…", and the share sheet. On iOS the existing
-  `RunEvent::Opened` delivers them.
+**As built:**
+- **Document types for iPad** in iOS-only config, so the Mac's associations are unchanged:
+  - `src-tauri/tauri.ios.conf.json` declares markdown and PDF by content type
+    (`net.daringfireball.markdown`, `com.adobe.pdf`). iPadOS ignores the extension list,
+    so markdown wasn't offered before.
+  - `src-tauri/Info.ios.plist` imports the markdown type (`.md`, `.markdown`, conforming
+    to plain text) and sets `LSSupportsOpeningDocumentsInPlace`: the app opens the
+    original file, not a copy, so edits and highlights land in iCloud.
+- **Access to the opened file:** iPadOS grants it through the URL object, but Tauri passes
+  only the path on. The iPad plugin wraps the app delegate's `application(_:open:options:)`
+  (`OpenedDocuments` in `IpadFilesPlugin.swift`): it starts access and stores a bookmark
+  under the path, as for a picked file. Tauri's `Opened` event then reaches the page
+  through the existing `open-files` flow, and `access(path)` reopens it on later launches.
+  The plugin is created before the app delegate exists, so the wrap is installed at
+  `didFinishLaunching`, which still comes before a launch-time URL.
+- **Verified in the simulator** (Files → long-press → Share → pretty-markdown):
+  - offered for both `.pdf` and `.md`;
+  - while running: the PDF opens as a new tab;
+  - from a cold start: the session's tabs restore and the shared note opens as a new tab,
+    with math rendered;
+  - the tab's path is the original file in Files storage (no Inbox copy), and the hook
+    stores its bookmark.
+- **Real-device check still to do:** the simulator doesn't enforce the sandbox, so open
+  a file from iCloud Drive on the iPad, force-quit, and check it reopens.
 
 ## Phase D: Touch and iPad UX (in progress)
 
