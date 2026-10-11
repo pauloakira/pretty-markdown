@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged by Tauri into the iOS app's Info.plist only (the Mac uses tauri.conf.json's
+  fileAssociations). See ipad/PLAN.md, Phase C.
+  - Documents opened from Files or another app open in place: the app reads, edits and
+    highlights the original file (e.g. in iCloud Drive), not a copy.
+  - iPadOS matches documents by content type, not extension, so markdown needs one
+    (imported, as the system may not declare it). The document types themselves come
+    from fileAssociations in tauri.ios.conf.json.
+-->
+<plist version="1.0">
+<dict>
+  <key>LSSupportsOpeningDocumentsInPlace</key>
+  <true/>
+  <key>UTImportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>net.daringfireball.markdown</string>
+      <key>UTTypeDescription</key>
+      <string>Markdown Document</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>md</string>
+          <string>markdown</string>
+        </array>
+        <key>public.mime-type</key>
+        <array>
+          <string>text/markdown</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

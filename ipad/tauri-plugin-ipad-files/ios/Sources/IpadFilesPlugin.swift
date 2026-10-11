@@ -11,6 +11,7 @@
 // only exists in iCloud.
 
 import Foundation
+import ObjectiveC
 import SwiftRs
 import Tauri
 import UIKit
@@ -20,10 +21,75 @@ class PathArgs: Decodable {
   let path: String
 }
 
+/// The bookmarks, by the path the app knows each document under (in UserDefaults).
+enum Bookmarks {
+  private static let key = "pretty-markdown.bookmarks"
+
+  static func all() -> [String: Data] {
+    UserDefaults.standard.dictionary(forKey: key) as? [String: Data] ?? [:]
+  }
+
+  static func store(_ data: Data, for path: String) {
+    var bookmarks = all()
+    bookmarks[path] = data
+    UserDefaults.standard.set(bookmarks, forKey: key)
+  }
+}
+
+/// Files opened from outside the app: "Open in pretty-markdown" from Files, the share sheet,
+/// or another app. iPadOS hands the app a security-scoped URL for the document *in place*
+/// (Info.ios.plist: LSSupportsOpeningDocumentsInPlace), and the access belongs to that URL
+/// object. Tauri passes the file on to the page as a plain path, which carries no access,
+/// so this hook catches the URL first: it starts access and keeps a bookmark under the
+/// path, exactly as for a picked file, and the app's normal file reading then just works.
+enum OpenedDocuments {
+  private static var installed = false
+
+  /// Wrap the app delegate's `application(_:open:options:)`. The plugin is created before
+  /// the app delegate exists, so this waits for launch to finish, which is before iPadOS
+  /// delivers a URL the app was launched to open.
+  static func install() {
+    if UIApplication.shared.delegate != nil {
+      wrapDelegate()
+      return
+    }
+    var observer: NSObjectProtocol?
+    observer = NotificationCenter.default.addObserver(
+      forName: UIApplication.didFinishLaunchingNotification, object: nil, queue: nil
+    ) { _ in
+      if let observer { NotificationCenter.default.removeObserver(observer) }
+      wrapDelegate()
+    }
+  }
+
+  private static func wrapDelegate() {
+    guard !installed, let delegate = UIApplication.shared.delegate,
+      let cls = object_getClass(delegate)
+    else { return }
+    let selector = NSSelectorFromString("application:openURL:options:")
+    guard let method = class_getInstanceMethod(cls, selector) else { return }
+    installed = true
+    typealias OpenURL = @convention(c) (AnyObject, Selector, UIApplication, NSURL, NSDictionary) -> Bool
+    let original = unsafeBitCast(method_getImplementation(method), to: OpenURL.self)
+    let hook: @convention(block) (AnyObject, UIApplication, NSURL, NSDictionary) -> Bool = {
+      this, app, url, options in
+      keep(url as URL)
+      return original(this, selector, app, url, options)
+    }
+    method_setImplementation(method, imp_implementationWithBlock(hook))
+  }
+
+  private static func keep(_ url: URL) {
+    guard url.isFileURL else { return }
+    // Access lasts until the app quits; the bookmark brings it back on later launches.
+    _ = url.startAccessingSecurityScopedResource()
+    if let data = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+      Bookmarks.store(data, for: url.path)
+    }
+  }
+}
 
 class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
-  /// Bookmarks by the path the app knows the document under.
-  private let bookmarksKey = "pretty-markdown.bookmarks"
   /// Files we've started security-scoped access to. Access is kept for the app's lifetime
   /// (open documents are read and saved repeatedly); the system ends it when the app quits.
   private var accessing = Set<String>()
@@ -48,16 +114,6 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
     webView?.evaluateJavaScript("window.dispatchEvent(new Event('pencil-double-tap'))")
   }
 
-  private func loadBookmarks() -> [String: Data] {
-    UserDefaults.standard.dictionary(forKey: bookmarksKey) as? [String: Data] ?? [:]
-  }
-
-  private func storeBookmark(_ data: Data, for path: String) {
-    var bookmarks = loadBookmarks()
-    bookmarks[path] = data
-    UserDefaults.standard.set(bookmarks, forKey: bookmarksKey)
-  }
-
   private func startAccess(_ url: URL) {
     lock.lock()
     defer { lock.unlock() }
@@ -75,7 +131,7 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
       do {
         let data = try url.bookmarkData(
           options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-        self.storeBookmark(data, for: args.path)
+        Bookmarks.store(data, for: args.path)
         invoke.resolve(["path": url.path])
       } catch {
         invoke.reject(
@@ -95,7 +151,7 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
   private func makeAccessible(_ path: String, _ invoke: Invoke) {
     var url = URL(fileURLWithPath: path)
 
-    if let data = loadBookmarks()[path] {
+    if let data = Bookmarks.all()[path] {
       var stale = false
       if let resolved = try? URL(
         resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
@@ -106,7 +162,7 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
           let fresh = try? url.bookmarkData(
             options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
         {
-          storeBookmark(fresh, for: path)
+          Bookmarks.store(fresh, for: path)
         }
       }
     }
@@ -130,5 +186,6 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
 
 @_cdecl("init_plugin_ipad_files")
 func initPlugin() -> Plugin {
+  OpenedDocuments.install()
   return IpadFilesPlugin()
 }
