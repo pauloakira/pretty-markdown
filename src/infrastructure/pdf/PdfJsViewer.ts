@@ -360,25 +360,23 @@ export async function mountPdfJs(
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
   };
-  // No freehand highlights. In highlight mode pdf.js draws one when a press lands on empty
-  // space instead of text: its text layer covers the page, and a press on the layer itself
-  // (between lines, past the text), on its images, or on the editor layer starts a
-  // freehand stroke. On a touch screen that happened by accident (a stroke starting just
-  // off the text). Highlights follow text, so such a press does nothing but deselect.
+  // No freehand highlights. pdf.js draws one when a press lands on empty space instead of
+  // text: its text layer covers the page, and a press on the layer itself (between lines,
+  // past the text), on its images, or on the editor layer starts a freehand stroke. On a
+  // touch screen that happened by accident (a stroke starting just off the text).
+  //
+  // Such presses are stopped in every mode, not just highlight mode: on the iPad, after
+  // highlight mode was turned off, a page could keep pdf.js's stroke listener, with the
+  // editor fully back to "none" (seen on the device with the Pencil). Highlights follow
+  // text, so a press there does nothing but deselect; text selection still starts (the
+  // press isn't cancelled, only kept from pdf.js).
   const EMPTY_SPACE = ".textLayer, .endOfContent, .textLayerImages, .textLayerImagePlaceholder, .annotationEditorLayer";
   const onEmptyPress = (event: PointerEvent) => {
     const target = event.target as Element | null;
-    // pdf.js's own state, not just the last mode it reported: it marks a page's text layer
-    // ("highlighting") while it would start a stroke there.
-    const strokeArmed =
-      editorMode === AnnotationEditorType.HIGHLIGHT ||
-      uiManager?.getMode() === AnnotationEditorType.HIGHLIGHT ||
-      Boolean(target?.closest(".textLayer.highlighting"));
-    if (!strokeArmed) return;
     const onImage = target?.getAttribute("role") === "img" && target.closest(".textLayer");
     if (!target || !(target.matches(EMPTY_SPACE) || onImage)) return;
     event.stopPropagation();
-    uiManager?.unselectAll(); // what a press on empty space is still for
+    if (editorMode === AnnotationEditorType.HIGHLIGHT) uiManager?.unselectAll(); // what the press is still for
   };
   container.addEventListener("pointerdown", onEmptyPress, true);
 

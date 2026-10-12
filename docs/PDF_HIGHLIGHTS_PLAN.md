@@ -562,18 +562,19 @@ fingers scroll. Outside the mode, nothing changes.
     - Now `PdfJsViewer` remembers the mode the reader last asked for (`wantedMode`).
     - A mode change that disagrees with it is reversed at once, and not shown in the
       toolbar.
-  - **A guard that trusted reported state.** `onEmptyPress` acted only when pdf.js had
-    reported highlight mode.
-    - Now it also checks the editor's own mode (`uiManager.getMode()`).
-    - It also blocks the press when pdf.js has armed that page's text layer for strokes
-      (its `highlighting` class), whatever the mode.
-- Not reproduced exactly in the simulator, which can't send Pencil input (nor hover).
-  Checked there:
-  - toggling on and off;
-  - a stroke on text still highlights;
-  - a stroke on blank space draws nothing;
-  - after scrolling and zoom changes in highlight mode, no page stays armed once the mode
-    is off.
+  - **A guard that trusted the mode.** `onEmptyPress` acted only in highlight mode. A
+    diagnostic build on the iPad showed that wasn't enough.
+    - After highlight mode was turned on and off, the editor, the viewer and our state were
+      all back to "none", and no text layer carried pdf.js's `highlighting` marker.
+    - Yet a Pencil press on a text layer's `endOfContent` opened a freehand stroke at once.
+    - So a page kept a stroke listener that pdf.js should have removed.
+    - Now presses on empty text-layer space and on the editor layer are kept from pdf.js
+      in every mode. Highlights follow text, so nothing is lost. Text selection still
+      starts: the press isn't cancelled, and pdf.js's selection handling doesn't need it.
+- Verified on the iPad with the diagnostic build: highlight mode on, a highlight, off,
+  then scrolling with the Pencil. Of 8 presses, 3 were on blank space, and no stroke
+  opened. In the simulator (finger only): toggling, highlighting text, and blank-space
+  strokes drawing nothing.
 
 **Tested in the iPad simulator, on the VEM paper:**
 - a one-finger drag highlights "We consider the discretization of a boundary", snapped
