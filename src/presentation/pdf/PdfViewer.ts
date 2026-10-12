@@ -1,4 +1,5 @@
 import type { HighlightColor } from "../../domain/values/Highlight";
+import type { OutlineItem } from "../../domain/values/Outline";
 import type { Result } from "../../domain/values/Result";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { PdfView, PdfZoom } from "../../domain/values/ViewState";
@@ -64,6 +65,13 @@ export interface PdfViewerHandle {
   currentScale(): number;
   setZoom(zoom: PdfZoom): void;
   goToPage(page: number): void;
+  /**
+   * The PDF's bookmarks (its table of contents), each with its position: the page index
+   * plus the fraction of the page above it. Empty when the PDF has none.
+   */
+  outline(): Promise<readonly OutlineItem[]>;
+  /** Scroll so that `position` (as in `outline()`) is at the top. */
+  goTo(position: number): void;
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;

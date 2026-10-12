@@ -413,8 +413,11 @@ memory cost (on iPad especially), so it's left for now.
 - **Done when:** §1's MVP list is complete and the performance targets in §5 are met.
 
 ### Phase 4: Polish (optional)
-- Outline / table-of-contents sidebar (pdf.js `getOutline()`), page thumbnails,
-  "Dark pages" toggle (an inversion filter on page canvases, off by default), rotation.
+- ✅ Outline / table-of-contents sidebar (2026-10-12): the contents sidebar, shared with
+  markdown. pdf.js `getOutline()` → `pdfOutline.ts`, which resolves each bookmark to a page
+  index plus the fraction of the page above it, so the sidebar marks the section being read.
+- Page thumbnails, a "Dark pages" toggle (an inversion filter on page canvases, off by
+  default), rotation.
 
 ## 8. Risks
 

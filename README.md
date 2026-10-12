@@ -54,6 +54,11 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
   On iPad, in highlight mode, drag a finger or the Apple Pencil across text to highlight it
   and scroll with two fingers; double-tap the Pencil (2nd generation) to toggle the mode.
   Undo and Redo are in the toolbar.
+- **Contents sidebar.** A tree of a document's chapters and sections, from a PDF's
+  bookmarks or a markdown file's headings (math in headings shows as math). Click to jump.
+  The section you're reading stays marked as you scroll. Filter by name, and collapse it
+  all. `⌘⇧L` or the toolbar button shows or hides it. On iPad held upright it slides over
+  the page.
 - **Tabs and tab groups.** Open several documents like browser tabs. Organize them into
   Chrome-style named, colored groups that you can collapse and drag, or group them by folder
   with one click.
@@ -74,6 +79,7 @@ Prerequisites, Windows steps, uninstalling, and troubleshooting are in
 | Toggle reader / editor | `⌘E` | `Ctrl+E` |
 | Save / Save as | `⌘S` / `⌘⇧S` | `Ctrl+S` / `Ctrl+Shift+S` |
 | Find in page | `⌘F` | `Ctrl+F` |
+| Show / hide the contents sidebar | `⌘⇧L` | `Ctrl+Shift+L` |
 | Export to PDF | `⌘P` | `Ctrl+P` |
 | PDF: zoom in / out / fit width | `⌘+` / `⌘−` / `⌘0` | `Ctrl++` / `Ctrl+−` / `Ctrl+0` |
 | PDF: highlight mode on / off | `⌘⇧H` (`Esc` to leave) | `Ctrl+Shift+H` (`Esc` to leave) |

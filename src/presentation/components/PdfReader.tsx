@@ -1,13 +1,21 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useContainer } from "../../composition/ContainerContext";
 import type { HighlightColor } from "../../domain/values/Highlight";
+import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { EditHistory, HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
+import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
 import { PdfToolbar } from "./PdfToolbar";
 
 /** Quiet period after the last scroll/zoom before the position is recorded (as Reader). */
 const VIEW_SETTLE_MS = 400;
+/**
+ * The "reading line": how far below the top of the view (in pages) a section counts as the
+ * one being read. Bookmarks usually point a little below the top of their page (a chapter
+ * title's top margin), so at the top of a chapter's page that chapter is current.
+ */
+const CURRENT_LOOKAHEAD_PAGES = 0.2;
 
 /** What the app needs from the PDF on screen before quitting. */
 export interface PdfReaderControl {
@@ -32,6 +40,8 @@ interface PdfReaderProps {
   controlRef: MutableRefObject<PdfReaderControl | null>;
   /** The document is showing (e.g. to re-run an open search on it). */
   onReady?: () => void;
+  /** The contents sidebar (its open state and width are app settings). */
+  contents: ContentsPanel;
 }
 
 type Status =
@@ -59,6 +69,7 @@ export function PdfReader({
   onHighlightColorChange,
   controlRef,
   onReady,
+  contents,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -71,6 +82,8 @@ export function PdfReader({
   const [tool, setToolState] = useState<PdfTool>("select");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [history, setHistory] = useState<EditHistory>({ canUndo: false, canRedo: false });
+  const [outline, setOutline] = useState<readonly OutlineItem[] | null>(null);
+  const [position, setPosition] = useState(initialView.page - 1 + initialView.pageOffset);
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -97,6 +110,7 @@ export function PdfReader({
 
     const onViewChange = (view: PdfView) => {
       setPage(view.page);
+      setPosition(view.page - 1 + view.pageOffset);
       setFitWidth(view.zoom === "page-width");
       if (handle) setZoomPercent(Math.round(handle.currentScale() * 100));
       window.clearTimeout(timer);
@@ -181,6 +195,26 @@ export function PdfReader({
     };
   }, [path, documentService, pdfViewer, pdfSaver, linkOpener, controlRef]);
 
+  // The bookmarks, read the first time the contents are shown for this document.
+  const ready = status.kind === "ready";
+  useEffect(() => {
+    if (!ready || !contents.open || outline !== null) return;
+    let cancelled = false;
+    void handleRef.current?.outline().then((items) => {
+      if (!cancelled) setOutline(items);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, contents.open, outline]);
+  const currentId = useMemo(
+    () => (outline ? currentItemId(outline, position + CURRENT_LOOKAHEAD_PAGES) : null),
+    [outline, position],
+  );
+  const goToSection = useCallback((item: OutlineItem) => {
+    if (item.position !== null) handleRef.current?.goTo(item.position);
+  }, []);
+
   // A new colour from the toolbar (it's a setting, so it arrives as a prop).
   useEffect(() => {
     handleRef.current?.setHighlightColor(highlightColor);
@@ -256,11 +290,25 @@ export function PdfReader({
         history={history}
         onUndo={() => handleRef.current?.undo()}
         onRedo={() => handleRef.current?.redo()}
+        contentsOpen={contents.open}
+        onToggleContents={() => contents.setOpen(!contents.open)}
       />
       {saveError && (
         <div className="banner banner--error" role="alert">
           {saveError}
         </div>
+      )}
+      <div className="doc-body">
+      {contents.open && (
+        <ContentsSidebar
+          outline={ready ? outline : null}
+          currentId={currentId}
+          showPages
+          emptyMessage="This PDF has no table of contents."
+          sourceLabel="From the PDF's bookmarks"
+          panel={contents}
+          onSelect={goToSection}
+        />
       )}
       <div className={`pdf-reader__stage${tool === "highlight" ? " pdf-reader__stage--highlighting" : ""}`}>
         <div className="pdf-reader__host" ref={hostRef} />
@@ -270,6 +318,7 @@ export function PdfReader({
             {status.message}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
