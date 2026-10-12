@@ -128,7 +128,10 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   drawn once instead of as a low-resolution copy plus a sharp part redrawn while
   scrolling. Main-thread stalls are about half. Then (2026-10-11):
   - Drawn pages are bounded to the visible ones plus the pre-drawing window, freed at once
-    on a zoom change. This fixed stale strips on screen in landscape after "Fit width".
+    on a zoom change (bounds memory).
+  - Page canvases are CPU-backed on the iPad (2026-10-12). GPU-backed ones froze the page
+    for ~75 ms after each page was drawn and left stale bands on screen in landscape.
+    Measured on the device: stalls halved, no stale bands.
   - "Fit width" fits the typical page, not a smaller cover.
 
   Details in docs/PDF_PLAN.md §5.
