@@ -126,7 +126,12 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   (H3 and the iPad fixes).
 - ✅ **Smoother PDF scrolling** (2026-10-11): page canvases up to 12 MP, so each page is
   drawn once instead of as a low-resolution copy plus a sharp part redrawn while
-  scrolling. Main-thread stalls are about half. Details in docs/PDF_PLAN.md §5.
+  scrolling. Main-thread stalls are about half. Then (2026-10-11):
+  - Drawn pages are bounded to the visible ones plus the pre-drawing window, freed at once
+    on a zoom change. This fixed stale strips on screen in landscape after "Fit width".
+  - "Fit width" fits the typical page, not a smaller cover.
+
+  Details in docs/PDF_PLAN.md §5.
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.

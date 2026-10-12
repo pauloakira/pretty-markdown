@@ -41,6 +41,7 @@ import type {
   PdfTool,
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
+import { samplePages, typicalWidth } from "./pageWidth";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
@@ -132,8 +133,16 @@ interface VisiblePages {
 interface ViewerInternals {
   _getVisiblePages(): VisiblePages;
   readonly renderingQueue: { renderHighestPriority(pages?: VisiblePages): void };
-  getPageView(index: number): { readonly renderingState: number } | undefined;
+  getPageView(
+    index: number,
+  ): { readonly renderingState: number; readonly viewport: { readonly width: number; readonly scale: number } } | undefined;
   readonly pagesCount: number;
+  readonly _pages: readonly {
+    readonly id: number;
+    readonly renderingState: number;
+    readonly canvas?: HTMLCanvasElement | null;
+    reset(): void;
+  }[];
 }
 
 /**
@@ -436,6 +445,19 @@ export async function mountPdfJs(
 
   const startView = normalizePdfView(options.initialView());
   let zoom: PdfZoom = startView.zoom;
+  const internals = viewer as unknown as ViewerInternals;
+
+  // The typical page width in points, for "Fit width" (pageWidth.ts): until pdf.js has
+  // loaded a page it assumes it's the size of the first one, often a smaller cover.
+  const sampledWidths = await Promise.all(
+    samplePages(pdf.numPages, startView.page).map((n) =>
+      pdf.getPage(n).then(
+        (page) => page.getViewport({ scale: 1 }).width,
+        () => 0,
+      ),
+    ),
+  );
+  const pageWidth = typicalWidth(sampledWidths);
 
   /** Top and height of page `index` (0-based) in the container's scroll coordinates. */
   const pageBox = (index: number) => {
@@ -476,8 +498,19 @@ export async function mountPdfJs(
     return lastView;
   };
 
+  // pdf.js's "page-width" fits the current page as it knows it; scale that to the typical
+  // page when the two differ.
+  const fitWidth = () => {
+    viewer.currentScaleValue = "page-width";
+    const current = internals.getPageView(viewer.currentPageNumber - 1)?.viewport;
+    const currentWidth = current && current.scale > 0 ? current.width / current.scale : 0;
+    if (pageWidth && currentWidth > 0 && Math.abs(currentWidth - pageWidth) > pageWidth * 0.01) {
+      viewer.currentScale = (viewer.currentScale * currentWidth) / pageWidth;
+    }
+  };
   const applyScale = () => {
-    viewer.currentScaleValue = zoom === "page-width" ? "page-width" : String(zoom);
+    if (zoom === "page-width") fitWidth();
+    else viewer.currentScaleValue = String(zoom);
   };
 
   // Restore the initial view: zoom first (it changes page sizes), then the position. Both
@@ -513,7 +546,6 @@ export async function mountPdfJs(
   // has nothing more urgent: after each page finishes drawing, and as the reader scrolls.
   // Pages are queued through pdf.js's own rendering queue, so its cancellation, pausing
   // and page buffer keep working; we just hand it a wider set of "pages to draw".
-  const internals = viewer as unknown as ViewerInternals;
   let lastScrollTop = container.scrollTop;
   let scrollingDown = true;
   let preRenderTimer = 0;
@@ -560,6 +592,29 @@ export async function mountPdfJs(
   eventBus.on("pagerendered", schedulePreRender);
   container.addEventListener("scroll", schedulePreRender, { passive: true });
 
+  // Keep drawn pages to the visible ones plus the pre-drawing window, and only the visible
+  // ones right after a zoom change. pdf.js keeps up to 10 drawn pages, and on a zoom change
+  // it keeps each one's old canvas (stretched) until that page is redrawn: with whole
+  // Retina pages (~36 MB each in landscape) the iPad ran short of graphics memory, leaving
+  // stale strips on screen, worst after "Fit width". Freed pages are redrawn when needed.
+  const trimDrawnPages = (visibleOnly: boolean) => {
+    const visible = internals._getVisiblePages();
+    if (visible.views.length === 0) return;
+    const ahead = visibleOnly ? 0 : PRERENDER_AHEAD;
+    const behind = visibleOnly ? 0 : PRERENDER_BEHIND;
+    const from = visible.first.id - (scrollingDown ? behind : ahead);
+    const to = visible.last.id + (scrollingDown ? ahead : behind);
+    for (const page of internals._pages) {
+      // A page waiting to be redrawn after a zoom change still shows (and holds) its old canvas.
+      const drawn = page.renderingState !== RenderingStates.INITIAL || page.canvas;
+      if (drawn && (page.id < from || page.id > to)) page.reset();
+    }
+  };
+  const onPageRendered = () => trimDrawnPages(false);
+  const onScaleChanging = () => trimDrawnPages(true);
+  eventBus.on("pagerendered", onPageRendered);
+  eventBus.on("scalechanging", onScaleChanging);
+
   // "Fit width" has to be re-fitted when the window (so the container) resizes.
   const resizeObserver = new ResizeObserver(() => {
     if (container.clientWidth === 0) return;
@@ -567,7 +622,7 @@ export async function mountPdfJs(
       initialPending = false;
       applyInitialView();
     } else if (zoom === "page-width") {
-      viewer.currentScaleValue = "page-width";
+      fitWidth();
     }
   });
   resizeObserver.observe(container);
@@ -760,6 +815,8 @@ export async function mountPdfJs(
       window.clearTimeout(preRenderTimer);
       container.removeEventListener("scroll", schedulePreRender);
       eventBus.off("pagerendered", schedulePreRender);
+      eventBus.off("pagerendered", onPageRendered);
+      eventBus.off("scalechanging", onScaleChanging);
       resizeObserver.disconnect();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
