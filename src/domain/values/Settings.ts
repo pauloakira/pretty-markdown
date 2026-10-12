@@ -18,16 +18,23 @@ export interface Settings {
   theme: ThemePreference;
   /** The PDF highlighter's colour: the last one picked. */
   pdfHighlightColor: HighlightColor;
+  /** Whether the contents sidebar is open (one setting for every document). */
+  contentsOpen: boolean;
+  /** The contents sidebar's width, in px (dragged on the Mac). */
+  contentsWidthPx: number;
 }
 
 export const READING_WIDTH = { min: 32, max: 80, step: 2, default: 46 } as const;
 export const FONT_SCALE = { min: 80, max: 150, step: 5, default: 100 } as const;
+export const CONTENTS_WIDTH = { min: 180, max: 480, default: 260 } as const;
 
 export const defaultSettings: Settings = {
   readingWidthRem: READING_WIDTH.default,
   fontScalePct: FONT_SCALE.default,
   theme: "system",
   pdfHighlightColor: DEFAULT_HIGHLIGHT_COLOR,
+  contentsOpen: false,
+  contentsWidthPx: CONTENTS_WIDTH.default,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -44,5 +51,7 @@ export function clampSettings(s: Settings): Settings {
     pdfHighlightColor: isHighlightColor(s.pdfHighlightColor)
       ? s.pdfHighlightColor
       : defaultSettings.pdfHighlightColor,
+    contentsOpen: typeof s.contentsOpen === "boolean" ? s.contentsOpen : defaultSettings.contentsOpen,
+    contentsWidthPx: clamp(Math.round(s.contentsWidthPx), CONTENTS_WIDTH.min, CONTENTS_WIDTH.max),
   };
 }

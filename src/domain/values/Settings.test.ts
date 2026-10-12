@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampSettings,
+  CONTENTS_WIDTH,
   defaultSettings,
   FONT_SCALE,
   READING_WIDTH,
@@ -45,5 +46,13 @@ describe("Settings", () => {
       typeof clampSettings
     >[0];
     expect(clampSettings(bogus).pdfHighlightColor).toBe("yellow");
+  });
+
+  it("keeps the contents sidebar closed by default, at a width within range", () => {
+    expect(defaultSettings.contentsOpen).toBe(false);
+    expect(clampSettings({ ...defaultSettings, contentsOpen: true }).contentsOpen).toBe(true);
+    expect(clampSettings({ ...defaultSettings, contentsWidthPx: 5000 }).contentsWidthPx).toBe(CONTENTS_WIDTH.max);
+    const bogus = { ...defaultSettings, contentsOpen: "yes" } as unknown as Parameters<typeof clampSettings>[0];
+    expect(clampSettings(bogus).contentsOpen).toBe(false);
   });
 });

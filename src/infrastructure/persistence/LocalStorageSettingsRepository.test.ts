@@ -12,7 +12,14 @@ describe("LocalStorageSettingsRepository", () => {
   });
 
   it("round-trips saved settings", () => {
-    const settings = { readingWidthRem: 60, fontScalePct: 120, theme: "dark", pdfHighlightColor: "green" } as const;
+    const settings = {
+      readingWidthRem: 60,
+      fontScalePct: 120,
+      theme: "dark",
+      pdfHighlightColor: "green",
+      contentsOpen: true,
+      contentsWidthPx: 300,
+    } as const;
     repo.save(settings);
     expect(repo.load()).toEqual(settings);
   });
@@ -23,6 +30,7 @@ describe("LocalStorageSettingsRepository", () => {
       JSON.stringify({ readingWidthRem: 60, fontScalePct: 120, theme: "dark" }),
     );
     expect(repo.load()?.pdfHighlightColor).toBe("yellow");
+    expect(repo.load()?.contentsOpen).toBe(false);
   });
 
   it("clamps and backfills partial/out-of-range stored data", () => {
