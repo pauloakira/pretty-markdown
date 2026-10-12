@@ -5,8 +5,12 @@ import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
 
 /** Quiet period after the last scroll event before the position is recorded. */
 const SCROLL_SETTLE_MS = 400;
-/** A heading counts as the current section once it's this close to the top (px). */
-const CURRENT_LINE_PX = 32;
+/**
+ * The "reading line": a heading counts as the current section once it's above this line,
+ * a quarter of the way down the view (at most this many px). At the top of a document its
+ * first heading is current.
+ */
+const CURRENT_LINE_MAX_PX = 160;
 /** Space left above a heading jumped to from the contents (px). */
 const JUMP_MARGIN_PX = 16;
 
@@ -86,7 +90,7 @@ export function Reader({ html, initialScrollTop, onScrollPersist, containerRef, 
     const el = scrollRef.current;
     const article = articleRef.current;
     if (!el || !article || !outline) return;
-    const line = el.getBoundingClientRect().top + CURRENT_LINE_PX;
+    const line = el.getBoundingClientRect().top + Math.min(CURRENT_LINE_MAX_PX, el.clientHeight / 4);
     const headings = [...article.querySelectorAll(HEADINGS)].filter((heading) => heading.id);
     let index = -1;
     for (const [i, heading] of headings.entries()) {

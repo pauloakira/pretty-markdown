@@ -138,16 +138,26 @@ export function ContentsSidebar({ outline, currentId, showPages, emptyMessage, s
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = panel.widthPx;
+    // One width change per frame: each one re-fits the page beside the sidebar.
+    let frame = 0;
+    let width = startWidth;
     const onMove = (move: PointerEvent) => {
-      const width = Math.round(startWidth + move.clientX - startX);
-      panel.setWidth(Math.min(CONTENTS_WIDTH.max, Math.max(CONTENTS_WIDTH.min, width)));
+      width = Math.min(CONTENTS_WIDTH.max, Math.max(CONTENTS_WIDTH.min, Math.round(startWidth + move.clientX - startX)));
+      if (!frame) frame = requestAnimationFrame(() => {
+        frame = 0;
+        panel.setWidth(width);
+      });
     };
     const onUp = () => {
+      cancelAnimationFrame(frame);
+      panel.setWidth(width);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   return (

@@ -1304,15 +1304,12 @@ body {
   width: 1.8rem;
   height: 1.8rem;
   flex: none;
+  padding: 0; /* Safari's default button padding left the icon ~3px wide */
   border: 1px solid transparent;
   border-radius: 6px;
   background: none;
   color: var(--fg-muted);
   cursor: pointer;
-}
-.contents__tool:hover {
-  border-color: var(--border);
-  color: var(--fg);
 }
 .contents__tool svg {
   width: 14px;
@@ -1334,8 +1331,15 @@ body {
   align-items: center;
   border-radius: 6px;
 }
-.contents__row:hover {
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
+/* Hover only where there's a pointer that hovers: on iPad a tap left rows grey. */
+@media (hover: hover) {
+  .contents__row:hover {
+    background: color-mix(in srgb, var(--fg) 6%, transparent);
+  }
+  .contents__tool:hover {
+    border-color: var(--border);
+    color: var(--fg);
+  }
 }
 .contents__row--current,
 .contents__row--current:hover {
@@ -1422,6 +1426,13 @@ body {
   width: 6px;
   cursor: col-resize;
   z-index: 2;
+  touch-action: none; /* a finger drag resizes rather than scrolling */
+}
+@media (pointer: coarse) {
+  .contents__resize {
+    right: -10px;
+    width: 20px;
+  }
 }
 
 /* On a touch screen: taller rows for fingers. */

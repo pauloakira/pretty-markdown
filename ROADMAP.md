@@ -63,7 +63,8 @@ Reader-first build plan. Each milestone is independently shippable.
       - [x] Phase 1 — foundation: document kinds, PDF view state, session v3, byte reading.
       - [x] Phase 2 — viewer: pdf.js (lazy), zoom/page controls, links, position memory.
       - [x] Phase 3 — integration: find, file watching, file association, document cache.
-      - [ ] Phase 4 — polish (outline sidebar, thumbnails, dark pages).
+      - [ ] Phase 4 — polish (thumbnails, dark pages). The outline sidebar is done, for PDFs
+        and markdown alike (contents sidebar, 2026-10-12).
       - [x] Highlights, saved into the PDF; drag to highlight on iPad
         ([docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md)).
 - [ ] iPad version (personal install, same codebase via Tauri's iOS target) — see

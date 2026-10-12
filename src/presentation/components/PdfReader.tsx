@@ -11,10 +11,11 @@ import { PdfToolbar } from "./PdfToolbar";
 /** Quiet period after the last scroll/zoom before the position is recorded (as Reader). */
 const VIEW_SETTLE_MS = 400;
 /**
- * How far below the top of the view (in pages) a section counts as the one being read, so
- * that a section jumped to from the contents (placed at the very top) is the current one.
+ * The "reading line": how far below the top of the view (in pages) a section counts as the
+ * one being read. Bookmarks usually point a little below the top of their page (a chapter
+ * title's top margin), so at the top of a chapter's page that chapter is current.
  */
-const CURRENT_LOOKAHEAD_PAGES = 0.03;
+const CURRENT_LOOKAHEAD_PAGES = 0.2;
 
 /** What the app needs from the PDF on screen before quitting. */
 export interface PdfReaderControl {
