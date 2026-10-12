@@ -329,8 +329,19 @@ export async function mountPdfJs(
   // once it's in; double-clicking a highlight asks to edit it. pdf.js's own viewer app
   // answers these; here we do, for the modes this app offers (highlighting only).
   const OFFERED_MODES: readonly number[] = [AnnotationEditorType.NONE, AnnotationEditorType.HIGHLIGHT];
+  // The mode the reader last asked for (the toolbar, the Pencil, or pdf.js's Highlight
+  // button). pdf.js can apply a request late: entering highlight mode first redraws the
+  // pages that already have highlights and switches only once they've drawn, and a
+  // request to leave it meanwhile is dropped (pdf.js still thinks it's off). The late
+  // switch then turned highlighting on by itself, e.g. while scrolling with the Pencil.
+  let wantedMode: number = AnnotationEditorType.NONE;
+  const requestMode = (mode: number) => {
+    wantedMode = mode;
+    viewer.annotationEditorMode = { mode };
+  };
   const onModeRequest = (event: { mode: number; editId?: string | null; mustEnterInEditMode?: boolean }) => {
     if (!OFFERED_MODES.includes(event.mode)) return;
+    wantedMode = event.mode;
     viewer.annotationEditorMode = {
       mode: event.mode,
       editId: event.editId ?? null,
@@ -339,6 +350,11 @@ export async function mountPdfJs(
   };
   let editorMode: number = AnnotationEditorType.NONE;
   const onModeChanged = (event: { mode: number }) => {
+    if (event.mode !== wantedMode) {
+      // A late switch the reader has since taken back: undo it (pdf.js now knows the mode).
+      viewer.annotationEditorMode = { mode: wantedMode };
+      return;
+    }
     editorMode = event.mode;
     const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
     applyTouchHighlighting(tool === "highlight");
@@ -351,8 +367,14 @@ export async function mountPdfJs(
   // off the text). Highlights follow text, so such a press does nothing but deselect.
   const EMPTY_SPACE = ".textLayer, .endOfContent, .textLayerImages, .textLayerImagePlaceholder, .annotationEditorLayer";
   const onEmptyPress = (event: PointerEvent) => {
-    if (editorMode !== AnnotationEditorType.HIGHLIGHT) return;
     const target = event.target as Element | null;
+    // pdf.js's own state, not just the last mode it reported: it marks a page's text layer
+    // ("highlighting") while it would start a stroke there.
+    const strokeArmed =
+      editorMode === AnnotationEditorType.HIGHLIGHT ||
+      uiManager?.getMode() === AnnotationEditorType.HIGHLIGHT ||
+      Boolean(target?.closest(".textLayer.highlighting"));
+    if (!strokeArmed) return;
     const onImage = target?.getAttribute("role") === "img" && target.closest(".textLayer");
     if (!target || !(target.matches(EMPTY_SPACE) || onImage)) return;
     event.stopPropagation();
@@ -747,8 +769,7 @@ export async function mountPdfJs(
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;
-      const mode = tool === "highlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.NONE;
-      viewer.annotationEditorMode = { mode };
+      requestMode(tool === "highlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.NONE);
       if (tool === "highlight") applyHighlightColor();
     },
     setHighlightColor(color) {
