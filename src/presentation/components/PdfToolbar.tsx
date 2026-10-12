@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { EditHistory, HighlightAvailability, PdfTool } from "../pdf/PdfViewer";
+import { ContentsButton } from "./ContentsSidebar";
 import { HighlightControl } from "./HighlightControl";
 
 interface PdfToolbarProps {
@@ -26,6 +27,8 @@ interface PdfToolbarProps {
   history: EditHistory;
   onUndo: () => void;
   onRedo: () => void;
+  contentsOpen: boolean;
+  onToggleContents: () => void;
 }
 
 /** Toolbar for a PDF tab: the highlighter, page indicator with go-to-page, and zoom. */
@@ -48,6 +51,8 @@ export function PdfToolbar({
   history,
   onUndo,
   onRedo,
+  contentsOpen,
+  onToggleContents,
 }: PdfToolbarProps) {
   const ready = pageCount !== null;
   // The field shows the current page until the user types; Enter jumps, Escape/blur reverts.
@@ -62,9 +67,12 @@ export function PdfToolbar({
 
   return (
     <div className="doctoolbar">
-      <span className="doctoolbar__name" title={title ?? undefined}>
-        {name}
-      </span>
+      <div className="doctoolbar__lead">
+        <ContentsButton open={contentsOpen} onToggle={onToggleContents} />
+        <span className="doctoolbar__name" title={title ?? undefined}>
+          {name}
+        </span>
+      </div>
       <div className="doctoolbar__actions">
         <HighlightControl
           availability={highlighting}

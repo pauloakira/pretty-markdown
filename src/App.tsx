@@ -5,6 +5,7 @@ import { initialPdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
 import { isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
+import type { ContentsPanel } from "./presentation/components/ContentsSidebar";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
 import { EditMode } from "./presentation/components/EditMode";
 import { FindBar } from "./presentation/components/FindBar";
@@ -55,6 +56,16 @@ export default function App() {
   } = useWorkspace();
 
   const { settings, update: updateSettings, reset: resetSettings } = useSettings();
+  // The contents sidebar: one open/closed setting for every document.
+  const contents = useMemo<ContentsPanel>(
+    () => ({
+      open: settings.contentsOpen,
+      widthPx: settings.contentsWidthPx,
+      setOpen: (contentsOpen) => updateSettings({ contentsOpen }),
+      setWidth: (contentsWidthPx) => updateSettings({ contentsWidthPx }),
+    }),
+    [settings.contentsOpen, settings.contentsWidthPx, updateSettings],
+  );
   const { recents, remember: rememberRecent } = useRecentFiles();
   const { persist: persistSession, clear: clearSession, quit } = useSession();
 
@@ -179,8 +190,11 @@ export default function App() {
       saveAs: saveActiveAs,
       toggleMode: toggleActiveMode,
       exportPdf: exportActive,
+      toggleContents: () => {
+        if (activeKind === "pdf" || (activeMarkdown && mode === "reader")) contents.setOpen(!contents.open);
+      },
     }),
-    [openViaDialog, closeActive, focusSibling, activateIndex, activeKind, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive],
+    [openViaDialog, closeActive, focusSibling, activateIndex, activeKind, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive, contents],
   );
   useTabKeyboard(shortcuts);
 
@@ -221,6 +235,8 @@ export default function App() {
           onToggleMode={toggleActiveMode}
           onSave={saveActive}
           onExportPdf={exportActive}
+          contentsOpen={contents.open}
+          onToggleContents={() => contents.setOpen(!contents.open)}
         />
       )}
       <main className="app__content">
@@ -260,6 +276,7 @@ export default function App() {
             onHighlightColorChange={(pdfHighlightColor) => updateSettings({ pdfHighlightColor })}
             controlRef={pdfControlRef}
             onReady={find.refresh}
+            contents={contents}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (
@@ -276,6 +293,7 @@ export default function App() {
               initialScrollTop={active.viewState.scrollTop}
               onScrollPersist={(scrollTop) => persistScroll(active.id, scrollTop)}
               containerRef={readerRef}
+              contents={contents}
             />
           )
         ) : (

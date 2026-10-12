@@ -10,12 +10,14 @@ export interface TabShortcuts {
   saveAs: () => void;
   toggleMode: () => void;
   exportPdf: () => void;
+  toggleContents: () => void;
 }
 
 /**
  * Browser/editor-familiar shortcuts: ⌘/Ctrl+T new, ⌘/Ctrl+W close, ⌘/Ctrl+Shift+[ or ]
  * (and Ctrl+Tab) to switch, ⌘/Ctrl+1–9 to jump, ⌘/Ctrl+F to find, ⌘/Ctrl+S to save
- * (⇧ for save-as), ⌘/Ctrl+E to toggle reader/edit. Uses `event.code` so it's independent
+ * (⇧ for save-as), ⌘/Ctrl+E to toggle reader/edit, ⌘/Ctrl+⇧L to show or hide the contents
+ * (Safari's sidebar shortcut; ⌘⇧T would be taken by ⌘T). Uses `event.code` so it's independent
  * of the shifted character and keyboard layout.
  */
 export function useTabKeyboard(shortcuts: TabShortcuts): void {
@@ -30,7 +32,12 @@ export function useTabKeyboard(shortcuts: TabShortcuts): void {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      if (e.code === "KeyT") {
+      if (e.shiftKey && e.code === "KeyL") {
+        // In the editor, ⌘⇧L is CodeMirror's "select all matches".
+        if (document.activeElement?.closest(".cm-editor")) return;
+        e.preventDefault();
+        shortcuts.toggleContents();
+      } else if (e.code === "KeyT") {
         e.preventDefault();
         shortcuts.newTab();
       } else if (e.code === "KeyW") {
