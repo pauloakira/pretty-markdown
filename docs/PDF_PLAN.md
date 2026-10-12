@@ -175,6 +175,44 @@ framework imports, pdf.js stays in infrastructure, and adapters are wired up onl
 - **Rendering:** pdf.js's `PDFViewer` renders only visible (and nearby) pages and frees
   canvases that scroll far away. Keep its defaults unless profiling says otherwise.
 - **Parsing** happens in the pdf.js web worker, so the UI thread stays free.
+- **iPad canvas size** (2026-10-11): pdf.js caps page canvases on iOS at 5.2 MP. A
+  fit-width book page on a 12.9" Retina iPad is ~5.8 MP, so pdf.js drew every page twice:
+  a quarter-resolution copy plus a sharp "detail" canvas of the visible part, redrawn as
+  the view moved, i.e. all through a scroll. On touch devices we allow 12 MP
+  (`TOUCH_MAX_CANVAS_PIXELS`), so fit-width pages are drawn once, whole, in either
+  orientation.
+  - Measured with a temporary probe in the iPad simulator, flicking through a 323-page
+    book (main-thread time blocked per 1000 px scrolled):
+
+    | Variant | Blocked per 1000 px | Canvas memory |
+    |---|---|---|
+    | pdf.js default | 162 ms | 21 MP |
+    | 12 MP pages (shipped) | 75–88 ms | 55 MP (~220 MB) |
+    | + no pre-drawing | 62 ms | 55 MP |
+    | pdf.js partial rendering | 164 ms | 12 MP |
+
+  - We kept pre-drawing: it's only a small gain to drop, and pages would show up blank.
+  - Most of what's left is pdf.js building the text layer: without it, 22 ms. The text
+    layer is needed for selection, highlights and find. Our `:has()` CSS rule isn't a
+    factor (no change without it).
+- **Drawn pages are bounded** (2026-10-11). Whole Retina pages are big (~36 MB each at
+  landscape fit-width). pdf.js keeps up to 10 drawn pages, and on a zoom change it keeps
+  each one's old canvas, stretched, until that page is redrawn. On the iPad that ran
+  short of graphics memory: stale strips stayed on screen while scrolling, worst right
+  after "Fit width".
+  - Now only the visible pages plus the pre-drawing window keep their canvases (7 pages).
+  - Right after a zoom change, only the visible ones do; the window is redrawn at the new
+    size.
+  - Pages are freed with pdf.js's own `reset()`, as its page cache does, so they're redrawn
+    when needed.
+  - The simulator didn't show the strips (it runs on the Mac's GPU). There, canvases after
+    zooming in and pressing Fit width went from 10 pages plus stale old-size copies to 7.
+- **Fit width uses the typical page** (2026-10-11). Until pdf.js loads a page, it assumes
+  the page is the size of the first one, and "page-width" fits whatever page it knows. A
+  book whose cover is smaller than its pages opened too wide: *Mathematical Methods for
+  Physics and Engineering* (235 pt cover, 374 pt pages) at 314% instead of 197%, with
+  2.5× the pixels to draw. We fit the median width of a few sampled pages
+  (`pageWidth.ts`). 4 of 6 long books sampled had a first page of a different size.
 - **Memory:** cap the cache at 3 parsed documents and call `destroy()` on eviction and
   when a tab closes.
 - **Startup:** no cost for markdown users, thanks to the lazy chunk.

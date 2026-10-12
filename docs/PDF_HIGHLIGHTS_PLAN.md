@@ -547,6 +547,35 @@ fingers scroll. Outside the mode, nothing changes.
   - Undo removed it and saved the file back to its original size, and Redo restored and
     saved it.
 
+**Follow-up (2026-10-11): freehand strokes with highlight mode off.**
+- On the iPad, yellow freehand strokes appeared while scrolling with the Pencil, with the
+  toolbar showing highlight mode off. They weren't saved to the file, so they were
+  strokes pdf.js had started and never finished. pdf.js finishes a stroke only when a
+  `pointerup` for that pointer reaches `window`. Until then it keeps drawing on every
+  move of the pointer over that page, in any mode.
+- Two gaps let that happen:
+  - **Late mode switches.** Entering highlight mode first redraws the pages that already
+    have highlights, and pdf.js records the new mode only once they've drawn. A request
+    to leave the mode before then is dropped, because pdf.js still thinks it's off. The
+    pending switch then turned highlighting on by itself later, e.g. as those pages drew
+    while scrolling.
+    - Now `PdfJsViewer` remembers the mode the reader last asked for (`wantedMode`).
+    - A mode change that disagrees with it is reversed at once, and not shown in the
+      toolbar.
+  - **A guard that trusted the mode.** `onEmptyPress` acted only in highlight mode. A
+    diagnostic build on the iPad showed that wasn't enough.
+    - After highlight mode was turned on and off, the editor, the viewer and our state were
+      all back to "none", and no text layer carried pdf.js's `highlighting` marker.
+    - Yet a Pencil press on a text layer's `endOfContent` opened a freehand stroke at once.
+    - So a page kept a stroke listener that pdf.js should have removed.
+    - Now presses on empty text-layer space and on the editor layer are kept from pdf.js
+      in every mode. Highlights follow text, so nothing is lost. Text selection still
+      starts: the press isn't cancelled, and pdf.js's selection handling doesn't need it.
+- Verified on the iPad with the diagnostic build: highlight mode on, a highlight, off,
+  then scrolling with the Pencil. Of 8 presses, 3 were on blank space, and no stroke
+  opened. In the simulator (finger only): toggling, highlighting text, and blank-space
+  strokes drawing nothing.
+
 **Tested in the iPad simulator, on the VEM paper:**
 - a one-finger drag highlights "We consider the discretization of a boundary", snapped
   to words, with no scrolling;

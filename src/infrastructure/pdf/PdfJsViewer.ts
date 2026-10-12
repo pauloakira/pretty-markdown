@@ -41,6 +41,7 @@ import type {
   PdfTool,
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
+import { samplePages, typicalWidth } from "./pageWidth";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
@@ -106,6 +107,18 @@ const REPORT_INTERVAL_MS = 100;
 const PRERENDER_AHEAD = 4;
 const PRERENDER_BEHIND = 1;
 
+/**
+ * Largest page canvas on a touch device (iPad), in pixels. pdf.js caps iOS at 5.2 MP; a
+ * fit-width book page on a 12.9" Retina iPad is ~5.8 MP, so every page was drawn twice: a
+ * quarter-resolution copy plus a sharp "detail" canvas of the visible part, which pdf.js
+ * redraws as the view moves, i.e. all through a scroll. 12 MP draws fit-width pages whole
+ * in either orientation (landscape A4 is ~10 MP); zoomed further, the detail canvases
+ * return. Measured in the simulator on a 323-page book: main-thread stalls per 1000 px
+ * scrolled 162 → 75 ms. Memory: pdf.js keeps ~10 drawn pages (~220 MB at fit-width).
+ * (iOS allows up to 16.7 MP per canvas; the Mac keeps pdf.js's 33 MP.)
+ */
+const TOUCH_MAX_CANVAS_PIXELS = 12 * 2 ** 20;
+
 /** The slice of PDFViewer's (semi-internal) API the pre-renderer uses; pdfjs-dist is pinned. */
 interface VisiblePage {
   readonly id: number;
@@ -120,8 +133,16 @@ interface VisiblePages {
 interface ViewerInternals {
   _getVisiblePages(): VisiblePages;
   readonly renderingQueue: { renderHighestPriority(pages?: VisiblePages): void };
-  getPageView(index: number): { readonly renderingState: number } | undefined;
+  getPageView(
+    index: number,
+  ): { readonly renderingState: number; readonly viewport: { readonly width: number; readonly scale: number } } | undefined;
   readonly pagesCount: number;
+  readonly _pages: readonly {
+    readonly id: number;
+    readonly renderingState: number;
+    readonly canvas?: HTMLCanvasElement | null;
+    reset(): void;
+  }[];
 }
 
 /**
@@ -280,6 +301,7 @@ export async function mountPdfJs(
     annotationEditorMode: highlighting.allowed ? AnnotationEditorType.NONE : AnnotationEditorType.DISABLE,
     annotationEditorHighlightColors: highlightColorList(options.highlightColor),
     enableHighlightFloatingButton: true,
+    maxCanvasPixels: navigator.maxTouchPoints > 0 ? TOUCH_MAX_CANVAS_PIXELS : undefined,
   };
   const viewer = new PDFViewer(viewerOptions);
   linkService.setViewer(viewer);
@@ -307,8 +329,19 @@ export async function mountPdfJs(
   // once it's in; double-clicking a highlight asks to edit it. pdf.js's own viewer app
   // answers these; here we do, for the modes this app offers (highlighting only).
   const OFFERED_MODES: readonly number[] = [AnnotationEditorType.NONE, AnnotationEditorType.HIGHLIGHT];
+  // The mode the reader last asked for (the toolbar, the Pencil, or pdf.js's Highlight
+  // button). pdf.js can apply a request late: entering highlight mode first redraws the
+  // pages that already have highlights and switches only once they've drawn, and a
+  // request to leave it meanwhile is dropped (pdf.js still thinks it's off). The late
+  // switch then turned highlighting on by itself, e.g. while scrolling with the Pencil.
+  let wantedMode: number = AnnotationEditorType.NONE;
+  const requestMode = (mode: number) => {
+    wantedMode = mode;
+    viewer.annotationEditorMode = { mode };
+  };
   const onModeRequest = (event: { mode: number; editId?: string | null; mustEnterInEditMode?: boolean }) => {
     if (!OFFERED_MODES.includes(event.mode)) return;
+    wantedMode = event.mode;
     viewer.annotationEditorMode = {
       mode: event.mode,
       editId: event.editId ?? null,
@@ -317,24 +350,33 @@ export async function mountPdfJs(
   };
   let editorMode: number = AnnotationEditorType.NONE;
   const onModeChanged = (event: { mode: number }) => {
+    if (event.mode !== wantedMode) {
+      // A late switch the reader has since taken back: undo it (pdf.js now knows the mode).
+      viewer.annotationEditorMode = { mode: wantedMode };
+      return;
+    }
     editorMode = event.mode;
     const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
   };
-  // No freehand highlights. In highlight mode pdf.js draws one when a press lands on empty
-  // space instead of text: its text layer covers the page, and a press on the layer itself
-  // (between lines, past the text), on its images, or on the editor layer starts a
-  // freehand stroke. On a touch screen that happened by accident (a stroke starting just
-  // off the text). Highlights follow text, so such a press does nothing but deselect.
+  // No freehand highlights. pdf.js draws one when a press lands on empty space instead of
+  // text: its text layer covers the page, and a press on the layer itself (between lines,
+  // past the text), on its images, or on the editor layer starts a freehand stroke. On a
+  // touch screen that happened by accident (a stroke starting just off the text).
+  //
+  // Such presses are stopped in every mode, not just highlight mode: on the iPad, after
+  // highlight mode was turned off, a page could keep pdf.js's stroke listener, with the
+  // editor fully back to "none" (seen on the device with the Pencil). Highlights follow
+  // text, so a press there does nothing but deselect; text selection still starts (the
+  // press isn't cancelled, only kept from pdf.js).
   const EMPTY_SPACE = ".textLayer, .endOfContent, .textLayerImages, .textLayerImagePlaceholder, .annotationEditorLayer";
   const onEmptyPress = (event: PointerEvent) => {
-    if (editorMode !== AnnotationEditorType.HIGHLIGHT) return;
     const target = event.target as Element | null;
     const onImage = target?.getAttribute("role") === "img" && target.closest(".textLayer");
     if (!target || !(target.matches(EMPTY_SPACE) || onImage)) return;
     event.stopPropagation();
-    uiManager?.unselectAll(); // what a press on empty space is still for
+    if (editorMode === AnnotationEditorType.HIGHLIGHT) uiManager?.unselectAll(); // what the press is still for
   };
   container.addEventListener("pointerdown", onEmptyPress, true);
 
@@ -423,6 +465,19 @@ export async function mountPdfJs(
 
   const startView = normalizePdfView(options.initialView());
   let zoom: PdfZoom = startView.zoom;
+  const internals = viewer as unknown as ViewerInternals;
+
+  // The typical page width in points, for "Fit width" (pageWidth.ts): until pdf.js has
+  // loaded a page it assumes it's the size of the first one, often a smaller cover.
+  const sampledWidths = await Promise.all(
+    samplePages(pdf.numPages, startView.page).map((n) =>
+      pdf.getPage(n).then(
+        (page) => page.getViewport({ scale: 1 }).width,
+        () => 0,
+      ),
+    ),
+  );
+  const pageWidth = typicalWidth(sampledWidths);
 
   /** Top and height of page `index` (0-based) in the container's scroll coordinates. */
   const pageBox = (index: number) => {
@@ -463,8 +518,19 @@ export async function mountPdfJs(
     return lastView;
   };
 
+  // pdf.js's "page-width" fits the current page as it knows it; scale that to the typical
+  // page when the two differ.
+  const fitWidth = () => {
+    viewer.currentScaleValue = "page-width";
+    const current = internals.getPageView(viewer.currentPageNumber - 1)?.viewport;
+    const currentWidth = current && current.scale > 0 ? current.width / current.scale : 0;
+    if (pageWidth && currentWidth > 0 && Math.abs(currentWidth - pageWidth) > pageWidth * 0.01) {
+      viewer.currentScale = (viewer.currentScale * currentWidth) / pageWidth;
+    }
+  };
   const applyScale = () => {
-    viewer.currentScaleValue = zoom === "page-width" ? "page-width" : String(zoom);
+    if (zoom === "page-width") fitWidth();
+    else viewer.currentScaleValue = String(zoom);
   };
 
   // Restore the initial view: zoom first (it changes page sizes), then the position. Both
@@ -500,7 +566,6 @@ export async function mountPdfJs(
   // has nothing more urgent: after each page finishes drawing, and as the reader scrolls.
   // Pages are queued through pdf.js's own rendering queue, so its cancellation, pausing
   // and page buffer keep working; we just hand it a wider set of "pages to draw".
-  const internals = viewer as unknown as ViewerInternals;
   let lastScrollTop = container.scrollTop;
   let scrollingDown = true;
   let preRenderTimer = 0;
@@ -547,6 +612,29 @@ export async function mountPdfJs(
   eventBus.on("pagerendered", schedulePreRender);
   container.addEventListener("scroll", schedulePreRender, { passive: true });
 
+  // Keep drawn pages to the visible ones plus the pre-drawing window, and only the visible
+  // ones right after a zoom change. pdf.js keeps up to 10 drawn pages, and on a zoom change
+  // it keeps each one's old canvas (stretched) until that page is redrawn: with whole
+  // Retina pages (~36 MB each in landscape) the iPad ran short of graphics memory, leaving
+  // stale strips on screen, worst after "Fit width". Freed pages are redrawn when needed.
+  const trimDrawnPages = (visibleOnly: boolean) => {
+    const visible = internals._getVisiblePages();
+    if (visible.views.length === 0) return;
+    const ahead = visibleOnly ? 0 : PRERENDER_AHEAD;
+    const behind = visibleOnly ? 0 : PRERENDER_BEHIND;
+    const from = visible.first.id - (scrollingDown ? behind : ahead);
+    const to = visible.last.id + (scrollingDown ? ahead : behind);
+    for (const page of internals._pages) {
+      // A page waiting to be redrawn after a zoom change still shows (and holds) its old canvas.
+      const drawn = page.renderingState !== RenderingStates.INITIAL || page.canvas;
+      if (drawn && (page.id < from || page.id > to)) page.reset();
+    }
+  };
+  const onPageRendered = () => trimDrawnPages(false);
+  const onScaleChanging = () => trimDrawnPages(true);
+  eventBus.on("pagerendered", onPageRendered);
+  eventBus.on("scalechanging", onScaleChanging);
+
   // "Fit width" has to be re-fitted when the window (so the container) resizes.
   const resizeObserver = new ResizeObserver(() => {
     if (container.clientWidth === 0) return;
@@ -554,7 +642,7 @@ export async function mountPdfJs(
       initialPending = false;
       applyInitialView();
     } else if (zoom === "page-width") {
-      viewer.currentScaleValue = "page-width";
+      fitWidth();
     }
   });
   resizeObserver.observe(container);
@@ -679,8 +767,7 @@ export async function mountPdfJs(
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;
-      const mode = tool === "highlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.NONE;
-      viewer.annotationEditorMode = { mode };
+      requestMode(tool === "highlight" ? AnnotationEditorType.HIGHLIGHT : AnnotationEditorType.NONE);
       if (tool === "highlight") applyHighlightColor();
     },
     setHighlightColor(color) {
@@ -747,6 +834,8 @@ export async function mountPdfJs(
       window.clearTimeout(preRenderTimer);
       container.removeEventListener("scroll", schedulePreRender);
       eventBus.off("pagerendered", schedulePreRender);
+      eventBus.off("pagerendered", onPageRendered);
+      eventBus.off("scalechanging", onScaleChanging);
       resizeObserver.disconnect();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
