@@ -197,9 +197,9 @@ framework imports, pdf.js stays in infrastructure, and adapters are wired up onl
     factor (no change without it).
 - **Drawn pages are bounded** (2026-10-11). Whole Retina pages are big (~36 MB each at
   landscape fit-width). pdf.js keeps up to 10 drawn pages, and on a zoom change it keeps
-  each one's old canvas, stretched, until that page is redrawn. On the iPad that ran
-  short of graphics memory: stale strips stayed on screen while scrolling, worst right
-  after "Fit width".
+  each one's old canvas, stretched, until that page is redrawn. This was added for stale
+  strips on screen on the iPad, which turned out to have another cause (next item); it
+  still bounds memory.
   - Now only the visible pages plus the pre-drawing window keep their canvases (7 pages).
   - Right after a zoom change, only the visible ones do; the window is redrawn at the new
     size.
@@ -207,6 +207,18 @@ framework imports, pdf.js stays in infrastructure, and adapters are wired up onl
     when needed.
   - The simulator didn't show the strips (it runs on the Mac's GPU). There, canvases after
     zooming in and pressing Fit width went from 10 pages plus stale old-size copies to 7.
+- **CPU-backed page canvases on the iPad** (2026-10-12). On the Mac, GPU-backed canvases
+  (`enableHWA`) are smoother. On the iPad they weren't:
+  - A diagnostic build measured on the device (*Geometric Methods and Applications*, 696
+    pages). Drawing a page took ~16 ms, but the page froze for ~75 ms right after each
+    page was drawn. Building the page's text layer takes 8-14 ms, so that wasn't it.
+  - In landscape, stale bands stayed on screen at a fixed screen position. Each visible
+    page's canvas sat exactly on its page box (checked every 500 ms), so the bands were
+    WebKit not repainting the GPU-backed canvases, not misplaced content. They appeared
+    with only 7 drawn pages (~180 MB), so it wasn't memory either.
+  - With CPU-backed canvases: stalls while scrolling 18 → 9 ms per 1000 px, no stale
+    bands, and the user found it smooth ("just perfect").
+  - So `enableHWA` is on only without a touch screen (`navigator.maxTouchPoints === 0`).
 - **Fit width uses the typical page** (2026-10-11). Until pdf.js loads a page, it assumes
   the page is the size of the first one, and "page-width" fits whatever page it knows. A
   book whose cover is smaller than its pages opened too wide: *Mathematical Methods for

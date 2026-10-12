@@ -247,10 +247,13 @@ async function openDocument(source: PdfSource): Promise<Result<KeptDocument>> {
     standardFontDataUrl: assetUrl("standard_fonts"),
     wasmUrl: assetUrl("wasm"),
     iccUrl: assetUrl("iccs"),
-    // GPU-backed page canvases, as pdf.js's own viewer uses. The API default (off) makes
-    // every canvas `willReadFrequently`, i.e. CPU-backed, which WebKit composites slowly:
-    // scrolling stuttered and pages flickered as they were redrawn.
-    enableHWA: true,
+    // GPU-backed page canvases on the Mac, CPU-backed ones (pdf.js's API default) on a touch
+    // device (iPad). Each was measured on its platform:
+    // - Mac: CPU-backed canvases stuttered and pages flickered as they were redrawn.
+    // - iPad: GPU-backed ones froze the page for ~75 ms after each page was drawn and, in
+    //   landscape, left stale bands on screen; CPU-backed ones halved the stalls (18 → 9 ms
+    //   per 1000 px scrolled) with no stale bands.
+    enableHWA: navigator.maxTouchPoints === 0,
     // No `isEvalSupported` switch needed: pdf.js 6 never compiles PDF functions with eval,
     // and PDF JavaScript stays off because the viewer has no scripting manager.
   });
