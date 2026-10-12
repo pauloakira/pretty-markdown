@@ -18,6 +18,7 @@ import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRende
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import type { HighlightColor } from "../domain/values/Highlight";
+import type { OutlineItem } from "../domain/values/Outline";
 import type { FindState } from "../presentation/find/FindController";
 import type { FindListener, FindTarget } from "../presentation/find/FindTarget";
 import type {
@@ -150,6 +151,18 @@ export class FakePdfHandle implements PdfViewerHandle {
   goToPage(page: number) {
     this.moveTo({ ...this.current, page, pageOffset: 0 });
   }
+  /** The bookmarks this fake PDF reports (set by the factory's `outline`). */
+  bookmarks: readonly OutlineItem[] = [];
+  outline() {
+    return Promise.resolve(this.bookmarks);
+  }
+  /** Positions jumped to from the contents, in order. */
+  readonly jumps: number[] = [];
+  goTo(position: number) {
+    this.jumps.push(position);
+    const page = Math.floor(position);
+    this.moveTo({ ...this.current, page: page + 1, pageOffset: position - page });
+  }
   /** Simulate the reader scrolling or zooming. */
   moveTo(view: PdfView) {
     this.current = view;
@@ -170,6 +183,8 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
   failWith: string | null = null;
   info: PdfInfo = { pageCount: 12, title: "A Paper on Things" };
   highlighting: HighlightAvailability = { allowed: true };
+  /** The bookmarks the next mounts report. */
+  outline: readonly OutlineItem[] = [];
 
   /** Calls to `forget` and the key sets passed to `retain`, in order. */
   readonly forgotten: string[] = [];
@@ -185,6 +200,7 @@ export class FakePdfViewerFactory implements PdfViewerFactory {
     if (this.failWith) return err(this.failWith);
     container.textContent = "[pdf pages]";
     const handle = new FakePdfHandle(this.info, options, this.highlighting);
+    handle.bookmarks = this.outline;
     this.mounts.push(handle);
     return ok(handle);
   }

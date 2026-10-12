@@ -32,6 +32,7 @@ import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import { highlightColorList, highlightHex, type HighlightColor } from "../../domain/values/Highlight";
 import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
+import type { OutlineItem } from "../../domain/values/Outline";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
@@ -42,6 +43,7 @@ import type {
   PdfViewerHandle,
 } from "../../presentation/pdf/PdfViewer";
 import { samplePages, typicalWidth } from "./pageWidth";
+import { readOutline, type OutlineSource } from "./pdfOutline";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
@@ -756,6 +758,9 @@ export async function mountPdfJs(
   const rawTitle = (metadata?.info as { Title?: unknown } | undefined)?.Title;
   const title = typeof rawTitle === "string" && rawTitle.trim() ? rawTitle.trim() : null;
 
+  // The bookmarks, read on first request (most readers never open the contents).
+  let outline: Promise<readonly OutlineItem[]> | null = null;
+
   return ok({
     info: { pageCount: pdf.numPages, title },
     highlighting,
@@ -767,6 +772,15 @@ export async function mountPdfJs(
     },
     goToPage(page) {
       viewer.currentPageNumber = Math.min(Math.max(1, Math.round(page)), viewer.pagesCount);
+    },
+    outline() {
+      outline ??= readOutline(pdf as unknown as OutlineSource);
+      return outline;
+    },
+    goTo(position) {
+      const index = Math.min(Math.max(0, Math.floor(position)), viewer.pagesCount - 1);
+      const box = pageBox(index);
+      if (box) container.scrollTop = box.top + (position - index) * box.height;
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;
