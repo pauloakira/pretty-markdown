@@ -47,6 +47,7 @@ import { readOutline, type OutlineSource } from "./pdfOutline";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
+import { attachRetile } from "../../presentation/webkit/retile";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -641,8 +642,9 @@ export async function mountPdfJs(
   eventBus.on("scalechanging", onScaleChanging);
 
   // "Fit width" has to be re-fitted when the window (so the container) resizes.
+  let retiling = false;
   const resizeObserver = new ResizeObserver(() => {
-    if (container.clientWidth === 0) return;
+    if (container.clientWidth === 0 || retiling) return;
     if (initialPending) {
       initialPending = false;
       applyInitialView();
@@ -651,6 +653,9 @@ export async function mountPdfJs(
     }
   });
   resizeObserver.observe(container);
+
+  // iPad: keep WebKit drawing the scroller across its full width (retile.ts).
+  const detachRetile = attachRetile(container, { onRetiling: (on) => (retiling = on) });
 
   // Links that leave the document go to the app (to open in the browser); never let one
   // navigate the app's own web view. In-document links ("#...") are left to pdf.js.
@@ -854,6 +859,7 @@ export async function mountPdfJs(
       eventBus.off("pagerendered", onPageRendered);
       eventBus.off("scalechanging", onScaleChanging);
       resizeObserver.disconnect();
+      detachRetile();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
       eventBus.off("updateviewarea", reportView);

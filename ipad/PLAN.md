@@ -135,6 +135,19 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   - "Fit width" fits the typical page, not a smaller cover.
 
   Details in docs/PDF_PLAN.md §5.
+- ✅ **No black area after switching apps or unlocking** (2026-10-26). Coming back in
+  landscape, the right part of a PDF (past 1024 pt, an upright iPad's width) could stay
+  black, even while scrolling, until the zoom changed.
+  - Found on the device with a native probe of the views and their drawn layers. Every
+    view kept its full 1366 pt frame, but the PDF scroller's last column of WebKit tiles
+    (1024 to 1366) was missing. iPadOS lays a backgrounded app out at other sizes for its
+    snapshots, and WebKit kept the stale coverage.
+  - Changing the web view's frame didn't help; changing the scroller's size does. The
+    scroller is narrowed by a pixel for one frame (at 250 ms and 1 s), without re-fitting
+    the page (`src/presentation/webkit/retile.ts`, touch devices only).
+  - When: the page becoming visible again, and every new scroller appearing. A PDF
+    opened after a return started out with the same missing column. Used by the PDF
+    viewer and the markdown reader.
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.
