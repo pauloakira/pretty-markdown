@@ -47,6 +47,7 @@ import { readOutline, type OutlineSource } from "./pdfOutline";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
+import { attachRetile } from "../../presentation/webkit/retile";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -653,34 +654,8 @@ export async function mountPdfJs(
   });
   resizeObserver.observe(container);
 
-  // Back from another app or the lock screen, WebKit on iPad could keep drawing only the
-  // left 1024 pt of the page (an upright iPad's width), leaving the rest black even while
-  // scrolling. Measured on the device: the scroller's last column of tiles (1024 to 1366
-  // pt) was missing, and came back when its content changed size (e.g. "Fit width"). So
-  // on return, narrow the scroller by a pixel for one frame: WebKit recomputes its tiles.
-  // The re-fit for that resize is skipped, so the page isn't redrawn.
-  let retileFrame = 0;
-  const retile = () => {
-    if (document.visibilityState !== "visible" || container.clientWidth === 0) return;
-    cancelAnimationFrame(retileFrame);
-    retiling = true;
-    container.style.right = "1px";
-    void container.offsetWidth; // lay it out now
-    retileFrame = requestAnimationFrame(() => {
-      container.style.right = "";
-      void container.offsetWidth;
-      retileFrame = requestAnimationFrame(() => {
-        retiling = false;
-      });
-    });
-  };
-  // Twice: iPadOS may restore the window's size a moment after the page is visible again.
-  const retileTimers: number[] = [];
-  const onVisibilityChange = () => {
-    if (document.visibilityState !== "visible") return;
-    for (const delay of [250, 1000]) retileTimers.push(window.setTimeout(retile, delay));
-  };
-  document.addEventListener("visibilitychange", onVisibilityChange);
+  // iPad: keep WebKit drawing the scroller across its full width (retile.ts).
+  const detachRetile = attachRetile(container, { onRetiling: (on) => (retiling = on) });
 
   // Links that leave the document go to the app (to open in the browser); never let one
   // navigate the app's own web view. In-document links ("#...") are left to pdf.js.
@@ -884,9 +859,7 @@ export async function mountPdfJs(
       eventBus.off("pagerendered", onPageRendered);
       eventBus.off("scalechanging", onScaleChanging);
       resizeObserver.disconnect();
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      retileTimers.forEach((t) => window.clearTimeout(t));
-      cancelAnimationFrame(retileFrame);
+      detachRetile();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
       eventBus.off("updateviewarea", reportView);

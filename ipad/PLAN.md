@@ -142,9 +142,12 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     view kept its full 1366 pt frame, but the PDF scroller's last column of WebKit tiles
     (1024 to 1366) was missing. iPadOS lays a backgrounded app out at other sizes for its
     snapshots, and WebKit kept the stale coverage.
-  - Changing the web view's frame didn't help; changing the scroller's size does. On
-    return (`visibilitychange`, at 250 ms and 1 s) the viewer narrows the scroller by a
-    pixel for one frame, without re-fitting the page.
+  - Changing the web view's frame didn't help; changing the scroller's size does. The
+    scroller is narrowed by a pixel for one frame (at 250 ms and 1 s), without re-fitting
+    the page (`src/presentation/webkit/retile.ts`, touch devices only).
+  - When: the page becoming visible again, and every new scroller appearing. A PDF
+    opened after a return started out with the same missing column. Used by the PDF
+    viewer and the markdown reader.
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.
