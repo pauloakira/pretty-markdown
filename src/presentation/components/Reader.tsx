@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import { buildHeadingTree, currentItemId, type HeadingEntry, type OutlineItem } from "../../domain/values/Outline";
 import { useDocumentLinks } from "../hooks/useDocumentLinks";
 import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
+import { attachRetile } from "../webkit/retile";
 
 /** Quiet period after the last scroll event before the position is recorded. */
 const SCROLL_SETTLE_MS = 400;
@@ -76,6 +77,11 @@ export function Reader({ html, initialScrollTop, onScrollPersist, containerRef, 
   const scrollRef = containerRef ?? localRef;
   const articleRef = useRef<HTMLElement>(null);
   useDocumentLinks(scrollRef);
+  // iPad: keep WebKit drawing the page across its full width (retile.ts).
+  useEffect(() => {
+    const el = scrollRef.current;
+    return el ? attachRetile(el) : undefined;
+  }, [scrollRef]);
   const [outline, setOutline] = useState<readonly OutlineItem[] | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
 
