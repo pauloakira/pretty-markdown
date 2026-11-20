@@ -126,5 +126,9 @@ describe("tab bar by touch", () => {
       chip().click();
     });
     expect(app.tabManager.getSnapshot().groups.some((g) => g.collapsed)).toBe(true);
+    // The collapsed group is marked, so the bar can size it as a chip alone (theme.css).
+    const group = chip().closest(".tabgroup")!;
+    expect(group.classList.contains("tabgroup--collapsed")).toBe(true);
+    expect(group.querySelector(".tabgroup__head--collapsed")).not.toBeNull();
   });
 });
