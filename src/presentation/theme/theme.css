@@ -772,7 +772,19 @@ body {
   padding: 0 0.5rem 0 0.65rem;
   box-shadow: inset 0 -2px 0 var(--group-color);
 }
+/*
+ * A collapsed group is its chip alone. With no tabs beside it to take the squeeze, the
+ * head's 0.15 shrink only gave back 15% of the overflow (a flex line whose shrink
+ * factors sum below 1 shrinks by that fraction), so the chip spilled over its
+ * neighbours. Instead the whole group gives way slowly, like a chip, and the head fills
+ * it exactly; a divider closes it off like a tab.
+ */
+.tabgroup--collapsed {
+  flex-shrink: 0.15;
+}
 .tabgroup__head--collapsed {
+  flex-shrink: 1;
+  border-right: 1px solid var(--border);
   box-shadow: none;
 }
 .tabgroup__chip {

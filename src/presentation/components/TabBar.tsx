@@ -456,6 +456,7 @@ export function TabBar({
         style={{ "--group-tabs": group.collapsed ? 0 : members.length } as CSSProperties}
         className={[
           "tabgroup",
+          group.collapsed ? "tabgroup--collapsed" : "",
           dragged ? "tabgroup--dragging" : "",
           marker ? `tabgroup--${marker}` : "",
         ]
