@@ -57,12 +57,29 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Layer | Piece |
 |-------|-------|
 | Domain | `values/Excerpt.ts` (the excerpt, its link, text clean-up and escaping), `values/NotesFile.ts` (where the file lives; add, remove and read excerpts), `ports/NotesStore.ts` (read a notes file that may not exist yet; write it) |
+| Application | `NotesService`: add a passage to a document's notes (creating the file the first time), remove it again; changes to one file are queued so quick additions can't overwrite each other |
+| Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()` / `highlightSelection()` |
+| Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove** |
+
+### Add to notes (PDF)
+
+Select text, then **Add to notes** in the PDF toolbar or ⌘E. The passage is highlighted in
+the PDF (saved into it as before; the tool stays as it was) and added to the end of
+"Unsorted" in `<name>.notes.md`; the first time, the file is created. The notice names the
+file and offers **Open notes** (opens it in a tab) and **Remove** (takes the quote out of
+the notes again; the highlight stays in the PDF, where it can be deleted as usual). The
+notice's button isn't called "Undo" because the toolbar's Undo already means "undo the last
+highlight change". On a PDF that can't be highlighted (signed, locked), the passage is
+still added to the notes.
+
+Not yet: the iPad (writing beside a PDF opened from Files needs folder access; its own
+card), the selection popover, and the Notes side panel.
 
 ## Milestones
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — domain model done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file and Add to notes (Mac) done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |
