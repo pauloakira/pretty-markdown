@@ -44,3 +44,12 @@ behind interfaces (ports) so they're swappable and testable. See
 - Conventional Commits. Keep `main` releasable. Commit at logical checkpoints, not all at the end.
 - Update the relevant doc (and the decision log in ARCHITECTURE.md §9) when behavior or
   structure changes.
+
+## Task board
+
+Work is tracked on the shared Notion kanban
+[Claude Code — Kanban](https://app.notion.com/p/420668ddf3228055b93cf712c23db858), used by
+every Claude Code session. This repo's cards have **Project = `pretty-markdown`** (use the
+"pretty-markdown" board view). Before starting work, claim a card by following the rules at the top
+of that page: check **Claimed by** is empty, set **In progress** and your session name, add the
+branch and PR as you go, and move the card to **Done** after merge.
