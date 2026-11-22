@@ -4,6 +4,7 @@ import { CompositeMathRenderer } from "../math/CompositeMathRenderer";
 import { KatexRenderer } from "../math/KatexRenderer";
 import { MathJaxRenderer } from "../math/MathJaxRenderer";
 import { MarkdownPipeline } from "./MarkdownPipeline";
+import { excerptToMarkdown } from "../../domain/values/Excerpt";
 
 function makePipeline(preamble: MacroMap = {}): MarkdownPipeline {
   return new MarkdownPipeline(new CompositeMathRenderer([new KatexRenderer()]), preamble);
@@ -118,5 +119,22 @@ describe("MarkdownPipeline — LaTeX-style delimiters", () => {
     const pipeline = makePipeline();
     pipeline.render("# Intro");
     expect(pipeline.render("# Intro")).toContain('id="user-content-intro"');
+  });
+
+  it("renders an excerpt quote as written: no math, emphasis or list from its text", () => {
+    const quote = excerptToMarkdown({
+      id: "7f3a9c",
+      source: "Geometric Methods.pdf",
+      page: 133,
+      text: "1. Costs $5 and $10; a *star* and x_1 [12], not [a link](x.pdf).",
+      color: "blue",
+    });
+    const html = makePipeline().render(quote);
+    expect(html).toContain("<blockquote>");
+    expect(html).not.toContain("katex");
+    expect(html).not.toContain("<em>");
+    expect(html).not.toContain("<ol>");
+    expect(html).toContain("1. Costs $5 and $10; a *star* and x_1 [12], not [a link](x.pdf).");
+    expect(html).toContain('href="Geometric%20Methods.pdf#page=133&amp;ex=7f3a9c&amp;color=blue"');
   });
 });

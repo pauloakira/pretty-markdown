@@ -28,6 +28,7 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [ipad/](ipad/) | iPad version (same codebase, Tauri iOS target): [plan](ipad/PLAN.md) and [how to run/install](ipad/README.md). Keep the Mac build unaffected: fence platform code with `cfg(desktop)`/`cfg(mobile)` |
 | [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | PDF reading (Phases 1–3 done) — engine choice, layer-by-layer changes, phases, measurements |
 | [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | PDF highlights (done, H1–H4) — saved into the PDF, autosave, drag to highlight on iPad (finger and Pencil) |
+| [docs/RESEARCH_READER.md](docs/RESEARCH_READER.md) | Research reader (in progress, R1–R4) — excerpts into a Markdown notes file beside the document, peek and pin references, outline, board; decisions and the notes file format |
 
 ## Architecture in one breath
 
