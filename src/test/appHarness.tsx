@@ -32,6 +32,7 @@ import type {
   PdfTool,
   PdfViewerFactory,
   PdfViewerHandle,
+  PassageTarget,
 } from "../presentation/pdf/PdfViewer";
 import { disk, listeners } from "./tauriMock";
 
@@ -197,6 +198,12 @@ export class FakePdfHandle implements PdfViewerHandle {
     this.jumps.push(position);
     const page = Math.floor(position);
     this.moveTo({ ...this.current, page: page + 1, pageOffset: position - page });
+  }
+  /** Passages shown through `revealPassage`, in order. */
+  readonly revealed: PassageTarget[] = [];
+  revealPassage(target: PassageTarget) {
+    this.revealed.push(target);
+    this.moveTo({ ...this.current, page: target.page, pageOffset: 0.25 });
   }
   /** Simulate the reader scrolling or zooming. */
   moveTo(view: PdfView) {

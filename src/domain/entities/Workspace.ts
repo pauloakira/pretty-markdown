@@ -1,5 +1,5 @@
 import type { Session, SessionGroup } from "../values/Session";
-import { normalizePdfView, type EditorMode, type PdfView } from "../values/ViewState";
+import { BACK_LIMIT, normalizePdfView, type EditorMode, type PdfView } from "../values/ViewState";
 import type { Tab, TabId } from "./Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId, type TabGroup } from "./TabGroup";
 
@@ -271,6 +271,37 @@ export function setPdfView(ws: Workspace, id: TabId, view: PdfView): Workspace {
   return {
     ...ws,
     tabs: ws.tabs.map((t) => (t.id === id ? { ...t, viewState: { ...t.viewState, pdf: next } } : t)),
+  };
+}
+
+/**
+ * A PDF tab is about to jump: remember `from` for Back. The same place twice in a row is
+ * kept once, and only the last `BACK_LIMIT` places are. No-op for a markdown tab.
+ */
+export function pushBack(ws: Workspace, id: TabId, from: PdfView): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.document.kind !== "pdf") return ws;
+  const view = normalizePdfView(from);
+  const back = tab.viewState.back ?? [];
+  const top = back[back.length - 1];
+  if (top && top.page === view.page && top.pageOffset === view.pageOffset) return ws;
+  const next = [...back, view].slice(-BACK_LIMIT);
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, viewState: { ...t.viewState, back: next } } : t)),
+  };
+}
+
+/** Take the last place off a tab's Back list (the caller goes there). */
+export function popBack(ws: Workspace, id: TabId): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  const back = tab?.viewState.back;
+  if (!tab || !back || back.length === 0) return ws;
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) =>
+      t.id === id ? { ...t, viewState: { ...t.viewState, back: back.slice(0, -1) } } : t,
+    ),
   };
 }
 

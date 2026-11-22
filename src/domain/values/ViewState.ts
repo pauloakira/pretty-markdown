@@ -31,7 +31,15 @@ export interface ViewState {
   readonly scrollTop: number;
   readonly mode: EditorMode;
   readonly pdf?: PdfView;
+  /**
+   * PDF tabs: where the reader was before each jump (a quote's link, the contents, Go to
+   * page), most recent last, for "Back". Kept while the app runs, not in the session.
+   */
+  readonly back?: readonly PdfView[];
 }
+
+/** How many places "Back" remembers per tab. */
+export const BACK_LIMIT = 50;
 
 export const initialViewState: ViewState = { scrollTop: 0, mode: "reader" };
 

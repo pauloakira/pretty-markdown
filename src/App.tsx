@@ -15,6 +15,8 @@ import { Reader } from "./presentation/components/Reader";
 import { SettingsPanel } from "./presentation/components/SettingsPanel";
 import { TabBar } from "./presentation/components/TabBar";
 import { Welcome } from "./presentation/components/Welcome";
+import { FileLinkContext } from "./presentation/hooks/useDocumentLinks";
+import { useFileLinks } from "./presentation/hooks/useFileLinks";
 import { useFileOpen } from "./presentation/hooks/useFileOpen";
 import { useFileWatch } from "./presentation/hooks/useFileWatch";
 import { useFind } from "./presentation/hooks/useFind";
@@ -93,8 +95,15 @@ export default function App() {
   // Reload documents that change on disk (or flag a conflict if they have unsaved edits).
   const fileWatch = useFileWatch(workspace.tabs);
 
+  // Links from a Markdown document to other files (a quote's link to its PDF page).
+  const fileLinks = useFileLinks(
+    active?.document.kind === "markdown" ? active.document.path : null,
+    active?.id ?? null,
+    openRecent,
+  );
+
   // Parsed PDFs are kept for quick tab switches; release those whose tabs have closed.
-  const { pdfViewer } = useContainer();
+  const { pdfViewer, tabManager } = useContainer();
   const openPdfPaths = workspace.tabs
     .flatMap((t) => (t.document.kind === "pdf" ? [t.document.path] : []))
     .join("\n");
@@ -239,6 +248,7 @@ export default function App() {
           onToggleContents={() => contents.setOpen(!contents.open)}
         />
       )}
+      <FileLinkContext.Provider value={fileLinks.openFileLink}>
       <main className="app__content">
         {error && <div className="banner banner--error">{error}</div>}
         {active && fileWatch.conflicts[active.id] !== undefined && (
@@ -278,6 +288,11 @@ export default function App() {
             onReady={find.refresh}
             contents={contents}
             onOpenFile={(notesPath) => void openRecent(notesPath)}
+            reveal={fileLinks.revealFor(active.id)}
+            onRevealed={fileLinks.revealed}
+            back={active.viewState.back?.at(-1) ?? null}
+            onPushBack={(from) => tabManager.pushBack(active.id, from)}
+            onPopBack={() => tabManager.popBack(active.id)}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (
@@ -306,6 +321,7 @@ export default function App() {
           />
         )}
       </main>
+      </FileLinkContext.Provider>
       {settingsOpen && (
         <SettingsPanel
           settings={settings}
