@@ -54,4 +54,38 @@ describe("Workspace with PDF tabs", () => {
     const reparsed = parseSession(JSON.parse(JSON.stringify(session)));
     expect(JSON.stringify(reparsed)).toBe(JSON.stringify(session));
   });
+
+  describe("Back", () => {
+    const at = (page: number, pageOffset = 0) => ({ page, pageOffset, zoom: "page-width" as const });
+
+    it("remembers the places a PDF tab jumped from, most recent last, and gives them back", () => {
+      let ws = workspaceOf(pdf("paper"), md("notes"));
+      ws = W.pushBack(ws, "paper", at(3, 0.5));
+      ws = W.pushBack(ws, "paper", at(40));
+      expect(ws.tabs[0].viewState.back).toEqual([at(3, 0.5), at(40)]);
+      ws = W.popBack(ws, "paper");
+      expect(ws.tabs[0].viewState.back).toEqual([at(3, 0.5)]);
+      ws = W.popBack(ws, "paper");
+      expect(ws.tabs[0].viewState.back).toEqual([]);
+      expect(W.popBack(ws, "paper")).toBe(ws);
+    });
+
+    it("keeps the same place once, clamps it, and forgets the oldest past the limit", () => {
+      let ws = workspaceOf(pdf("paper"));
+      ws = W.pushBack(ws, "paper", at(3));
+      expect(W.pushBack(ws, "paper", at(3))).toBe(ws);
+      ws = W.pushBack(ws, "paper", { page: 0, pageOffset: 2, zoom: 1 });
+      expect(ws.tabs[0].viewState.back?.[1]).toEqual({ page: 1, pageOffset: 1, zoom: 1 });
+      for (let page = 1; page <= 60; page += 1) ws = W.pushBack(ws, "paper", at(page + 100));
+      expect(ws.tabs[0].viewState.back).toHaveLength(50);
+      expect(ws.tabs[0].viewState.back?.[49]).toEqual(at(160));
+    });
+
+    it("is only for PDF tabs, and isn't saved in the session", () => {
+      const ws = workspaceOf(pdf("paper"), md("notes"));
+      expect(W.pushBack(ws, "notes", at(2))).toBe(ws);
+      const jumped = W.pushBack(ws, "paper", at(2));
+      expect(JSON.stringify(W.toSession(jumped))).not.toContain("back");
+    });
+  });
 });

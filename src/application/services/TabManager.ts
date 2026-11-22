@@ -114,6 +114,19 @@ export class TabManager {
     this.commit(W.setPdfView(this.workspace, id, view));
   }
 
+  /** A PDF tab is about to jump away from `from`: remember it for Back. */
+  pushBack(id: TabId, from: PdfView): void {
+    this.commit(W.pushBack(this.workspace, id, from));
+  }
+
+  /** Take the last place off a PDF tab's Back list and return it, or null if it's empty. */
+  popBack(id: TabId): PdfView | null {
+    const back = this.workspace.tabs.find((t) => t.id === id)?.viewState.back ?? [];
+    const last = back[back.length - 1] ?? null;
+    this.commit(W.popBack(this.workspace, id));
+    return last;
+  }
+
   /** Persist a tab's scroll position. Notifies only if it changed. */
   persistScroll(id: TabId, scrollTop: number): void {
     this.commit(W.setScrollTop(this.workspace, id, scrollTop));

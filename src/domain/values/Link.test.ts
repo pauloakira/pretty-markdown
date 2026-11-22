@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyLink, fragmentIds, slugify } from "./Link";
+import { classifyLink, fragmentIds, resolveFileLink, slugify } from "./Link";
 
 describe("classifyLink", () => {
   it("treats #… as a place in the same document, decoding %-escapes", () => {
@@ -40,5 +40,47 @@ describe("slugify", () => {
   it("numbers repeats", () => {
     const taken = new Set<string>();
     expect(["A", "A", "A"].map((t) => slugify(t, taken))).toEqual(["a", "a-1", "a-2"]);
+  });
+});
+
+describe("resolveFileLink", () => {
+  const notes = "/papers/quad/paper.notes.md";
+
+  it("opens an excerpt's PDF at its page and passage, from the notes file's folder", () => {
+    const href = "Geometric%20Methods.pdf#page=133&ex=7f3a9c&color=yellow&rect=72,540,451,553";
+    expect(resolveFileLink(href, notes)).toEqual({
+      path: "/papers/quad/Geometric Methods.pdf",
+      page: 133,
+      rect: [72, 540, 451, 553],
+    });
+  });
+
+  it("opens a plain PDF link at its page, or at the start", () => {
+    expect(resolveFileLink("../ref.pdf#page=3", notes)).toEqual({ path: "/papers/ref.pdf", page: 3 });
+    expect(resolveFileLink("./ref.PDF", notes)).toEqual({ path: "/papers/quad/ref.PDF" });
+    expect(resolveFileLink("ref.pdf#page=0", notes)).toEqual({ path: "/papers/quad/ref.pdf" });
+    expect(resolveFileLink("ref.pdf#page=2&rect=nope", notes)).toEqual({ path: "/papers/quad/ref.pdf", page: 2 });
+  });
+
+  it("opens other notes and Markdown files, absolute paths included", () => {
+    expect(resolveFileLink("other.notes.md#unsorted", notes)).toEqual({ path: "/papers/quad/other.notes.md" });
+    expect(resolveFileLink("/Users/me/todo.markdown?x=1", notes)).toEqual({ path: "/Users/me/todo.markdown" });
+  });
+
+  it("ignores links with a scheme, fragments, folders and files the app doesn't read", () => {
+    for (const href of [
+      "file:///etc/hosts.md",
+      "javascript:alert(1)//.md",
+      "https://x.org/a.pdf",
+      "//host/a.pdf",
+      "#heading",
+      "",
+      "pictures/",
+      "figure.png",
+      "../../../../x.pdf",
+      "bad%E0%A4%A.pdf",
+    ]) {
+      expect(resolveFileLink(href, notes)).toBeNull();
+    }
   });
 });

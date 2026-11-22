@@ -1,6 +1,6 @@
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { OutlineItem } from "../../domain/values/Outline";
-import type { HighlightPlace } from "../../domain/values/PdfRect";
+import type { HighlightPlace, PdfRect } from "../../domain/values/PdfRect";
 import type { Result } from "../../domain/values/Result";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { PdfView, PdfZoom } from "../../domain/values/ViewState";
@@ -56,6 +56,13 @@ export interface SelectedPassage {
   readonly text: string;
 }
 
+/** A passage to show the reader: its page, and the area on it when that's known. */
+export interface PassageTarget {
+  /** 1-based page number. */
+  readonly page: number;
+  readonly rect?: PdfRect;
+}
+
 /** Whether this document can be highlighted, and if not, why (for the toolbar tooltip). */
 export type HighlightAvailability =
   | { readonly allowed: true }
@@ -85,6 +92,11 @@ export interface PdfViewerHandle {
   outline(): Promise<readonly OutlineItem[]>;
   /** Scroll so that `position` (as in `outline()`) is at the top. */
   goTo(position: number): void;
+  /**
+   * Bring a passage into view, a little below the top, and flash it, e.g. after following
+   * a quote's link. Without an area, goes to the top of its page.
+   */
+  revealPassage(target: PassageTarget): void;
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;

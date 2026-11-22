@@ -1,6 +1,12 @@
-import { useEffect, type RefObject } from "react";
+import { createContext, useContext, useEffect, type RefObject } from "react";
 import { useContainer } from "../../composition/ContainerContext";
 import { classifyLink, fragmentIds } from "../../domain/values/Link";
+
+/**
+ * Follows a link to another file (a relative path, e.g. a quote's link to its PDF page),
+ * provided by the app for the document on screen. Without it such links do nothing.
+ */
+export const FileLinkContext = createContext<((href: string) => void) | null>(null);
 
 /**
  * Handles link clicks in a rendered markdown document (reader and edit-mode preview).
@@ -9,10 +15,11 @@ import { classifyLink, fragmentIds } from "../../domain/values/Link";
  * from the UI: the opener plugin's script only intercepts `target="_blank"` links. So
  * every link click is taken over: `#fragment` scrolls within the document, http(s) and
  * mailto open outside the app via the `LinkOpener`, and anything else (relative paths,
- * `file:`) does nothing.
+ * `file:`) goes to the `FileLinkContext`, which opens the files the app reads.
  */
 export function useDocumentLinks(scrollRef: RefObject<HTMLElement | null>): void {
   const { linkOpener } = useContainer();
+  const openFileLink = useContext(FileLinkContext);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -24,10 +31,11 @@ export function useDocumentLinks(scrollRef: RefObject<HTMLElement | null>): void
       const link = classifyLink(anchor.getAttribute("href") ?? "");
       if (link.kind === "fragment") scrollToFragment(container, link.id);
       else if (link.kind === "external") void linkOpener.openExternal(link.url);
+      else openFileLink?.(link.href);
     };
     container.addEventListener("click", onClick);
     return () => container.removeEventListener("click", onClick);
-  }, [scrollRef, linkOpener]);
+  }, [scrollRef, linkOpener, openFileLink]);
 }
 
 /**

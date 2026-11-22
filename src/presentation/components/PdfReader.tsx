@@ -6,7 +6,14 @@ import type { HighlightPlace } from "../../domain/values/PdfRect";
 import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener, FindTarget } from "../find/FindTarget";
-import type { EditHistory, HighlightAvailability, PdfInfo, PdfTool, PdfViewerHandle } from "../pdf/PdfViewer";
+import type {
+  EditHistory,
+  HighlightAvailability,
+  PassageTarget,
+  PdfInfo,
+  PdfTool,
+  PdfViewerHandle,
+} from "../pdf/PdfViewer";
 import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
 import { PdfToolbar } from "./PdfToolbar";
 
@@ -67,6 +74,16 @@ interface PdfReaderProps {
   contents: ContentsPanel;
   /** Open a file in a tab (the notes file, from the "Added to notes" notice). */
   onOpenFile: (path: string) => void;
+  /** A passage to show once the document is ready (a quote's link was followed), or null. */
+  reveal: PassageTarget | null;
+  /** The passage has been shown: forget the request. */
+  onRevealed: () => void;
+  /** Where Back goes (the last place this tab jumped from), or null for no Back. */
+  back: PdfView | null;
+  /** About to jump (contents, Go to page): remember where the reader is, for Back. */
+  onPushBack: (from: PdfView) => void;
+  /** Back: take the last place off this tab's list and return it. */
+  onPopBack: () => PdfView | null;
 }
 
 type Status =
@@ -96,6 +113,11 @@ export function PdfReader({
   onReady,
   contents,
   onOpenFile,
+  reveal,
+  onRevealed,
+  back,
+  onPushBack,
+  onPopBack,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener, notesService } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -242,9 +264,46 @@ export function PdfReader({
     () => (outline ? currentItemId(outline, position + CURRENT_LOOKAHEAD_PAGES) : null),
     [outline, position],
   );
-  const goToSection = useCallback((item: OutlineItem) => {
-    if (item.position !== null) handleRef.current?.goTo(item.position);
+  // Jumps remember where the reader was, so Back (⌘[) returns there.
+  const pushBackRef = useRef(onPushBack);
+  pushBackRef.current = onPushBack;
+  const jump = useCallback((go: (handle: PdfViewerHandle) => void) => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    pushBackRef.current(handle.view());
+    go(handle);
   }, []);
+  const goToSection = useCallback(
+    (item: OutlineItem) => {
+      const position = item.position;
+      if (position !== null) jump((handle) => handle.goTo(position));
+    },
+    [jump],
+  );
+  const popBackRef = useRef(onPopBack);
+  popBackRef.current = onPopBack;
+  const goBack = useCallback(() => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    const to = popBackRef.current();
+    if (to) handle.goTo(to.page - 1 + to.pageOffset);
+  }, []);
+
+  // A passage to show (a quote's link was followed): once the document is ready. The app
+  // already opened the tab at its page and remembered where it was, for Back.
+  const onRevealedRef = useRef(onRevealed);
+  onRevealedRef.current = onRevealed;
+  useEffect(() => {
+    const handle = handleRef.current;
+    if (!ready || reveal === null || !handle) return;
+    try {
+      handle.revealPassage(reveal);
+    } catch {
+      // Showing the passage is a nicety; never let it take the reader down.
+      handle.goToPage(reveal.page);
+    }
+    onRevealedRef.current();
+  }, [ready, reveal]);
 
   // A new colour from the toolbar (it's a setting, so it arrives as a prop).
   useEffect(() => {
@@ -353,6 +412,11 @@ export function PdfReader({
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (!e.shiftKey && !e.altKey && e.code === "BracketLeft") {
+        e.preventDefault();
+        goBack();
+        return;
+      }
       if (!e.shiftKey && !e.altKey && e.code === "KeyE") {
         e.preventDefault();
         void addToNotes();
@@ -376,7 +440,7 @@ export function PdfReader({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setZoom, zoomBy, setTool, tool, addToNotes]);
+  }, [setZoom, zoomBy, setTool, tool, addToNotes, goBack]);
 
   return (
     <div className="pdf-reader">
@@ -387,7 +451,7 @@ export function PdfReader({
         page={page}
         zoomPercent={zoomPercent}
         fitWidth={fitWidth}
-        onGoToPage={(target) => handleRef.current?.goToPage(target)}
+        onGoToPage={(target) => jump((handle) => handle.goToPage(target))}
         onZoomIn={() => zoomBy(1)}
         onZoomOut={() => zoomBy(-1)}
         onFitWidth={() => setZoom("page-width")}
@@ -469,6 +533,18 @@ export function PdfReader({
       )}
       <div className={`pdf-reader__stage${tool === "highlight" ? " pdf-reader__stage--highlighting" : ""}`}>
         <div className="pdf-reader__host" ref={hostRef} />
+        {back && ready && (
+          <button
+            type="button"
+            className="back-pill"
+            onClick={goBack}
+            title="Go back to where you were (⌘[)"
+          >
+            <span aria-hidden="true">‹</span>
+            <span>Back to p. {back.page}</span>
+            <kbd className="back-pill__key">⌘[</kbd>
+          </button>
+        )}
         {status.kind === "loading" && <div className="pdf-reader__status">Opening {name}…</div>}
         {status.kind === "error" && (
           <div className="pdf-reader__status pdf-reader__status--error" role="alert">

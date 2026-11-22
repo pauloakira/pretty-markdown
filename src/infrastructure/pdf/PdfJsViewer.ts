@@ -19,6 +19,7 @@ import {
   type AnnotationEditorUIManager,
   type PDFDocumentLoadingTask,
   type PDFDocumentProxy,
+  type PageViewport,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
@@ -49,6 +50,7 @@ import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
 import { attachRetile } from "../../presentation/webkit/retile";
+import { viewportArea, type PageArea } from "./revealArea";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -147,6 +149,44 @@ interface ViewerInternals {
     readonly canvas?: HTMLCanvasElement | null;
     reset(): void;
   }[];
+}
+
+/** The slice of a page view `revealPassage` uses. */
+interface RevealPageView {
+  readonly div: HTMLElement;
+  readonly viewport: PageViewport;
+}
+
+/** Where a revealed passage goes: this fraction of the viewport from its top. */
+const REVEAL_FROM_TOP = 0.3;
+/** How long a revealed passage flashes (matches the `pdf-flash` animation in theme.css). */
+const FLASH_MS = 1600;
+/** Room around a flashed passage, in CSS pixels, so the outline doesn't touch the text. */
+const FLASH_PAD_PX = 4;
+
+/**
+ * Outline an area of a page for a moment (it fades out by itself). The outline goes in the
+ * scroll container, over the page, not in the page itself: pdf.js empties a page's element
+ * whenever it resizes it (a zoom, the window settling), which would take the outline too.
+ */
+function flashArea(container: HTMLElement, page: HTMLElement, area: PageArea): void {
+  container.querySelector(":scope > .pdf-flash")?.remove();
+  const box = container.getBoundingClientRect();
+  const at = page.getBoundingClientRect();
+  // In the container's scroll coordinates; the page's area starts inside its border.
+  const left = at.left - box.left + container.scrollLeft + page.clientLeft + area.left;
+  const top = at.top - box.top + container.scrollTop + page.clientTop + area.top;
+  const flash = document.createElement("div");
+  flash.className = "pdf-flash";
+  flash.setAttribute("aria-hidden", "true");
+  Object.assign(flash.style, {
+    left: `${left - FLASH_PAD_PX}px`,
+    top: `${top - FLASH_PAD_PX}px`,
+    width: `${area.width + 2 * FLASH_PAD_PX}px`,
+    height: `${area.height + 2 * FLASH_PAD_PX}px`,
+  });
+  container.append(flash);
+  window.setTimeout(() => flash.remove(), FLASH_MS);
 }
 
 /**
@@ -853,6 +893,20 @@ export async function mountPdfJs(
       const index = Math.min(Math.max(0, Math.floor(position)), viewer.pagesCount - 1);
       const box = pageBox(index);
       if (box) container.scrollTop = box.top + (position - index) * box.height;
+    },
+    revealPassage(target) {
+      const index = Math.min(Math.max(1, Math.round(target.page)), viewer.pagesCount) - 1;
+      const box = pageBox(index);
+      const pageView = viewer.getPageView(index) as RevealPageView | undefined;
+      if (!box || !pageView || !target.rect) {
+        viewer.currentPageNumber = index + 1;
+        return;
+      }
+      const area = viewportArea(pageView.viewport, target.rect);
+      // A third of the way down, so the lines before it are in view too.
+      const top = box.top + pageView.div.clientTop + area.top;
+      container.scrollTop = Math.max(0, top - container.clientHeight * REVEAL_FROM_TOP);
+      flashArea(container, pageView.div, area);
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;
