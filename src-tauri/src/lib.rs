@@ -309,7 +309,10 @@ async fn read_text_file(app: tauri::AppHandle, path: String) -> Result<String, S
 
 #[cfg(mobile)]
 #[tauri::command]
-async fn read_text_file_if_exists(app: tauri::AppHandle, path: String) -> Result<Option<String>, String> {
+async fn read_text_file_if_exists(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Option<String>, String> {
     read_text_if_exists(&accessible_path(&app, &path)?, &path)
 }
 
@@ -442,10 +445,10 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app, event| match event {
+        .run(|app, event| {
             // macOS delivers double-clicked files via the Opened event, both at launch
             // and while the app is already running.
-            tauri::RunEvent::Opened { urls } => {
+            if let tauri::RunEvent::Opened { urls } = event {
                 let paths: Vec<String> = urls
                     .iter()
                     .filter_map(|u| u.to_file_path().ok())
@@ -453,7 +456,6 @@ pub fn run() {
                     .collect();
                 dispatch_opened(app, paths);
             }
-            _ => {}
         });
 }
 
@@ -507,7 +509,10 @@ mod tests {
         assert_eq!(read_text_if_exists(&missing, "missing").unwrap(), None);
 
         std::fs::write(&missing, "# Notes\n").unwrap();
-        assert_eq!(read_text_if_exists(&missing, "present").unwrap().as_deref(), Some("# Notes\n"));
+        assert_eq!(
+            read_text_if_exists(&missing, "present").unwrap().as_deref(),
+            Some("# Notes\n")
+        );
 
         // A folder where the file should be exists but can't be read as text: an error,
         // not "no notes yet".
