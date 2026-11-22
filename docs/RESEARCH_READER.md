@@ -74,6 +74,7 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Domain | `values/Excerpt.ts` (the excerpt, its link, text clean-up and escaping), `values/NotesFile.ts` (where the file lives; add, remove and read excerpts), `ports/NotesStore.ts` (read a notes file that may not exist yet; write it) |
 | Domain | `values/PdfRect.ts`: a page area, a highlight's place (page + area), and when two areas are the same highlight |
 | Application | `NotesService`: add a passage to a document's notes (creating the file the first time), remove it again, find the quotes of a highlight (`excerptsOf`); changes to one file are queued so quick additions can't overwrite each other |
+| Infrastructure | `markdown/excerptBlocks.ts`: renders an excerpt as an excerpt block (below) |
 | Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()`, `highlightSelection()` (resolves to the new highlight's place), `removeHighlight(place)`, and `onHighlightRemoved`, seen at pdf.js's editor registry (`addEditor` / `removeEditor` on its UI manager, which has no events for these) |
 | Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove**. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
@@ -99,11 +100,29 @@ card), the selection popover, and the Notes side panel. `removeHighlight` reache
 highlights pdf.js has an editor for (made or opened for editing since the document
 opened); removing a quote from the Notes panel will need the file's other highlights too.
 
+### Excerpts in the notes
+
+In the notes file, an excerpt renders as an **excerpt block** (the design's QuoteBlock).
+It has a bar in a deeper shade of its highlight colour, the quote in the reading font at
+full strength, and a small "↗ p. 133 · Geometric Methods" link back to its page. The
+link keeps its own text, so the reader can reword it ("Theorem 4.8"), and the document's
+name is added after it. The block carries `data-excerpt`, `data-source` and `data-page`
+for the cards that light up the passage and jump to it.
+
+Only a quote whose last line is a dash and then an excerpt link (one with an `ex` id)
+becomes a block. A quote that merely ends in a link, or puts the dash and link on the same
+line as its text, stays an ordinary quote. A reader may spread a quote over several lines
+or paragraphs, and those all stay in the block. Math in the rest of the notes is
+untouched: the plugin runs after the math rules and only changes the quote's own tokens.
+
+The link doesn't open the PDF yet: links to other files do nothing in the reader. Opening
+the PDF at that page is the "hovering a quote lights up its passage" card.
+
 ## Milestones
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), and quote ↔ highlight removal done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, and excerpt blocks in the notes done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |

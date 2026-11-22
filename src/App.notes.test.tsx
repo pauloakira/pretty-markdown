@@ -160,6 +160,8 @@ describe("Add to notes", () => {
     const { tabs, activeTabId } = app.tabManager.getSnapshot();
     const active = tabs.find((t) => t.id === activeTabId);
     expect(active?.document.path).toBe(NOTES_PATH);
-    expect(document.querySelector("blockquote")?.textContent).toContain("Read me later.");
+    const quote = document.querySelector("blockquote.excerpt");
+    expect(quote?.querySelector("p")?.textContent).toBe("Read me later.");
+    expect(quote?.querySelector(".excerpt__source")?.textContent).toBe("↗ p. 2 · paper");
   });
 });

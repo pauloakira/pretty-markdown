@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { MacroMap, MathRenderer } from "../../domain/ports/MathRenderer";
+import { excerptBlocks } from "./excerptBlocks";
 import { headingIds } from "./headingIds";
 import { mathPlugin } from "./mathPlugin";
 
@@ -30,6 +31,7 @@ export class MarkdownPipeline {
       getMacros: () => this.activeMacros,
     });
     this.md.use(headingIds);
+    this.md.use(excerptBlocks);
   }
 
   render(source: string): string {
