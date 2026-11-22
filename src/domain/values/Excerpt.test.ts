@@ -80,11 +80,14 @@ describe("excerpt text", () => {
       "- not a list",
       "1. not a list either",
       "a | b ~ c \\ d",
+      "> not a nested quote",
     ];
     for (const text of cases) expect(unescapeQuoteText(escapeQuoteText(text))).toBe(text);
     expect(escapeQuoteText("costs $5")).toBe("costs \\$5");
     expect(escapeQuoteText("1. item")).toBe("1\\. item");
     expect(escapeQuoteText("e.g. this - that")).toBe("e.g. this - that");
+    expect(escapeQuoteText("exp : so(n) -> SO(n)")).toBe("exp : so(n) -> SO(n)");
+    expect(escapeQuoteText("> quoted")).toBe("\\> quoted");
   });
 });
 

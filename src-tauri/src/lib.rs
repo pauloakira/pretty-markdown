@@ -172,6 +172,23 @@ fn read_text(local: &Path, path: &str) -> Result<String, String> {
     std::fs::read_to_string(local).map_err(|e| format!("Failed to read '{path}': {e}"))
 }
 
+/// Read a text file that may not exist yet: `None` when there's no file at `path`, an error
+/// when there is one but it can't be read. A document's notes file is the case: "no notes
+/// yet" must never be mistaken for "unreadable", or a new file would replace the notes.
+#[cfg(desktop)]
+#[tauri::command]
+fn read_text_file_if_exists(path: String) -> Result<Option<String>, String> {
+    read_text_if_exists(&file_path(&path), &path)
+}
+
+fn read_text_if_exists(local: &Path, path: &str) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(local) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("Failed to read '{path}': {e}")),
+    }
+}
+
 /// A filesystem path from what the frontend passes: a plain path (desktop), or a
 /// `file://` URL, which is what the iOS/iPadOS document picker returns.
 fn file_path(path: &str) -> PathBuf {
@@ -292,6 +309,12 @@ async fn read_text_file(app: tauri::AppHandle, path: String) -> Result<String, S
 
 #[cfg(mobile)]
 #[tauri::command]
+async fn read_text_file_if_exists(app: tauri::AppHandle, path: String) -> Result<Option<String>, String> {
+    read_text_if_exists(&accessible_path(&app, &path)?, &path)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
 async fn read_file_bytes(
     app: tauri::AppHandle,
     path: String,
@@ -360,6 +383,7 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             read_text_file,
+            read_text_file_if_exists,
             read_file_bytes,
             write_text_file,
             write_file_bytes,
@@ -474,6 +498,24 @@ mod tests {
             },
         )
         .map(|_| ())
+    }
+
+    #[test]
+    fn read_text_if_exists_tells_missing_from_unreadable() {
+        let dir = temp_dir("read-if-exists");
+        let missing = dir.join("Geometric Methods.notes.md");
+        assert_eq!(read_text_if_exists(&missing, "missing").unwrap(), None);
+
+        std::fs::write(&missing, "# Notes\n").unwrap();
+        assert_eq!(read_text_if_exists(&missing, "present").unwrap().as_deref(), Some("# Notes\n"));
+
+        // A folder where the file should be exists but can't be read as text: an error,
+        // not "no notes yet".
+        let folder = dir.join("folder.notes.md");
+        std::fs::create_dir(&folder).unwrap();
+        assert!(read_text_if_exists(&folder, "folder").is_err());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
