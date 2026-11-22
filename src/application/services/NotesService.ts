@@ -6,7 +6,8 @@ import {
   type Excerpt,
 } from "../../domain/values/Excerpt";
 import type { HighlightColor } from "../../domain/values/Highlight";
-import { addExcerpt, notesPathFor, removeExcerpt } from "../../domain/values/NotesFile";
+import { addExcerpt, notesPathFor, readExcerpts, removeExcerpt } from "../../domain/values/NotesFile";
+import { roundRect, sameArea, type HighlightPlace, type PdfRect } from "../../domain/values/PdfRect";
 import { err, ok, type Result } from "../../domain/values/Result";
 
 /** A passage the reader picked in a document, to be kept in its notes. */
@@ -16,6 +17,8 @@ export interface TakenPassage {
   /** The text as selected (line breaks and all; it's cleaned up here). */
   readonly text: string;
   readonly color: HighlightColor;
+  /** The area its highlight covers, if it was highlighted (PDF points). */
+  readonly rect?: PdfRect;
 }
 
 /** What `addToNotes` did, so the reader can be told and the addition undone. */
@@ -59,6 +62,7 @@ export class NotesService {
       page: passage.page,
       text,
       color: passage.color,
+      ...(passage.rect ? { rect: roundRect(passage.rect) } : {}),
     };
     return this.queued(notesPath, async () => {
       const current = await this.store.read(notesPath);
@@ -67,6 +71,30 @@ export class NotesService {
       if (!written.ok) return err(`Couldn't save your notes: ${written.error}`);
       return ok({ notesPath, excerpt, created: current.value === null });
     });
+  }
+
+  /**
+   * The excerpts in the notes of the document at `documentPath` that quote the highlight
+   * at `place` (same page, same area): what to offer to remove when that highlight goes.
+   * None if there are no notes yet.
+   */
+  async excerptsOf(documentPath: string, place: HighlightPlace): Promise<Result<readonly Excerpt[]>> {
+    const notesPath = notesPathFor(documentPath);
+    const current = await this.store.read(notesPath);
+    if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
+    if (current.value === null) return ok([]);
+    const source = fileName(documentPath);
+    return ok(
+      readExcerpts(current.value)
+        .map((found) => found.excerpt)
+        .filter(
+          (excerpt) =>
+            excerpt.source === source &&
+            excerpt.page === place.page &&
+            excerpt.rect !== undefined &&
+            sameArea(excerpt.rect, place.rect),
+        ),
+    );
   }
 
   /** Take an excerpt out of a notes file again (Undo). Nothing to do if it's gone already. */

@@ -1,4 +1,5 @@
 import { isHighlightColor, type HighlightColor } from "./Highlight";
+import { formatRect, parseRect, type PdfRect } from "./PdfRect";
 
 /**
  * A passage the reader took from a document into their notes: the quoted text plus where
@@ -8,7 +9,7 @@ import { isHighlightColor, type HighlightColor } from "./Highlight";
  * page, e.g.
  *
  *     > The exponential map is surjective.
- *     > — [p. 133](Geometric%20Methods.pdf#page=133&ex=7f3a9c&color=yellow)
+ *     > — [p. 133](Geometric%20Methods.pdf#page=133&ex=7f3a9c&color=yellow&rect=72,540,301,553)
  *
  * Everything the app needs rides in that link, so the file reads as ordinary Markdown in
  * any editor, and `#page=` is the standard way to open a PDF at a page.
@@ -23,6 +24,12 @@ export interface Excerpt {
   /** The quoted text, on one line. */
   readonly text: string;
   readonly color: HighlightColor;
+  /**
+   * The area of the page its highlight covers (the highlight's /Rect), which is how the
+   * highlight in the PDF and this quote find each other. Absent when the PDF couldn't be
+   * highlighted (a signed PDF, say).
+   */
+  readonly rect?: PdfRect;
 }
 
 /** Where an excerpt link points: what `excerptHref` encodes. */
@@ -31,6 +38,7 @@ export interface ExcerptLink {
   readonly source: string;
   readonly page: number;
   readonly color: HighlightColor;
+  readonly rect?: PdfRect;
 }
 
 /** Excerpt ids are short lowercase hex, so they survive in URLs and Markdown untouched. */
@@ -51,9 +59,10 @@ export function newExcerptId(random: () => number): string {
   return id;
 }
 
-/** The link target for an excerpt: its source, page, id and colour. */
+/** The link target for an excerpt: its source, page, id, colour and highlighted area. */
 export function excerptHref(link: ExcerptLink): string {
-  return `${encodeSource(link.source)}#page=${link.page}&ex=${link.id}&color=${link.color}`;
+  const rect = link.rect ? `&rect=${formatRect(link.rect)}` : "";
+  return `${encodeSource(link.source)}#page=${link.page}&ex=${link.id}&color=${link.color}${rect}`;
 }
 
 /**
@@ -70,7 +79,8 @@ export function parseExcerptHref(href: string): ExcerptLink | null {
   const color = params.get("color");
   const source = decodeSource(href.slice(0, hash));
   if (source === null) return null;
-  return { id, source, page, color: isHighlightColor(color) ? color : "yellow" };
+  const rect = parseRect(params.get("rect") ?? "");
+  return { id, source, page, color: isHighlightColor(color) ? color : "yellow", ...(rect ? { rect } : {}) };
 }
 
 /**
