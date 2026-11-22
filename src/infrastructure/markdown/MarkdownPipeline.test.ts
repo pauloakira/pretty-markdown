@@ -130,11 +130,98 @@ describe("MarkdownPipeline — LaTeX-style delimiters", () => {
       color: "blue",
     });
     const html = makePipeline().render(quote);
-    expect(html).toContain("<blockquote>");
+    expect(html).toContain('<blockquote class="excerpt excerpt--blue"');
     expect(html).not.toContain("katex");
     expect(html).not.toContain("<em>");
     expect(html).not.toContain("<ol>");
     expect(html).toContain("1. Costs $5 and $10; a *star* and x_1 [12], not [a link](x.pdf).");
     expect(html).toContain('href="Geometric%20Methods.pdf#page=133&amp;ex=7f3a9c&amp;color=blue"');
+  });
+});
+
+describe("excerpt blocks", () => {
+  const excerpt = (text: string, extra: Partial<Parameters<typeof excerptToMarkdown>[0]> = {}) =>
+    excerptToMarkdown({
+      id: "7f3a9c",
+      source: "Geometric Methods.pdf",
+      page: 133,
+      text,
+      color: "yellow",
+      rect: [72, 540, 451, 553],
+      ...extra,
+    });
+
+  it("renders an excerpt as a quote with its colour and a link back to its page", () => {
+    const html = makePipeline().render(excerpt("The exponential map is surjective."));
+    expect(html).toBe(
+      '<blockquote class="excerpt excerpt--yellow" data-excerpt="7f3a9c" ' +
+        'data-source="Geometric Methods.pdf" data-page="133">\n' +
+        "<p>The exponential map is surjective.</p>\n" +
+        '<p class="excerpt__source"><a href="Geometric%20Methods.pdf#page=133&amp;ex=7f3a9c&amp;color=yellow&amp;rect=72,540,451,553" class="excerpt__link">' +
+        '<span aria-hidden="true">↗ </span>p. 133 · Geometric Methods</a></p>\n' +
+        "</blockquote>\n",
+    );
+  });
+
+  it("keeps the reader's own wording of the link, and names a document in a folder", () => {
+    const md = "> Quoted.\n> — [Theorem 4.8](papers/Lie%20Groups.pdf#page=87&ex=c41d2e&color=green)";
+    const html = makePipeline().render(md);
+    expect(html).toContain('class="excerpt excerpt--green"');
+    expect(html).toContain('data-source="papers/Lie Groups.pdf"');
+    expect(html).toContain("</span>Theorem 4.8 · Lie Groups</a>");
+  });
+
+  it("leaves ordinary quotes alone, including ones ending in a plain page link", () => {
+    const pipeline = makePipeline();
+    expect(pipeline.render("> Just a quote.")).toBe("<blockquote>\n<p>Just a quote.</p>\n</blockquote>\n");
+    const plainLink = pipeline.render("> Quoted.\n> — [p. 3](paper.pdf#page=3)");
+    expect(plainLink).toContain("<blockquote>");
+    expect(plainLink).toContain("— <a href=\"paper.pdf#page=3\">p. 3</a>");
+  });
+
+  it("needs the link on a line of its own after a dash", () => {
+    const pipeline = makePipeline();
+    const href = "a.pdf#page=2&ex=7f3a9c&color=pink";
+    expect(pipeline.render(`> Read [p. 2](${href}) for more.`)).toContain("<blockquote>");
+    expect(pipeline.render(`> Inline — [p. 2](${href})`)).toContain("<blockquote>");
+    expect(pipeline.render(`> Text\n> [p. 2](${href})`)).toContain("<blockquote>");
+    expect(pipeline.render(`> Text\n> — [p. 2](${href}) and more`)).toContain("<blockquote>");
+  });
+
+  it("keeps a quote the reader spread over several lines and paragraphs", () => {
+    const href = "a.pdf#page=2&ex=7f3a9c&color=pink";
+    const html = makePipeline().render(`> First paragraph.\n>\n> Second, *edited*\n> over two lines.\n>\n> — [p. 2](${href})`);
+    expect(html).toContain('class="excerpt excerpt--pink"');
+    expect(html).toContain("<p>First paragraph.</p>");
+    expect(html).toContain("<p>Second, <em>edited</em>\nover two lines.</p>");
+    expect(html).not.toMatch(/<p>\s*<\/p>/); // the source line's own paragraph is gone
+    expect(html.match(/<p/g)).toHaveLength(3);
+  });
+
+  it("escapes what comes from the link", () => {
+    const html = makePipeline().render('> Q.\n> — [p. 1](%3Cimg%20src%3Dx%20onerror%3D%22a%22%3E.pdf#page=1&ex=7f3a9c)');
+    expect(html).not.toContain("<img");
+    expect(html).toContain('data-source="&lt;img src=x onerror=&quot;a&quot;&gt;.pdf"');
+    expect(html).toContain("· &lt;img src=x onerror=&quot;a&quot;&gt;</a>");
+  });
+
+  it("renders math between excerpts, and still falls back to MathJax", () => {
+    const notes = [
+      excerpt("Costs $5."),
+      "So $e^{tA} \\in SO(n)$ and $\\enclose{circle}{x}$.",
+      excerpt("The second one.", { id: "c41d2e", color: "blue" }),
+    ].join("\n\n");
+    const html = makeFallbackPipeline().render(notes);
+    expect(html.match(/class="excerpt /g)).toHaveLength(2);
+    expect(html).toContain("<p>Costs $5.</p>"); // the quote's $ stays text
+    expect(html).toContain("katex");
+    expect(html).toContain("mjx-container");
+  });
+
+  it("finds an excerpt inside a list or a nested quote", () => {
+    const href = "a.pdf#page=2&ex=7f3a9c&color=blue";
+    const html = makePipeline().render(`- Item\n\n  > Q.\n  > — [p. 2](${href})\n\n> Outer\n>\n> > Inner.\n> > — [p. 2](${href})`);
+    expect(html.match(/class="excerpt excerpt--blue"/g)).toHaveLength(2);
+    expect(html).toContain("<blockquote>\n<p>Outer</p>"); // the outer quote isn't one
   });
 });
