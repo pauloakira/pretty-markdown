@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useContainer } from "../../composition/ContainerContext";
+import { fileName } from "../../domain/entities/Document";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
@@ -16,6 +17,19 @@ const VIEW_SETTLE_MS = 400;
  * title's top margin), so at the top of a chapter's page that chapter is current.
  */
 const CURRENT_LOOKAHEAD_PAGES = 0.2;
+
+/** How long the "Added to notes" notice stays (errors stay until dismissed). */
+const NOTICE_MS = 8000;
+
+/** What the reader is told after Add to notes. */
+type NotesNotice =
+  | {
+      readonly kind: "added";
+      readonly notesPath: string;
+      readonly excerptId: string;
+      readonly created: boolean;
+    }
+  | { readonly kind: "error"; readonly message: string };
 
 /** What the app needs from the PDF on screen before quitting. */
 export interface PdfReaderControl {
@@ -42,6 +56,8 @@ interface PdfReaderProps {
   onReady?: () => void;
   /** The contents sidebar (its open state and width are app settings). */
   contents: ContentsPanel;
+  /** Open a file in a tab (the notes file, from the "Added to notes" notice). */
+  onOpenFile: (path: string) => void;
 }
 
 type Status =
@@ -70,8 +86,9 @@ export function PdfReader({
   controlRef,
   onReady,
   contents,
+  onOpenFile,
 }: PdfReaderProps) {
-  const { documentService, pdfViewer, pdfSaver, linkOpener } = useContainer();
+  const { documentService, pdfViewer, pdfSaver, linkOpener, notesService } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
   const hostRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<PdfViewerHandle | null>(null);
@@ -84,6 +101,7 @@ export function PdfReader({
   const [history, setHistory] = useState<EditHistory>({ canUndo: false, canRedo: false });
   const [outline, setOutline] = useState<readonly OutlineItem[] | null>(null);
   const [position, setPosition] = useState(initialView.page - 1 + initialView.pageOffset);
+  const [notesNotice, setNotesNotice] = useState<NotesNotice | null>(null);
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -227,6 +245,44 @@ export function PdfReader({
     setToolState(next);
   }, []);
 
+  // Add the selected text to this PDF's notes file (docs/RESEARCH_READER.md), highlighting
+  // it in the PDF too when the PDF can be highlighted.
+  const addToNotes = useCallback(async () => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    const passage = handle.selectedPassage();
+    if (passage === null) {
+      setNotesNotice({ kind: "error", message: "Select some text in the PDF first, then Add to notes." });
+      return;
+    }
+    handle.highlightSelection();
+    const added = await notesService.addToNotes(path, { ...passage, color: colorRef.current });
+    setNotesNotice(
+      added.ok
+        ? {
+            kind: "added",
+            notesPath: added.value.notesPath,
+            excerptId: added.value.excerpt.id,
+            created: added.value.created,
+          }
+        : { kind: "error", message: added.error },
+    );
+  }, [notesService, path]);
+
+  // The "Added" notice goes away by itself; an error stays until dismissed.
+  useEffect(() => {
+    if (notesNotice?.kind !== "added") return;
+    const timer = window.setTimeout(() => setNotesNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [notesNotice]);
+
+  const undoAddToNotes = useCallback(async () => {
+    if (notesNotice?.kind !== "added") return;
+    setNotesNotice(null);
+    const removed = await notesService.removeFromNotes(notesNotice.notesPath, notesNotice.excerptId);
+    if (!removed.ok) setNotesNotice({ kind: "error", message: removed.error });
+  }, [notesNotice, notesService]);
+
   const setZoom = useCallback((zoom: PdfZoom) => handleRef.current?.setZoom(zoom), []);
   const zoomBy = useCallback((direction: 1 | -1) => {
     const handle = handleRef.current;
@@ -249,6 +305,11 @@ export function PdfReader({
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (!e.shiftKey && !e.altKey && e.code === "KeyE") {
+        e.preventDefault();
+        void addToNotes();
+        return;
+      }
       if (e.shiftKey && e.code === "KeyH") {
         e.preventDefault();
         setTool(tool === "highlight" ? "select" : "highlight");
@@ -267,7 +328,7 @@ export function PdfReader({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setZoom, zoomBy, setTool, tool]);
+  }, [setZoom, zoomBy, setTool, tool, addToNotes]);
 
   return (
     <div className="pdf-reader">
@@ -292,7 +353,39 @@ export function PdfReader({
         onRedo={() => handleRef.current?.redo()}
         contentsOpen={contents.open}
         onToggleContents={() => contents.setOpen(!contents.open)}
+        onAddToNotes={() => void addToNotes()}
       />
+      {notesNotice?.kind === "added" && (
+        <div className="banner banner--warn notes-notice" role="status">
+          <span>
+            {notesNotice.created ? "Started your notes: " : "Added to "}
+            <strong>{fileName(notesNotice.notesPath)}</strong>
+          </span>
+          <span className="banner__actions">
+            <button className="banner__btn" onClick={() => onOpenFile(notesNotice.notesPath)}>
+              Open notes
+            </button>
+            <button
+              className="banner__btn"
+              onClick={() => void undoAddToNotes()}
+              aria-label="Remove from notes"
+              title="Take this passage out of the notes again"
+            >
+              Remove
+            </button>
+          </span>
+        </div>
+      )}
+      {notesNotice?.kind === "error" && (
+        <div className="banner banner--warn notes-notice" role="alert">
+          <span>{notesNotice.message}</span>
+          <span className="banner__actions">
+            <button className="banner__btn" onClick={() => setNotesNotice(null)} aria-label="Dismiss">
+              OK
+            </button>
+          </span>
+        </div>
+      )}
       {saveError && (
         <div className="banner banner--error" role="alert">
           {saveError}

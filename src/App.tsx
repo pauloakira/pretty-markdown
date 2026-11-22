@@ -277,6 +277,7 @@ export default function App() {
             controlRef={pdfControlRef}
             onReady={find.refresh}
             contents={contents}
+            onOpenFile={(notesPath) => void openRecent(notesPath)}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (

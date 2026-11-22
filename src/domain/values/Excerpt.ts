@@ -94,13 +94,13 @@ export function excerptToMarkdown(excerpt: Excerpt): string {
 
 /**
  * Escape what Markdown (and the math plugin) would otherwise read as syntax: emphasis,
- * code, HTML, `$…$` math, tables, a link's `](` or `][`, and a list or heading marker at
- * the start. Ordinary punctuation is left alone, so the quote still reads well in other
+ * code, HTML, `$…$` math, tables, a link's `](` or `][`, and a list, quote or heading
+ * marker at the start (`->` mid-line stays as it is). Ordinary punctuation is left alone, so the quote still reads well in other
  * editors. A lone `[` is not escaped: `\[` opens display math in the LaTeX dialect.
  */
 export function escapeQuoteText(text: string): string {
-  const escaped = text.replace(/[\\`*_<>$|~]|\](?=[([])/g, "\\$&");
-  return escaped.replace(/^(#|[+\-=]|\d+[.)])/, (marker) =>
+  const escaped = text.replace(/[\\`*_<$|~]|\](?=[([])/g, "\\$&");
+  return escaped.replace(/^(#|>|[+\-=]|\d+[.)])/, (marker) =>
     marker.length === 1 ? `\\${marker}` : `${marker.slice(0, -1)}\\${marker.slice(-1)}`,
   );
 }

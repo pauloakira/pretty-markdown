@@ -29,6 +29,8 @@ interface PdfToolbarProps {
   onRedo: () => void;
   contentsOpen: boolean;
   onToggleContents: () => void;
+  /** Add the selected text to this PDF's notes file. */
+  onAddToNotes: () => void;
 }
 
 /** Toolbar for a PDF tab: the highlighter, page indicator with go-to-page, and zoom. */
@@ -53,6 +55,7 @@ export function PdfToolbar({
   onRedo,
   contentsOpen,
   onToggleContents,
+  onAddToNotes,
 }: PdfToolbarProps) {
   const ready = pageCount !== null;
   // The field shows the current page until the user types; Enter jumps, Escape/blur reverts.
@@ -74,6 +77,16 @@ export function PdfToolbar({
         </span>
       </div>
       <div className="doctoolbar__actions">
+        <button
+          className="doctoolbar__btn"
+          // Keep the text selection: a click would otherwise clear it before it's read.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onAddToNotes}
+          disabled={!ready}
+          title="Add the selected text to this PDF's notes (⌘E)"
+        >
+          Add to notes
+        </button>
         <HighlightControl
           availability={highlighting}
           tool={tool}

@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
 import App from "../App";
 import { DocumentService } from "../application/services/DocumentService";
+import { NotesService } from "../application/services/NotesService";
 import { PdfSaver } from "../application/services/PdfSaver";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
@@ -25,6 +26,7 @@ import type {
   HighlightAvailability,
   PdfInfo,
   PdfMountOptions,
+  SelectedPassage,
   PdfSource,
   PdfTool,
   PdfViewerFactory,
@@ -54,6 +56,8 @@ export const PDFS: Record<string, string> = {
 
 /** Bytes written to the fake disk (by PDF saves), by path. Read back before `PDFS`. */
 export const WRITTEN = new Map<string, Uint8Array>();
+/** Notes files "on disk" (path → text), read and written through the notes store. */
+export const NOTES = new Map<string, string>();
 
 export class FakeAppWindow implements AppWindow {
   handler: (() => void) | null = null;
@@ -93,6 +97,18 @@ export class FakePdfHandle implements PdfViewerHandle {
   }
   setHighlightColor(color: HighlightColor) {
     this.color = color;
+  }
+  /** What a test has "selected" in this PDF (null: nothing). */
+  selection: SelectedPassage | null = null;
+  /** Colours of the selections highlighted through `highlightSelection`, in order. */
+  readonly highlighted: HighlightColor[] = [];
+  selectedPassage() {
+    return this.selection;
+  }
+  highlightSelection() {
+    if (!this.highlighting.allowed || this.selection === null) return false;
+    this.highlighted.push(this.color);
+    return true;
   }
   /** Undo/redo requests, in order. */
   readonly historyLog: string[] = [];
@@ -240,6 +256,8 @@ export function makeContainer(): TestContainer {
   const picks: (string | null)[] = [];
   const reader: FileReader = {
     async readTextFile(path) {
+      const notes = NOTES.get(path);
+      if (notes !== undefined) return ok(notes);
       return path in FILES ? ok(FILES[path]) : err("missing");
     },
     async readBytes(path, maxBytes) {
@@ -280,6 +298,18 @@ export function makeContainer(): TestContainer {
     documentExporter: { exportPdf: async () => {} },
     pdfViewer: new FakePdfViewerFactory(),
     pdfSaver: new PdfSaver(reader, writer),
+    notesService: new NotesService(
+      {
+        async read(path) {
+          return ok(NOTES.get(path) ?? null);
+        },
+        async write(path, text) {
+          NOTES.set(path, text);
+          return ok(undefined);
+        },
+      },
+      () => 0.5,
+    ),
     linkOpener: new FakeLinkOpener(),
     picks,
   };
@@ -356,6 +386,7 @@ export function useAppHarness() {
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     disk.session = null;
     WRITTEN.clear();
+    NOTES.clear();
     listeners.clear();
   });
   afterEach(async () => {

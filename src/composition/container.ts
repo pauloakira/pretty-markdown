@@ -1,4 +1,5 @@
 import { DocumentService } from "../application/services/DocumentService";
+import { NotesService } from "../application/services/NotesService";
 import { PdfSaver } from "../application/services/PdfSaver";
 import { SessionService } from "../application/services/SessionService";
 import { TabManager } from "../application/services/TabManager";
@@ -10,6 +11,7 @@ import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepositor
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
 import { IosFileSystem } from "../infrastructure/fs/IosFileSystem";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
+import { TauriNotesStore } from "../infrastructure/fs/TauriNotesStore";
 import { PrintDocumentExporter } from "../infrastructure/export/PrintDocumentExporter";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
@@ -47,6 +49,8 @@ export interface Container {
   readonly pdfViewer: PdfViewerFactory;
   /** Saves PDFs (e.g. with new highlights) and recognises those saves when watching. */
   readonly pdfSaver: PdfSaver;
+  /** Keeps excerpts in each document's notes file (docs/RESEARCH_READER.md). */
+  readonly notesService: NotesService;
   readonly linkOpener: LinkOpener;
 }
 
@@ -70,6 +74,7 @@ export function createContainer(): Container {
   const documentExporter = new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
   const pdfSaver = new PdfSaver(fileSystem, fileSystem);
+  const notesService = new NotesService(new TauriNotesStore());
   const linkOpener = new TauriLinkOpener();
 
   return {
@@ -83,6 +88,7 @@ export function createContainer(): Container {
     documentExporter,
     pdfViewer,
     pdfSaver,
+    notesService,
     linkOpener,
   };
 }

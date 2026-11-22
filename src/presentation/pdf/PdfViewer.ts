@@ -43,6 +43,13 @@ export interface EditHistory {
  */
 export type PdfTool = "select" | "highlight";
 
+/** Text selected in a PDF. */
+export interface SelectedPassage {
+  /** 1-based number of the page the selection starts on. */
+  readonly page: number;
+  readonly text: string;
+}
+
 /** Whether this document can be highlighted, and if not, why (for the toolbar tooltip). */
 export type HighlightAvailability =
   | { readonly allowed: true }
@@ -75,6 +82,17 @@ export interface PdfViewerHandle {
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;
+  /**
+   * The text selected in this document now, with the page the selection starts on, or
+   * null if nothing is selected here (e.g. to add it to the notes).
+   */
+  selectedPassage(): SelectedPassage | null;
+  /**
+   * Highlight the current selection in the highlighter colour, as pdf.js's Highlight
+   * button does, but staying with the current tool. False if this PDF can't be
+   * highlighted or nothing is selected.
+   */
+  highlightSelection(): boolean;
   /** Undo or redo the last highlight change (adding, recolouring, deleting). */
   undo(): void;
   redo(): void;
