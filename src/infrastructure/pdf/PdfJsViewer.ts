@@ -796,6 +796,37 @@ export async function mountPdfJs(
       highlightColor = color;
       applyHighlightColor();
     },
+    selectedPassage() {
+      const selection = document.getSelection();
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+      const range = selection.getRangeAt(0);
+      if (!container.contains(range.commonAncestorContainer)) return null;
+      const start = range.startContainer;
+      const element = start instanceof Element ? start : start.parentElement;
+      const page = Number(element?.closest<HTMLElement>(".page[data-page-number]")?.dataset.pageNumber);
+      const text = selection.toString();
+      if (!Number.isInteger(page) || page < 1 || text.trim() === "") return null;
+      return { page, text };
+    },
+    highlightSelection() {
+      if (!highlighting.allowed || !uiManager) return false;
+      const selection = document.getSelection();
+      if (!selection || selection.isCollapsed) return false;
+      applyHighlightColor();
+      // From the select tool pdf.js switches to highlight mode, then highlights once it's
+      // in. Switch back afterwards: adding to the notes shouldn't change the tool.
+      if (editorMode === AnnotationEditorType.NONE) {
+        const back = (event: { mode: number }) => {
+          if (event.mode !== AnnotationEditorType.HIGHLIGHT) return;
+          eventBus.off("annotationeditormodechanged", back);
+          // After pdf.js's own listener has made the highlight.
+          window.setTimeout(() => requestMode(AnnotationEditorType.NONE), 0);
+        };
+        eventBus.on("annotationeditormodechanged", back);
+      }
+      uiManager.highlightSelection("main_toolbar");
+      return true;
+    },
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
     },
