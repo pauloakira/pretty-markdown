@@ -74,8 +74,11 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Domain | `values/Excerpt.ts` (the excerpt, its link, text clean-up and escaping), `values/NotesFile.ts` (where the file lives; add, remove and read excerpts), `ports/NotesStore.ts` (read a notes file that may not exist yet; write it) |
 | Domain | `values/PdfRect.ts`: a page area, a highlight's place (page + area), and when two areas are the same highlight |
 | Application | `NotesService`: add a passage to a document's notes (creating the file the first time), remove it again, find the quotes of a highlight (`excerptsOf`); changes to one file are queued so quick additions can't overwrite each other |
+| Domain | `values/Link.ts` `resolveFileLink`: a link to another file, relative to the document's folder, with a PDF's `#page=` and `rect` |
 | Infrastructure | `markdown/excerptBlocks.ts`: renders an excerpt as an excerpt block (below) |
+| Infrastructure | `PdfJsViewer.revealPassage(target)` (with `pdf/revealArea.ts`): scrolls a passage into view and flashes it |
 | Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()`, `highlightSelection()` (resolves to the new highlight's place), `removeHighlight(place)`, and `onHighlightRemoved`, seen at pdf.js's editor registry (`addEditor` / `removeEditor` on its UI manager, which has no events for these) |
+| Presentation | `useFileLinks` (links in a Markdown document to other files, via `FileLinkContext`), the PDF tab's **Back** pill and ⌘[, over `ViewState.back` |
 | Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove**. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
 ### Add to notes (PDF)
@@ -115,14 +118,31 @@ line as its text, stays an ordinary quote. A reader may spread a quote over seve
 or paragraphs, and those all stay in the block. Math in the rest of the notes is
 untouched: the plugin runs after the math rules and only changes the quote's own tokens.
 
-The link doesn't open the PDF yet: links to other files do nothing in the reader. Opening
-the PDF at that page is the "hovering a quote lights up its passage" card.
+### Following a quote's link
+
+Clicking "↗ p. 133" opens the PDF in a tab (or switches to it) at that page. The passage
+lands a third of the way down the window, so the lines before it are in view too, and it is
+outlined for a moment in the accent colour. A quote without a `rect` (from a PDF that
+couldn't be highlighted) goes to the top of its page.
+
+If the PDF was already open, its tab remembers where the reader was, and a
+**‹ Back to p. 12** pill at the top of the page returns there (⌘[ does too). Each PDF tab
+keeps its own list, so several jumps are undone one at a time. The contents sidebar and
+Go to page are jumps as well. A PDF opened by the link has nowhere to go back to: the notes
+are a tab switch away until the Notes panel puts them beside the page.
+
+Other links to files work the same way from any Markdown document: `other.notes.md` or
+`../paper.pdf#page=3` opens in a tab, relative to the document's folder. Links to files
+the app doesn't read (images, folders) and `file:` URLs still do nothing.
+
+Not yet: hovering a quote to outline its passage. That needs the quote and the page on
+screen together, so it comes with the Notes panel.
 
 ## Milestones
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, and excerpt blocks in the notes done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, and following a quote's link (with Back) done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |

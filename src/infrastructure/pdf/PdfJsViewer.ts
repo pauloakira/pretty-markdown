@@ -19,6 +19,7 @@ import {
   type AnnotationEditorUIManager,
   type PDFDocumentLoadingTask,
   type PDFDocumentProxy,
+  type PageViewport,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
@@ -33,7 +34,7 @@ import { highlightColorList, highlightHex, type HighlightColor } from "../../dom
 import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import type { OutlineItem } from "../../domain/values/Outline";
-import { sameArea, type HighlightPlace, type PdfRect } from "../../domain/values/PdfRect";
+import { sameArea, type HighlightPlace } from "../../domain/values/PdfRect";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
@@ -49,6 +50,7 @@ import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
 import { attachRetile } from "../../presentation/webkit/retile";
+import { viewportArea, type PageArea } from "./revealArea";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -152,7 +154,7 @@ interface ViewerInternals {
 /** The slice of a page view `revealPassage` uses. */
 interface RevealPageView {
   readonly div: HTMLElement;
-  readonly viewport: { convertToViewportRectangle(rect: number[]): number[] };
+  readonly viewport: PageViewport;
 }
 
 /** Where a revealed passage goes: this fraction of the viewport from its top. */
@@ -162,34 +164,28 @@ const FLASH_MS = 1600;
 /** Room around a flashed passage, in CSS pixels, so the outline doesn't touch the text. */
 const FLASH_PAD_PX = 4;
 
-interface PageArea {
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  readonly height: number;
-}
-
-/** A PDF-space rect on a page, in CSS pixels from the page's top-left corner. */
-function viewportArea(pageView: RevealPageView, rect: PdfRect): PageArea {
-  const [x1, y1, x2, y2] = pageView.viewport.convertToViewportRectangle([...rect]);
-  const left = Math.min(x1, x2);
-  const top = Math.min(y1, y2);
-  return { left, top, width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
-}
-
-/** Outline an area of a page for a moment (it fades out by itself). */
-function flashArea(page: HTMLElement, area: PageArea): void {
-  page.querySelector(".pdf-flash")?.remove();
+/**
+ * Outline an area of a page for a moment (it fades out by itself). The outline goes in the
+ * scroll container, over the page, not in the page itself: pdf.js empties a page's element
+ * whenever it resizes it (a zoom, the window settling), which would take the outline too.
+ */
+function flashArea(container: HTMLElement, page: HTMLElement, area: PageArea): void {
+  container.querySelector(":scope > .pdf-flash")?.remove();
+  const box = container.getBoundingClientRect();
+  const at = page.getBoundingClientRect();
+  // In the container's scroll coordinates; the page's area starts inside its border.
+  const left = at.left - box.left + container.scrollLeft + page.clientLeft + area.left;
+  const top = at.top - box.top + container.scrollTop + page.clientTop + area.top;
   const flash = document.createElement("div");
   flash.className = "pdf-flash";
   flash.setAttribute("aria-hidden", "true");
   Object.assign(flash.style, {
-    left: `${area.left - FLASH_PAD_PX}px`,
-    top: `${area.top - FLASH_PAD_PX}px`,
+    left: `${left - FLASH_PAD_PX}px`,
+    top: `${top - FLASH_PAD_PX}px`,
     width: `${area.width + 2 * FLASH_PAD_PX}px`,
     height: `${area.height + 2 * FLASH_PAD_PX}px`,
   });
-  page.append(flash);
+  container.append(flash);
   window.setTimeout(() => flash.remove(), FLASH_MS);
 }
 
@@ -906,10 +902,11 @@ export async function mountPdfJs(
         viewer.currentPageNumber = index + 1;
         return;
       }
-      const area = viewportArea(pageView, target.rect);
+      const area = viewportArea(pageView.viewport, target.rect);
       // A third of the way down, so the lines before it are in view too.
-      container.scrollTop = Math.max(0, box.top + area.top - container.clientHeight * REVEAL_FROM_TOP);
-      flashArea(pageView.div, area);
+      const top = box.top + pageView.div.clientTop + area.top;
+      container.scrollTop = Math.max(0, top - container.clientHeight * REVEAL_FROM_TOP);
+      flashArea(container, pageView.div, area);
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;

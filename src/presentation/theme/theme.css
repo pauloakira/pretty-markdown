@@ -1238,7 +1238,7 @@ body {
 }
 /* In highlight mode, the pointer over text says "highlighter", not "text cursor". */
 /* "‹ Back to p. 133": after a jump (a quote's link, the contents, Go to page), returns to
-   where the reader was. Inverted from the page so it reads in either theme. */
+   where the reader was. Dark in both themes: it floats over the page, which stays white. */
 .back-pill {
   position: absolute;
   top: 12px;
@@ -1251,8 +1251,8 @@ body {
   padding: 6px 12px;
   border: none;
   border-radius: 999px;
-  background: var(--fg);
-  color: var(--bg);
+  background: rgba(28, 31, 36, 0.92);
+  color: #ffffff;
   font: 600 12.5px/1.4 var(--font-sans);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   cursor: pointer;

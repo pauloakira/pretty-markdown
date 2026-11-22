@@ -294,8 +294,14 @@ export function PdfReader({
   const onRevealedRef = useRef(onRevealed);
   onRevealedRef.current = onRevealed;
   useEffect(() => {
-    if (!ready || reveal === null) return;
-    handleRef.current?.revealPassage(reveal);
+    const handle = handleRef.current;
+    if (!ready || reveal === null || !handle) return;
+    try {
+      handle.revealPassage(reveal);
+    } catch {
+      // Showing the passage is a nicety; never let it take the reader down.
+      handle.goToPage(reveal.page);
+    }
     onRevealedRef.current();
   }, [ready, reveal]);
 
