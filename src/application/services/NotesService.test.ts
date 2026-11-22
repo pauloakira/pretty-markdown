@@ -98,4 +98,30 @@ describe("NotesService", () => {
     expect((await notes.removeFromNotes(NOTES, added.value.excerpt.id)).ok).toBe(true);
     expect(store.files.get(NOTES)).toBe("# Mine\n\n## Unsorted\n");
   });
+
+  it("keeps the highlight's area, in whole points, and finds the quote from it", async () => {
+    const store = new FakeNotesStore();
+    const notes = new NotesService(store, sequence());
+    const rect = [72.4, 540.9, 300.2, 552.1] as const;
+    const added = await notes.addToNotes(PDF, { page: 7, text: "Lemma 3.", color: "green", rect });
+    await notes.addToNotes(PDF, { page: 7, text: "Unhighlighted.", color: "green" });
+    if (!added.ok) throw new Error(added.error);
+    expect(added.value.excerpt.rect).toEqual([72, 540, 301, 553]);
+
+    const found = await notes.excerptsOf(PDF, { page: 7, rect: [72, 540, 301, 553] });
+    expect(found.ok && found.value.map((e) => e.text)).toEqual(["Lemma 3."]);
+    const elsewhere = await notes.excerptsOf(PDF, { page: 8, rect: [72, 540, 301, 553] });
+    expect(elsewhere.ok && elsewhere.value).toEqual([]);
+  });
+
+  it("finds no quotes for a highlight when there are no notes, or they're another PDF's", async () => {
+    const store = new FakeNotesStore();
+    const notes = new NotesService(store, sequence());
+    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual({ ok: true, value: [] });
+    store.files.set(
+      NOTES,
+      "## Unsorted\n\n> Elsewhere.\n> — [p. 1](Other.pdf#page=1&ex=abcdef&color=yellow&rect=0,0,10,10)\n",
+    );
+    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual({ ok: true, value: [] });
+  });
 });

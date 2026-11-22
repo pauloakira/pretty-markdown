@@ -1,5 +1,6 @@
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { OutlineItem } from "../../domain/values/Outline";
+import type { HighlightPlace } from "../../domain/values/PdfRect";
 import type { Result } from "../../domain/values/Result";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type { PdfView, PdfZoom } from "../../domain/values/ViewState";
@@ -30,6 +31,11 @@ export interface PdfMountOptions {
   readonly onToolChange: (tool: PdfTool) => void;
   /** Whether there are highlight changes to undo or redo (for the toolbar's buttons). */
   readonly onHistoryChange: (history: EditHistory) => void;
+  /**
+   * The reader removed a highlight: deleted it, or undid making it. Not called for
+   * `removeHighlight`. Lets the reader be offered to take its quote out of the notes too.
+   */
+  readonly onHighlightRemoved: (place: HighlightPlace) => void;
 }
 
 export interface EditHistory {
@@ -89,10 +95,15 @@ export interface PdfViewerHandle {
   selectedPassage(): SelectedPassage | null;
   /**
    * Highlight the current selection in the highlighter colour, as pdf.js's Highlight
-   * button does, but staying with the current tool. False if this PDF can't be
-   * highlighted or nothing is selected.
+   * button does, but staying with the current tool. Resolves to where the new highlight
+   * is, or null if this PDF can't be highlighted or nothing is selected.
    */
-  highlightSelection(): boolean;
+  highlightSelection(): Promise<HighlightPlace | null>;
+  /**
+   * Remove the highlight at `place` (e.g. its quote was taken out of the notes), if it's
+   * one made or edited since the document opened. False if there's none such.
+   */
+  removeHighlight(place: HighlightPlace): boolean;
   /** Undo or redo the last highlight change (adding, recolouring, deleting). */
   undo(): void;
   redo(): void;

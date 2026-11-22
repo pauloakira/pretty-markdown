@@ -47,6 +47,15 @@ describe("excerpt links", () => {
   it("fall back to yellow for an unknown colour", () => {
     expect(parseExcerptHref("a.pdf#page=2&ex=abcd&color=mauve")?.color).toBe("yellow");
   });
+
+  it("carry the highlighted area, and drop one that isn't an area", () => {
+    const link = { id: "7f3a9c", source: "a.pdf", page: 4, color: "green" as const, rect: [72, 540, 301, 553] as const };
+    const href = excerptHref(link);
+    expect(href).toBe("a.pdf#page=4&ex=7f3a9c&color=green&rect=72,540,301,553");
+    expect(parseExcerptHref(href)).toEqual(link);
+    expect(parseExcerptHref("a.pdf#page=4&ex=7f3a9c&rect=72,540,60,553")).not.toHaveProperty("rect");
+    expect(parseExcerptHref("a.pdf#page=4&ex=7f3a9c&rect=1,2,3")).not.toHaveProperty("rect");
+  });
 });
 
 describe("excerpt ids", () => {
