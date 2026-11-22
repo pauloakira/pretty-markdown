@@ -17,6 +17,8 @@
 set -euo pipefail
 
 REPO_URL="${PRETTY_MARKDOWN_REPO:-https://github.com/pauloakira/pretty-markdown.git}"
+# main holds releases; day-to-day work lands on develop (docs/CI.md).
+BRANCH="main"
 APP_NAME="pretty-markdown"
 CLONE_DIR="$HOME/.pretty-markdown"
 DEST=""
@@ -97,11 +99,12 @@ if [ "$DIR_GIVEN" = 0 ] && [ -f "$checkout/package.json" ] && grep -q '"name": "
 elif [ -d "$CLONE_DIR/.git" ]; then
   SRC="$CLONE_DIR"
   step "Updating $SRC"
-  git -C "$SRC" pull --ff-only
+  git -C "$SRC" checkout -q "$BRANCH"
+  git -C "$SRC" pull --ff-only origin "$BRANCH"
 else
   SRC="$CLONE_DIR"
   step "Cloning $REPO_URL into $SRC"
-  git clone --depth 1 "$REPO_URL" "$SRC"
+  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$SRC"
 fi
 cd "$SRC"
 

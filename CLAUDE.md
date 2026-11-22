@@ -29,6 +29,7 @@ with live preview, and **multi-tab** (several documents open at once, like a bro
 | [docs/PDF_PLAN.md](docs/PDF_PLAN.md) | PDF reading (Phases 1–3 done) — engine choice, layer-by-layer changes, phases, measurements |
 | [docs/PDF_HIGHLIGHTS_PLAN.md](docs/PDF_HIGHLIGHTS_PLAN.md) | PDF highlights (done, H1–H4) — saved into the PDF, autosave, drag to highlight on iPad (finger and Pencil) |
 | [docs/RESEARCH_READER.md](docs/RESEARCH_READER.md) | Research reader (in progress, R1–R4) — excerpts into a Markdown notes file beside the document, peek and pin references, outline, board; decisions and the notes file format |
+| [docs/CI.md](docs/CI.md) | CI checks, the `develop`/`main` branches, and how to cut a release |
 
 ## Architecture in one breath
 
@@ -42,7 +43,10 @@ behind interfaces (ports) so they're swappable and testable. See
 
 - TypeScript `strict`; no `any`. Model expected failures as values (`Result`/unions), not throws.
 - Keep the Domain layer pure. Wire concrete adapters only at the composition root.
-- Conventional Commits. Keep `main` releasable. Commit at logical checkpoints, not all at the end.
+- Conventional Commits. Commit at logical checkpoints, not all at the end.
+- **Branch from `develop` and open PRs into `develop`.** `main` holds releases only (it's what
+  `scripts/install.sh` installs); it moves by a release PR from `develop` ([docs/CI.md](docs/CI.md)).
+  A PR merges when CI is green; run the same checks locally before pushing.
 - Update the relevant doc (and the decision log in ARCHITECTURE.md §9) when behavior or
   structure changes.
 
