@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
 import type { HighlightColor } from "../../domain/values/Highlight";
+import type { HighlightPlace } from "../../domain/values/PdfRect";
 import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
 import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener, FindTarget } from "../find/FindTarget";
@@ -18,16 +19,24 @@ const VIEW_SETTLE_MS = 400;
  */
 const CURRENT_LOOKAHEAD_PAGES = 0.2;
 
-/** How long the "Added to notes" notice stays (errors stay until dismissed). */
+/** How long a notes notice stays (errors stay until dismissed). */
 const NOTICE_MS = 8000;
 
-/** What the reader is told after Add to notes. */
+/** What the reader is told about their notes: after Add to notes, or removing a highlight. */
 type NotesNotice =
   | {
       readonly kind: "added";
       readonly notesPath: string;
       readonly excerptId: string;
       readonly created: boolean;
+      /** The highlight made with it, to remove along with it. */
+      readonly place: HighlightPlace | null;
+    }
+  | {
+      /** The reader removed a highlight whose passage is quoted in the notes. */
+      readonly kind: "quoted";
+      readonly notesPath: string;
+      readonly excerptIds: readonly string[];
     }
   | { readonly kind: "error"; readonly message: string };
 
@@ -114,6 +123,7 @@ export function PdfReader({
   colorRef.current = highlightColor;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onHighlightRemovedRef = useRef<(place: HighlightPlace) => void>(() => {});
 
   useEffect(() => {
     const host = hostRef.current;
@@ -167,6 +177,9 @@ export function PdfReader({
         },
         onHistoryChange: (next) => {
           if (!cancelled) setHistory(next);
+        },
+        onHighlightRemoved: (place) => {
+          if (!cancelled) onHighlightRemovedRef.current(place);
         },
       });
       if (!mounted.ok) {
@@ -255,8 +268,14 @@ export function PdfReader({
       setNotesNotice({ kind: "error", message: "Select some text in the PDF first, then Add to notes." });
       return;
     }
-    handle.highlightSelection();
-    const added = await notesService.addToNotes(path, { ...passage, color: colorRef.current });
+    // The highlight's place goes into the quote's link, so each can find the other later.
+    const place = await handle.highlightSelection();
+    const added = await notesService.addToNotes(path, {
+      ...passage,
+      page: place?.page ?? passage.page,
+      color: colorRef.current,
+      ...(place ? { rect: place.rect } : {}),
+    });
     setNotesNotice(
       added.ok
         ? {
@@ -264,23 +283,52 @@ export function PdfReader({
             notesPath: added.value.notesPath,
             excerptId: added.value.excerpt.id,
             created: added.value.created,
+            place,
           }
         : { kind: "error", message: added.error },
     );
   }, [notesService, path]);
 
-  // The "Added" notice goes away by itself; an error stays until dismissed.
+  // A highlight the reader removed may be quoted in the notes: offer to remove the quote
+  // too (it's kept unless they say so).
+  onHighlightRemovedRef.current = (place) => {
+    void notesService.excerptsOf(path, place).then((found) => {
+      if (!found.ok || found.value.length === 0) return;
+      setNotesNotice({
+        kind: "quoted",
+        notesPath: notesService.notesPathFor(path),
+        excerptIds: found.value.map((excerpt) => excerpt.id),
+      });
+    });
+  };
+
+  // Notices about the notes go away by themselves; an error stays until dismissed.
   useEffect(() => {
-    if (notesNotice?.kind !== "added") return;
+    if (notesNotice === null || notesNotice.kind === "error") return;
     const timer = window.setTimeout(() => setNotesNotice(null), NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notesNotice]);
 
+  // Remove: take back the Add to notes, the quote and its highlight.
   const undoAddToNotes = useCallback(async () => {
     if (notesNotice?.kind !== "added") return;
     setNotesNotice(null);
+    if (notesNotice.place) handleRef.current?.removeHighlight(notesNotice.place);
     const removed = await notesService.removeFromNotes(notesNotice.notesPath, notesNotice.excerptId);
     if (!removed.ok) setNotesNotice({ kind: "error", message: removed.error });
+  }, [notesNotice, notesService]);
+
+  // The reader removed a quoted highlight and wants the quote gone as well.
+  const removeQuotes = useCallback(async () => {
+    if (notesNotice?.kind !== "quoted") return;
+    setNotesNotice(null);
+    for (const id of notesNotice.excerptIds) {
+      const removed = await notesService.removeFromNotes(notesNotice.notesPath, id);
+      if (!removed.ok) {
+        setNotesNotice({ kind: "error", message: removed.error });
+        return;
+      }
+    }
   }, [notesNotice, notesService]);
 
   const setZoom = useCallback((zoom: PdfZoom) => handleRef.current?.setZoom(zoom), []);
@@ -369,9 +417,25 @@ export function PdfReader({
               className="banner__btn"
               onClick={() => void undoAddToNotes()}
               aria-label="Remove from notes"
-              title="Take this passage out of the notes again"
+              title="Take this passage out of the notes again, and its highlight"
             >
               Remove
+            </button>
+          </span>
+        </div>
+      )}
+      {notesNotice?.kind === "quoted" && (
+        <div className="banner banner--warn notes-notice" role="status">
+          <span>
+            {"That highlight is quoted in "}
+            <strong>{fileName(notesNotice.notesPath)}</strong>
+          </span>
+          <span className="banner__actions">
+            <button className="banner__btn" onClick={() => void removeQuotes()}>
+              {notesNotice.excerptIds.length === 1 ? "Remove the quote" : "Remove the quotes"}
+            </button>
+            <button className="banner__btn" onClick={() => setNotesNotice(null)}>
+              Keep
             </button>
           </span>
         </div>

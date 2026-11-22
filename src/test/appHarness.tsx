@@ -19,6 +19,7 @@ import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRende
 import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import type { HighlightColor } from "../domain/values/Highlight";
+import { sameArea, type HighlightPlace } from "../domain/values/PdfRect";
 import type { OutlineItem } from "../domain/values/Outline";
 import type { FindState } from "../presentation/find/FindController";
 import type { FindListener, FindTarget } from "../presentation/find/FindTarget";
@@ -105,10 +106,28 @@ export class FakePdfHandle implements PdfViewerHandle {
   selectedPassage() {
     return this.selection;
   }
-  highlightSelection() {
-    if (!this.highlighting.allowed || this.selection === null) return false;
+  /** Where the highlights made through `highlightSelection` are, while they're there. */
+  readonly places: HighlightPlace[] = [];
+  async highlightSelection(): Promise<HighlightPlace | null> {
+    await Promise.resolve();
+    if (!this.highlighting.allowed || this.selection === null) return null;
     this.highlighted.push(this.color);
+    // One line each, down the page.
+    const top = 700 - 20 * this.highlighted.length;
+    const place: HighlightPlace = { page: this.selection.page, rect: [72, top - 12, 300, top] };
+    this.places.push(place);
+    return place;
+  }
+  removeHighlight(place: HighlightPlace) {
+    const index = this.places.findIndex((p) => p.page === place.page && sameArea(p.rect, place.rect));
+    if (index < 0) return false;
+    this.places.splice(index, 1);
     return true;
+  }
+  /** Simulate the reader deleting a highlight in the PDF (pdf.js's delete, or undo). */
+  deleteHighlightItself(place: HighlightPlace) {
+    this.removeHighlight(place);
+    this.options.onHighlightRemoved(place);
   }
   /** Undo/redo requests, in order. */
   readonly historyLog: string[] = [];

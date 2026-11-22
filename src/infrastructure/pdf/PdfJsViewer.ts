@@ -33,6 +33,7 @@ import { highlightColorList, highlightHex, type HighlightColor } from "../../dom
 import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import type { OutlineItem } from "../../domain/values/Outline";
+import { sameArea, type HighlightPlace } from "../../domain/values/PdfRect";
 import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
@@ -178,6 +179,46 @@ interface ExtraViewerOptions {
   enableHighlightFloatingButton: boolean;
 }
 
+/**
+ * What this adapter uses of a pdf.js annotation editor (pdf.js doesn't export the class's
+ * type). `annotationElementId` is set for a highlight that was in the file when it opened;
+ * `deleted` marks such a highlight the reader deleted (it stays until the save drops it).
+ */
+interface PdfEditor {
+  readonly id: string;
+  readonly pageIndex: number;
+  readonly editorType: string;
+  readonly annotationElementId: string | null;
+  readonly deleted?: boolean;
+  readonly parent: object | null;
+  isEmpty(): boolean;
+  getPDFRect(): number[];
+  remove(): void;
+}
+
+/** The editor registry of pdf.js's UI manager, which every new and removed editor passes. */
+interface EditorRegistry {
+  addEditor(editor: PdfEditor): void;
+  removeEditor(editor: PdfEditor): void;
+  getEditors(pageIndex: number): Iterable<PdfEditor>;
+}
+
+/** How long to wait for pdf.js to make a highlight from the selection before giving up. */
+const HIGHLIGHT_WAIT_MS = 2000;
+
+function isHighlight(editor: PdfEditor): boolean {
+  return editor.editorType === "highlight" && !editor.isEmpty();
+}
+
+/** Where `editor` is: its page and the area it covers in PDF points (its /Rect). */
+function placeOf(editor: PdfEditor): HighlightPlace {
+  const [x1, y1, x2, y2] = editor.getPDFRect();
+  return {
+    page: editor.pageIndex + 1,
+    rect: [Math.min(x1, x2), Math.min(y1, y2), Math.max(x1, x2), Math.max(y1, y2)],
+  };
+}
+
 /** The annotation storage's change hooks (typed `null` in pdf.js's declarations). */
 interface StorageHooks {
   onSetModified: (() => void) | null;
@@ -316,6 +357,32 @@ export async function mountPdfJs(
   let uiManager: AnnotationEditorUIManager | null = null;
   const onUiManager = (event: { uiManager: AnnotationEditorUIManager }) => {
     uiManager = event.uiManager;
+    watchEditors(event.uiManager as unknown as EditorRegistry);
+  };
+
+  // Highlights coming and going, seen where pdf.js registers its editors (it has no event
+  // for either). A new highlight completes `highlightSelection()`; a highlight the reader
+  // removed (deleted, or undid making) is reported, for its quote in the notes.
+  //
+  // pdf.js also unregisters the editors it made for the file's own highlights when
+  // highlight mode ends; those aren't removals. A removal of one of those is marked
+  // `deleted` first, and new highlights are only unregistered when removed.
+  let onNewHighlight: ((editor: PdfEditor) => void) | null = null;
+  let removingQuietly = false;
+  const watchEditors = (registry: EditorRegistry) => {
+    const addEditor = registry.addEditor.bind(registry);
+    const removeEditor = registry.removeEditor.bind(registry);
+    registry.addEditor = (editor) => {
+      addEditor(editor);
+      if (onNewHighlight && editor.annotationElementId === null && isHighlight(editor)) onNewHighlight(editor);
+    };
+    registry.removeEditor = (editor) => {
+      const removed =
+        !removingQuietly && isHighlight(editor) && (editor.annotationElementId === null || editor.deleted === true);
+      const place = removed ? placeOf(editor) : null; // while it's still on its page
+      removeEditor(editor);
+      if (place) options.onHighlightRemoved(place);
+    };
   };
   eventBus.on("annotationeditoruimanager", onUiManager);
 
@@ -809,10 +876,22 @@ export async function mountPdfJs(
       return { page, text };
     },
     highlightSelection() {
-      if (!highlighting.allowed || !uiManager) return false;
+      if (!highlighting.allowed || !uiManager) return Promise.resolve(null);
       const selection = document.getSelection();
-      if (!selection || selection.isCollapsed) return false;
+      if (!selection || selection.isCollapsed) return Promise.resolve(null);
       applyHighlightColor();
+      // pdf.js makes the highlight now, or once it's in highlight mode (below).
+      const made = new Promise<HighlightPlace | null>((resolve) => {
+        const timer = window.setTimeout(() => {
+          onNewHighlight = null;
+          resolve(null);
+        }, HIGHLIGHT_WAIT_MS);
+        onNewHighlight = (editor) => {
+          onNewHighlight = null;
+          window.clearTimeout(timer);
+          resolve(placeOf(editor));
+        };
+      });
       // From the select tool pdf.js switches to highlight mode, then highlights once it's
       // in. Switch back afterwards: adding to the notes shouldn't change the tool.
       if (editorMode === AnnotationEditorType.NONE) {
@@ -825,7 +904,26 @@ export async function mountPdfJs(
         eventBus.on("annotationeditormodechanged", back);
       }
       uiManager.highlightSelection("main_toolbar");
-      return true;
+      return made;
+    },
+    removeHighlight(place) {
+      if (!uiManager) return false;
+      let removed = false;
+      for (const editor of [...(uiManager as unknown as EditorRegistry).getEditors(place.page - 1)]) {
+        if (!isHighlight(editor) || editor.deleted === true) continue;
+        // One of the file's own highlights is only deleted from the file through its page.
+        if (editor.annotationElementId !== null && editor.parent === null) continue;
+        if (!sameArea(placeOf(editor).rect, place.rect)) continue;
+        removingQuietly = true;
+        try {
+          editor.remove();
+        } finally {
+          removingQuietly = false;
+        }
+        removed = true;
+      }
+      if (removed) scheduleSave();
+      return removed;
     },
     flush() {
       return highlighting.allowed ? runSave() : Promise.resolve();
@@ -867,6 +965,7 @@ export async function mountPdfJs(
       storageHooks.onSetModified = null;
       storageHooks.onResetModified = null;
       storageHooks.onAnnotationEditor = null;
+      onNewHighlight = null;
       eventBus.off("switchannotationeditorparams", scheduleSave);
       eventBus.off("editingstateschanged", scheduleSave);
       eventBus.off("annotationeditoruimanager", onUiManager);

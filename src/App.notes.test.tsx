@@ -54,6 +54,7 @@ describe("Add to notes", () => {
           page: 4,
           text: "Gauss–Legendre nodes are the roots of P_n.",
           color: "yellow",
+          rect: [72, 668, 300, 680], // where the fake viewer put the highlight
         },
       },
     ]);
@@ -86,7 +87,7 @@ describe("Add to notes", () => {
     expect(notice()).toContain("Select some text in the PDF first");
   });
 
-  it("Remove takes the passage out of the notes again", async () => {
+  it("Remove takes the passage out of the notes again, and its highlight", async () => {
     const app = makeContainer();
     await launch(app);
     NOTES.set(NOTES_PATH, "# Mine\n\n## Unsorted\n");
@@ -100,6 +101,48 @@ describe("Add to notes", () => {
     await settle();
 
     expect(NOTES.get(NOTES_PATH)).toBe("# Mine\n\n## Unsorted\n");
+    expect(viewer.places).toEqual([]);
+    expect(notice()).toBeNull();
+  });
+
+  it("deleting a quoted highlight offers to remove its quote too", async () => {
+    const app = makeContainer();
+    await launch(app);
+    const viewer = await openPdf(app);
+    viewer.selection = { page: 3, text: "Keep or not." };
+    await act(async () => button("Add to notes").click());
+    await settle();
+    viewer.selection = { page: 3, text: "Stays." };
+    await act(async () => button("Add to notes").click());
+    await settle();
+
+    await act(async () => viewer.deleteHighlightItself(viewer.places[0]));
+    await settle();
+    expect(notice()).toContain("That highlight is quoted in paper.notes.md");
+    await act(async () => button("Remove the quote").click());
+    await settle();
+
+    expect(readExcerpts(NOTES.get(NOTES_PATH) ?? "").map((f) => f.excerpt.text)).toEqual(["Stays."]);
+    expect(notice()).toBeNull();
+  });
+
+  it("keeps the quote when asked, and says nothing for a highlight that isn't quoted", async () => {
+    const app = makeContainer();
+    await launch(app);
+    const viewer = await openPdf(app);
+    viewer.selection = { page: 3, text: "Still here." };
+    await act(async () => button("Add to notes").click());
+    await settle();
+
+    await act(async () => viewer.deleteHighlightItself(viewer.places[0]));
+    await settle();
+    await act(async () => button("Keep").click());
+    await settle();
+    expect(readExcerpts(NOTES.get(NOTES_PATH) ?? "").map((f) => f.excerpt.text)).toEqual(["Still here."]);
+    expect(notice()).toBeNull();
+
+    await act(async () => viewer.deleteHighlightItself({ page: 3, rect: [72, 100, 300, 112] }));
+    await settle();
     expect(notice()).toBeNull();
   });
 
