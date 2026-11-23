@@ -82,6 +82,7 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Presentation | `NotesPanel` (the notes beside the page) and the toolbar's **Read · Notes**, over `ViewState.notes`; `NotesService.readNotes`; `PdfViewerHandle.markPassage` outlines a hovered quote's passage |
 | Presentation | `SelectionPopover` (the Mac): actions by a selection, over `PdfMountOptions.selectionActions` / `onSelectionChange` (the adapter's `pdf/selectionWatch.ts`); `quoteToMarkdown` for Copy as quote |
 | Domain / Presentation | Quote cards: `NotesFile.segmentNotes` (the notes as text and excerpts, each with its note), `setNote`, `takeExcerpt` / `restoreExcerpt`, `setExcerptColor`; `NotesService.setNote` / `removeFromNotes` / `restoreToNotes` / `setColor`; `ExcerptCard` in the `NotesPanel`; `PdfViewerHandle.recolorHighlight` |
+| Domain / Infrastructure / Presentation | Edits made elsewhere: `ports/FileWatcher.ts` (watch a path; independent watches), `TauriFileWatcher` (counts watchers per path over `watch_file` / `unwatch_file` and one `file-changed` listener), used by `useFileWatch` (tabs) and the `NotesPanel`; `NotesFile.noteOf` / `sameNote`; `NotesService.setNote(…, from)` resolves to `saved`, `changed` (with the other note) or `gone` |
 | Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour, adds it to the notes and opens its card in the Notes panel, note ready. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
 ### Add to notes (PDF)
@@ -191,9 +192,23 @@ Titles, headings and text before the first quote show as they are around the car
 - **Hovering a card** outlines its passage on the page where it is, without scrolling.
   Quotes from other documents have nothing to outline.
 - With no notes yet, the panel says how to start them (Add to notes, ⌘E).
-- **Open as tab ↗** opens the whole notes file in its own tab (headings, reordering). The
-  panel reads the notes again when the window comes back to the front, so edits made
-  elsewhere appear.
+- **Open as tab ↗** opens the whole notes file in its own tab (headings, reordering).
+
+**Edits made elsewhere.** The panel watches the notes file and reads it again when it
+changes on disk: saved from its tab, edited in another app, or synced from another device
+(and when the window comes back to the front, which covers iPadOS, where files can't be
+watched). Each change the panel makes reads the file first and edits only its own part, so
+it never writes over the rest. A note being written is the one place both sides can touch:
+- if the note changes elsewhere while the reader has nothing unsaved, the card takes the
+  new text in;
+- if they have unsaved words, nothing is saved over the other version. The card shows it
+  and asks: **Keep both** (theirs, then the reader's below), **Use mine** or **Use theirs**. The
+  check is made again at each save, so a change not yet heard of is caught there too.
+  Closing the panel before choosing keeps both.
+
+The card tells its own saves, which come back through the watcher, from changes made
+elsewhere by remembering what it wrote. A note whose quote was deleted elsewhere can't be
+saved, and the panel says so.
 
 Recolouring and removing reach the highlights pdf.js has an editor for: those made or
 edited since the document opened. A quote of an older highlight is recoloured in the
