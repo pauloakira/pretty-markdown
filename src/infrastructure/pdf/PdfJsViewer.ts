@@ -876,12 +876,20 @@ export async function mountPdfJs(
   };
   // pdf.js clears the selection once it has turned it into a highlight, but on iPadOS the
   // still-running selection gesture then puts back a selection reaching to the end of the
-  // page. Clear it again for a moment after each highlight is created.
+  // page. Clear it again for a moment after each highlight is created, if it's in the
+  // pages: a caret elsewhere (the note just opened in the Notes panel) must stay, or
+  // WebKit has nowhere to type.
   const strayTimers: number[] = [];
+  const clearStraySelection = () => {
+    const selection = document.getSelection();
+    if (selection && selection.rangeCount > 0 && container.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      selection.removeAllRanges();
+    }
+  };
   const onEditorAdded = () => {
     scheduleSave();
     for (const ms of [30, 150, 400]) {
-      strayTimers.push(window.setTimeout(() => document.getSelection()?.removeAllRanges(), ms));
+      strayTimers.push(window.setTimeout(clearStraySelection, ms));
     }
   };
   if (highlighting.allowed) {

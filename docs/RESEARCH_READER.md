@@ -80,17 +80,18 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()`, `highlightSelection()` (resolves to the new highlight's place), `removeHighlight(place)`, and `onHighlightRemoved`, seen at pdf.js's editor registry (`addEditor` / `removeEditor` on its UI manager, which has no events for these) |
 | Presentation | `useFileLinks` (links in a Markdown document to other files, via `FileLinkContext`), the PDF tab's **Back** pill and ⌘[, over `ViewState.back` |
 | Presentation | `NotesPanel` (the notes beside the page) and the toolbar's **Read · Notes**, over `ViewState.notes`; `NotesService.readNotes`; `PdfViewerHandle.markPassage` outlines a hovered quote's passage |
-| Presentation | `SelectionPopover` (the Mac): actions by a selection, over `PdfMountOptions.selectionActions` / `onSelectionChange` (the adapter's `pdf/selectionWatch.ts`); `quoteToMarkdown` for Copy as quote; `NotesService.addToNotes(…, comment)` |
-| Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove**. Removing a quoted highlight offers **Remove the quote** / **Keep** |
+| Presentation | `SelectionPopover` (the Mac): actions by a selection, over `PdfMountOptions.selectionActions` / `onSelectionChange` (the adapter's `pdf/selectionWatch.ts`); `quoteToMarkdown` for Copy as quote |
+| Domain / Presentation | Quote cards: `NotesFile.segmentNotes` (the notes as text and excerpts, each with its note), `setNote`, `takeExcerpt` / `restoreExcerpt`, `setExcerptColor`; `NotesService.setNote` / `removeFromNotes` / `restoreToNotes` / `setColor`; `ExcerptCard` in the `NotesPanel`; `PdfViewerHandle.recolorHighlight` |
+| Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour, adds it to the notes and opens its card in the Notes panel, note ready. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
 ### Add to notes (PDF)
 
 Select text, then **Add to notes** in the PDF toolbar or ⌘E. The passage is highlighted in
 the PDF (saved into it as before; the tool stays as it was) and added to the end of
-"Unsorted" in `<name>.notes.md`; the first time, the file is created. The notice names the
-file and offers **Show notes** (opens the Notes panel, unless it's open already) and **Remove** (takes the quote out of
-the notes again, and the highlight it made). The notice's button isn't called "Undo"
-because the toolbar's Undo already means "undo the last highlight change". On a PDF that
+"Unsorted" in `<name>.notes.md`; the first time, the file is created. The Notes panel
+opens (if it isn't open) with the new quote's card marked and its note open, so the
+reader can write their thought on it straight away; the card's Delete takes it out again,
+with its highlight. On a PDF that
 can't be highlighted (signed, locked), the passage is still added to the notes, without a
 `rect`.
 
@@ -116,14 +117,8 @@ Escape. It isn't shown in highlight mode, where a selection is highlighted at on
 - **The colours** highlight the passage in that colour, and it becomes the highlighter
   colour (as picking it in the toolbar does). The tool stays as it was. The current colour
   is ringed. Not shown on a PDF that can't be highlighted.
-- **Add to notes** (⌘E) does what the toolbar's does.
-- **Comment** highlights the passage at once (so the reader sees what they're commenting
-  on), then opens a field: Enter adds the quote to the notes with the comment in its own
-  paragraph below it (⇧Enter for a new line; the comment is the reader's own Markdown,
-  math included). Escape or Cancel takes the highlight off again and writes nothing. A
-  click elsewhere does the same while the field is empty, and leaves it open once
-  something is written, so a stray click doesn't lose it. The notice's **Remove** takes
-  the comment out with its quote, if it's still as written.
+- **Add to notes** (⌘E) does what the toolbar's does. Notes on a quote are written in its
+  card in the Notes panel, which opens with the note ready.
 - **Copy as quote** copies `> text` and `> — [p. 12](Paper.pdf#page=12)`: an ordinary quote
   (no excerpt id, so pasted into notes it isn't taken for an excerpt), linked by the PDF's
   name, which is right for notes beside it and readable anywhere else. Nothing is
@@ -167,21 +162,38 @@ the app doesn't read (images, folders) and `file:` URLs still do nothing.
 ### The Notes panel
 
 **Read · Notes** in a PDF's toolbar, or ⇧⌘N, puts the PDF's notes file beside the page.
-Reading looks exactly as before until it's opened. The panel shows the notes as the reader
-shows any Markdown file (math and excerpt blocks included), with the file's name and how
-many excerpts it holds. Each PDF tab remembers whether its panel is open and how wide it
-is (drag its left edge; the page keeps at least 360 px), and so does the saved session.
+Reading looks exactly as before until it's opened. Each PDF tab remembers whether its panel
+is open and how wide it is (drag its left edge; the page keeps at least 360 px), and so
+does the saved session.
 
+The panel shows the notes file with each quote as a **card**: the quote, its "↗ p. 133"
+link, and the reader's **note** on it. A quote's note is whatever is written after it up
+to the next quote or heading, so a paragraph typed under a quote in any editor shows in
+its card, and a note written in the card is plain Markdown under the quote in the file.
+Titles, headings and text before the first quote show as they are around the cards.
+
+- **Writing a note**: "Add a note" on a card, or a click on its note, edits it in place.
+  It's saved as the reader types (shortly after the last key) and when they finish (Esc,
+  ⌘↩ or clicking away); an emptied note is removed. Links in a note still work as links.
+- **Add to notes** opens the panel with the new card marked and its note open, focused.
+- **A card's menu** (on hover, top right): **Colour** recolours the quote and its
+  highlight on the page; **Copy** copies the quote as Markdown (as Copy as quote does);
+  **Delete** takes out the quote and its note. "Quote deleted · Undo" shows for six
+  seconds; the highlight comes off the page once Undo is no longer offered (or the panel
+  closes), so Undo brings back both. Undo restores the file exactly when nothing else
+  changed it meanwhile, and otherwise puts the card back where it was.
 - **Following a quote** ("↗ p. 133") stays in this tab: the page scrolls to the passage and
   flashes it, and Back (⌘[) returns. Other links open from the notes file's folder.
-- **Hovering a quote** outlines its passage on the page where it is, without scrolling.
+- **Hovering a card** outlines its passage on the page where it is, without scrolling.
   Quotes from other documents have nothing to outline.
-- **Add to notes** shows the new quote in the panel at once, scrolled into view and marked
-  for a moment; **Remove** takes it out again.
 - With no notes yet, the panel says how to start them (Add to notes, ⌘E).
-- **Open as tab ↗** opens the notes file in its own tab, to write in it. The panel shows
-  the notes and reads them again when the window comes back to the front, so edits made
+- **Open as tab ↗** opens the whole notes file in its own tab (headings, reordering). The
+  panel reads the notes again when the window comes back to the front, so edits made
   elsewhere appear.
+
+Recolouring and removing reach the highlights pdf.js has an editor for: those made or
+edited since the document opened. A quote of an older highlight is recoloured in the
+notes only.
 
 Board joins the switch in R4. The Notes · Outline switch of the design comes with R3.
 
