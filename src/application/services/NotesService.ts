@@ -8,9 +8,11 @@ import {
 import type { HighlightColor } from "../../domain/values/Highlight";
 import {
   addExcerpt,
+  noteOf,
   notesPathFor,
   readExcerpts,
   restoreExcerpt,
+  sameNote,
   setExcerptColor,
   setNote,
   takeExcerpt,
@@ -46,6 +48,16 @@ export interface RemovedExcerpt {
   readonly before: string;
   readonly after: string;
 }
+
+/**
+ * What saving a note did: saved; not saved because the note was changed elsewhere (another
+ * tab or app) since the reader started from it, with that version; or not saved because
+ * its quote is gone from the notes.
+ */
+export type NoteSaved =
+  | { readonly kind: "saved" }
+  | { readonly kind: "changed"; readonly note: string }
+  | { readonly kind: "gone" };
 
 /** A document's notes file, as read for the Notes panel. */
 export interface DocumentNotes {
@@ -157,11 +169,21 @@ export class NotesService {
     })).then((result) => (result.ok ? ok(undefined) : result));
   }
 
-  /** Write the reader's note on excerpt `id` (an empty note removes it). */
-  setNote(notesPath: string, id: string, note: string): Promise<Result<void>> {
-    return this.edit(notesPath, (text) => ({ text: setNote(text, id, note), value: undefined })).then((result) =>
-      result.ok ? ok(undefined) : result,
-    );
+  /**
+   * Write the reader's note on excerpt `id` (an empty note removes it). `from` is the note
+   * the reader was editing: if the file now holds a different one (written elsewhere in
+   * the meantime), nothing is written and that note comes back, so neither is lost.
+   * Without `from`, the note is written whatever is there.
+   */
+  setNote(notesPath: string, id: string, note: string, from?: string): Promise<Result<NoteSaved>> {
+    return this.edit<NoteSaved>(notesPath, (text) => {
+      const current = noteOf(text, id);
+      if (current === null) return { text, value: { kind: "gone" } };
+      if (from !== undefined && !sameNote(current, from) && !sameNote(current, note)) {
+        return { text, value: { kind: "changed", note: current } };
+      }
+      return { text: setNote(text, id, note), value: { kind: "saved" } };
+    }).then((result) => (result.ok ? ok(result.value ?? { kind: "gone" }) : result));
   }
 
   /** Recolour excerpt `id` (its link's colour; the highlight is the viewer's). */

@@ -4,10 +4,12 @@ import {
   addExcerpt,
   isNotesPath,
   newNotesFile,
+  noteOf,
   notesPathFor,
   readExcerpts,
   removeExcerpt,
   restoreExcerpt,
+  sameNote,
   segmentNotes,
   setExcerptColor,
   setNote,
@@ -149,6 +151,14 @@ describe("excerpt cards and their notes", () => {
     expect(withNotes).toContain("is surjective.\n> — [p. 133](Geometric%20Methods.pdf#page=133&ex=aaaa01&color=yellow)\n\nSo every rotation\n\nhas a log: $X$.\n\n> It costs");
     expect(setNote(setNote(withNotes, first.id, ""), second.id, "")).toBe(start);
     expect(setNote(withNotes, "ffffff", "x")).toBe(withNotes);
+  });
+
+  it("reads one excerpt's note, and compares notes as they're written", () => {
+    expect(noteOf(withNotes, first.id)).toBe("So every rotation\n\nhas a log: $X$.");
+    expect(noteOf(start, first.id)).toBe("");
+    expect(noteOf(withNotes, "ffffff")).toBeNull();
+    expect(sameNote("idea  \nmore\n\n", "\nidea\nmore")).toBe(true);
+    expect(sameNote("idea", "idea!")).toBe(false);
   });
 
   it("deletes a card, quote and note, and Undo puts it back where it was", () => {

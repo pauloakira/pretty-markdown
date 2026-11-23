@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createPdfDocument } from "./domain/entities/Document";
 import { toSession } from "./domain/entities/Workspace";
 import { parseSession } from "./domain/values/Session";
+import { emitEvent, tauriCore } from "./test/tauriMock";
 import {
   button,
   launch,
@@ -318,5 +319,106 @@ describe("The Notes panel", () => {
     await act(async () => button("Open as tab ↗").click());
     await settle();
     expect(activeTab(app)?.document.path).toBe(NOTES_PATH);
+  });
+
+  describe("when the notes file changes elsewhere", () => {
+    /** The file changed on disk to `text` (another tab or app), and the panel heard. */
+    const changeOnDisk = async (text: string) => {
+      NOTES.set(NOTES_PATH, text);
+      await act(async () => emitEvent("file-changed", [NOTES_PATH]));
+      await wait(200);
+    };
+    const wait = (ms: number) => act(async () => new Promise((resolve) => setTimeout(resolve, ms)));
+    const openPanel = async () => {
+      NOTES.set(NOTES_PATH, SEEDED);
+      const app = makeContainer();
+      await launch(app);
+      await openPdf(app);
+      await act(async () => button("Notes").click());
+      await settle();
+      return app;
+    };
+    const editSecond = async () => {
+      await act(async () => within(cards()[1], "Add a note").click());
+      return cards()[1];
+    };
+    const theirs = SEEDED.replace("color=pink)", "color=pink)\n\nTheir note.");
+
+    it("reads it again", async () => {
+      await openPanel();
+      await changeOnDisk(`${SEEDED}\n\n> Third.\n> — [p. 9](paper.pdf#page=9&ex=ccc333&color=green)`);
+      expect(cards()).toHaveLength(3);
+      expect(panel()?.querySelector(".notes-panel__footer")?.textContent).toContain("3 quotes");
+    });
+
+    it("a note being written takes in the change if nothing's unsaved", async () => {
+      await openPanel();
+      const card = await editSecond();
+      await changeOnDisk(theirs);
+      expect(card.querySelector("textarea")?.value).toBe("Their note.");
+      expect(card.querySelector(".excerpt-card__conflict")).toBeNull();
+    });
+
+    it("with unsaved words, the reader chooses; Keep both keeps both", async () => {
+      await openPanel();
+      const card = await editSecond();
+      await type(card, "My note.");
+      await changeOnDisk(theirs); // before the note was saved
+      expect(card.querySelector(".excerpt-card__conflict")?.textContent).toContain("Their note.");
+      await wait(500);
+      expect(NOTES.get(NOTES_PATH)).toBe(theirs); // nothing saved over theirs meanwhile
+
+      await act(async () => within(card, "Keep both").click());
+      await settle();
+      expect(card.querySelector(".excerpt-card__conflict")).toBeNull();
+      expect(NOTES.get(NOTES_PATH)).toContain("color=pink)\n\nTheir note.\n\nMy note.\n");
+    });
+
+    it("a save that finds another note asks too; Use mine writes it", async () => {
+      await openPanel();
+      const card = await editSecond();
+      await type(card, "My note.");
+      NOTES.set(NOTES_PATH, theirs); // changed, but not heard of yet
+      await wait(500); // the note is saved: it finds theirs
+      expect(NOTES.get(NOTES_PATH)).toBe(theirs);
+      expect(card.querySelector(".excerpt-card__conflict")).not.toBeNull();
+
+      await act(async () => within(card, "Use mine").click());
+      await settle();
+      expect(NOTES.get(NOTES_PATH)).toContain("color=pink)\n\nMy note.\n");
+      expect(NOTES.get(NOTES_PATH)).not.toContain("Their note.");
+    });
+
+    it("Use theirs takes their note", async () => {
+      await openPanel();
+      const card = await editSecond();
+      await type(card, "My note.");
+      await changeOnDisk(theirs);
+      await act(async () => within(card, "Use theirs").click());
+      expect(card.querySelector("textarea")?.value).toBe("Their note.");
+      await act(async () => card.querySelector("textarea")?.blur());
+      await settle();
+      expect(NOTES.get(NOTES_PATH)).toBe(theirs);
+    });
+
+    it("keeps watching when the notes file's tab closes behind it", async () => {
+      const app = await openPanel();
+      const pdfTab = activeTab(app);
+      await act(async () => button("Open as tab ↗").click());
+      await settle();
+      const notesTab = activeTab(app);
+      if (!pdfTab || !notesTab) throw new Error("no tab");
+      await act(async () => app.tabManager.activateTab(pdfTab.id));
+      await settle();
+      expect(panel()).not.toBeNull();
+
+      // Both the tab and the panel watch the file; closing the tab leaves the panel's watch.
+      tauriCore.invoke.mockClear();
+      await act(async () => app.tabManager.closeTab(notesTab.id));
+      await settle();
+      expect(tauriCore.invoke.mock.calls.filter(([cmd]) => cmd === "unwatch_file")).toEqual([]);
+      await changeOnDisk(`${SEEDED}\n\n> Third.\n> — [p. 9](paper.pdf#page=9&ex=ccc333&color=green)`);
+      expect(cards()).toHaveLength(3);
+    });
   });
 });
