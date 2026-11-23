@@ -1,4 +1,5 @@
 import type { ScreenBox, SelectedPassage, SelectionPlace } from "../../presentation/pdf/PdfViewer";
+import { snapSelectionToWords } from "./wordSnap";
 
 /** Quiet period after a keyboard selection change before it's reported. */
 const SETTLE_MS = 120;
@@ -51,9 +52,13 @@ export function attachSelectionWatch(
   const onRelease = () => {
     if (!pressing) return;
     pressing = false;
-    // After the browser has settled the selection (a click that only deselects, too).
+    // After the browser has settled the selection (a click that only deselects, too). A
+    // dragged selection takes whole words: the quote and highlight shouldn't stop mid-word.
     window.clearTimeout(timer);
-    timer = window.setTimeout(report, 0);
+    timer = window.setTimeout(() => {
+      if (options.isActive() && options.read()) snapSelectionToWords(document.getSelection());
+      report();
+    }, 0);
   };
   const onSelectionChange = () => {
     if (pressing) return;
