@@ -148,7 +148,18 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   - When: the page becoming visible again, and every new scroller appearing. A PDF
     opened after a return started out with the same missing column. Used by the PDF
     viewer and the markdown reader.
-- **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
+- ✅ **Pinch to zoom** in PDFs (2026-11-23), `src/infrastructure/pdf/pinchZoom.ts`.
+  - The pages grow or shrink under the fingers, anchored between them, and follow them as
+    they move; pdf.js redraws them sharp 400 ms after the last change. 25%–400%, as the
+    toolbar.
+  - Ending within 6% of the fit-width scale snaps to Fit width (the toolbar's Fit width
+    lights up again, and the page keeps fitting on rotation or Split View).
+  - iPadOS's own pinch zoomed the whole app; it's off over the pages (`touch-action:
+    pan-x pan-y`, gesture events cancelled). Works in highlight mode too.
+  - On the Mac, a trackpad pinch does the same (gesture events, or ctrl+wheel).
+  - Tested: unit tests, and in the simulator with real two-finger touches — 121% → 241%
+    anchored at the fingers, back to Fit width by the snap, out to 60% without one, in
+    highlight mode, and one-finger scrolling unchanged.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
 - ✅ **Settings gear, landscape and Split View** (2026-11-23).
   - The gear was the "⚙" character, drawn on iPadOS as an emoji wider than its 38 px
