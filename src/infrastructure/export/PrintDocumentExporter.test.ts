@@ -35,4 +35,23 @@ describe("PrintDocumentExporter", () => {
     await new PrintDocumentExporter().exportPdf({ title: "x", html: "<p>y</p>" });
     expect(document.getElementById("print-root")).toBeNull();
   });
+
+  it("can print through the system sheet, cleaning up when it closes (iPadOS)", async () => {
+    let closeSheet = () => {};
+    const printed: string[] = [];
+    const exporter = new PrintDocumentExporter(
+      (title) =>
+        new Promise<void>((resolve) => {
+          printed.push(title);
+          closeSheet = resolve;
+        }),
+    );
+    const exporting = exporter.exportPdf({ title: "Paper.md", html: "<p>y</p>" });
+    await Promise.resolve();
+    expect(printed).toEqual(["Paper.md"]);
+    expect(document.getElementById("print-root")?.innerHTML).toContain("<p>y</p>"); // while the sheet is open
+    closeSheet();
+    await exporting;
+    expect(document.getElementById("print-root")).toBeNull();
+  });
 });

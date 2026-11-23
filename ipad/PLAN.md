@@ -153,8 +153,20 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
 - Fix the settings gear clipping; respect safe areas in landscape and Split View.
 - Hardware keyboard shortcuts (Magic Keyboard) already work through the same handlers.
   Verify them.
-- PDF export: `window.print` isn't available in WKWebView on iOS. Offer the share sheet or
-  the native print dialog instead, or hide the option.
+- ✅ **Export PDF and Save As** (2026-11-23). Both did nothing on the iPad.
+  - **Export PDF** opens the system print sheet: WKWebView on iOS ignores
+    `window.print()`, so the page asks the plugin (`printPage`, with the web view's print
+    formatter). The print stylesheet applies as on the Mac, so only the document prints,
+    maths as vector. The sheet's share button saves or sends the PDF, named after the
+    document without ".md".
+  - **Save As** (⇧⌘S) opens the Files "Save" sheet (`exportFile`): the plugin writes the
+    text to a temporary file and exports a copy where the reader chooses. The new file is
+    remembered (bookmark) like a picked one, so the tab keeps editing it, Save writes
+    there, and it reopens after a relaunch. Copy mode shows "Save"; moving the temporary
+    file would show "Move".
+  - Tested in the simulator: the print preview shows only the document, Save to Files is
+    offered; Save As into On My iPad, an edit saved to the new file (the original
+    untouched), relaunch reopens it, Cancel changes nothing.
 
 ## Phase E: Install on the iPad ✅ (2026-10-07)
 
@@ -211,9 +223,9 @@ first TestFlight for personal use, then the App Store once Phase D is done.
 
 **F3. Review-readiness (Apple tests on real iPads)**
 - **Finish Phase D first:** long-press instead of right-click, the clipped settings gear,
-  safe areas and Split View, and PDF export (or hide it).
+  safe areas and Split View.
 - **Hide or replace what doesn't work on iPad:**
-  - *Save As* (currently it does nothing);
+  - ✅ *Save As* and *Export PDF* work (Phase D, 2026-11-23);
   - anything that mentions the Mac (⌘ shortcuts in tooltips are fine with a keyboard).
 - **No crashes on first launch** with an empty session. Apple's review usually starts with
   an empty install.

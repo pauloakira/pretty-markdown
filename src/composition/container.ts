@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { FileWatcher } from "../domain/ports/FileWatcher";
 import { TauriFileWatcher } from "../infrastructure/fs/TauriFileWatcher";
 import { DocumentService } from "../application/services/DocumentService";
@@ -75,7 +76,10 @@ export function createContainer(): Container {
   const recentFilesRepository = new LocalStorageRecentFilesRepository();
   const sessionService = new SessionService(new TauriSessionRepository(), documentService);
   const appWindow = new TauriAppWindow();
-  const documentExporter = new PrintDocumentExporter();
+  const documentExporter =
+    import.meta.env.TAURI_ENV_PLATFORM === "ios"
+      ? new PrintDocumentExporter((title) => invoke("print_page", { title }))
+      : new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
   const pdfSaver = new PdfSaver(fileSystem, fileSystem);
   const notesService = new NotesService(new TauriNotesStore());

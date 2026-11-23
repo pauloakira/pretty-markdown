@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { err, ok, type Result } from "../../domain/values/Result";
 import { TauriFileSystem } from "./TauriFileSystem";
 
 /**
@@ -40,8 +41,18 @@ export class IosFileSystem extends TauriFileSystem {
     return path;
   }
 
-  /** "Save As" to a new location isn't supported on iPad yet; saving in place works. */
+  /** Not used on iPadOS: Save As goes through `saveNew` (the Files "Save to" sheet). */
   async pickSavePath(): Promise<string | null> {
     return null;
+  }
+
+  /** Save As: the Files "Save to" sheet places the file; it's then remembered like a picked one. */
+  async saveNew(name: string, content: string): Promise<Result<string | null>> {
+    try {
+      const path = await invoke<string | null>("save_file_as", { name, contents: content });
+      return ok(path === null ? null : pathFromFileUrl(path));
+    } catch (error) {
+      return err(`Couldn't save '${name}': ${String(error)}`);
+    }
   }
 }

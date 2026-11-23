@@ -364,6 +364,45 @@ async fn remember_document(app: tauri::AppHandle, path: String) -> Result<(), St
     }
 }
 
+/// Print the page with the system print sheet (iPadOS Export PDF, which can also save or
+/// share the PDF): WKWebView on iOS ignores `window.print()`. Returns when the sheet
+/// closes. Desktop prints from the page itself.
+#[tauri::command]
+async fn print_page(app: tauri::AppHandle, title: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files().print(&title)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, title);
+        Err("Printing goes through the page on this platform.".into())
+    }
+}
+
+/// Save As on iPadOS: write `contents` as a new file the user places with the Files "Save
+/// to" sheet (an app can't write to a path it hasn't been given). Returns its path, already
+/// remembered like an opened document, or None if they cancelled. Desktop picks a path
+/// with the save dialog instead.
+#[tauri::command]
+async fn save_file_as(
+    app: tauri::AppHandle,
+    name: String,
+    contents: String,
+) -> Result<Option<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files().export(&name, &contents)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, name, contents);
+        Err("Save As uses the save dialog on this platform.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -391,6 +430,8 @@ pub fn run() {
             write_text_file,
             write_file_bytes,
             remember_document,
+            print_page,
+            save_file_as,
             read_session,
             write_session,
             clear_session,
