@@ -150,7 +150,25 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     viewer and the markdown reader.
 - **Pinch to zoom** in PDFs, mapped to the viewer's zoom with fit-width snapping.
 - Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
-- Fix the settings gear clipping; respect safe areas in landscape and Split View.
+- ✅ **Settings gear, landscape and Split View** (2026-11-23).
+  - The gear was the "⚙" character, drawn on iPadOS as an emoji wider than its 38 px
+    button, so it was cut off at the tab bar's edge. It's now a drawn icon
+    (`SettingsIcon`), the same on every platform, in the tab bar and on the welcome screen.
+  - The document toolbar is a container (`container: doctoolbar`) and compacts itself as
+    the window narrows instead of running off the edge (a PDF's needed ~750 px, so in
+    portrait Split View and Slide Over its right half was unreachable):
+    - ≤ 860 px: the document's name goes (the tab shows it);
+    - ≤ 760 px: Add to notes, Highlight and Fit width become icons (names kept for
+      VoiceOver and tooltips);
+    - ≤ 560 px: zoom; ≤ 470 px: the page count; ≤ 400 px: Undo/Redo; ≤ 340 px: Fit
+      width (pinch and ⌘+/⌘−/⌘0 still zoom, ⌘Z still undoes);
+    - a markdown document's toolbar drops its name at ≤ 380 px; the contents button
+      never shrinks.
+  - Checked in WebKit at 320, 375, 507, 694, 1024 and 1366 px (nothing past the edge),
+    and in the simulator in portrait and landscape (safe areas respected: nothing under
+    the status bar or the home indicator).
+  - Still to do: the Notes panel beside the page is too narrow in Split View; it should
+    become a sheet there (the R3 bottom-sheet card).
 - Hardware keyboard shortcuts (Magic Keyboard) already work through the same handlers.
   Verify them.
 - ✅ **Export PDF and Save As** (2026-11-23). Both did nothing on the iPad.
@@ -237,8 +255,8 @@ first TestFlight for personal use, then the App Store once Phase D is done.
   store name; "pretty-markdown" may need a variant if it's taken.
 
 **F3. Review-readiness (Apple tests on real iPads)**
-- **Finish Phase D first:** long-press instead of right-click, the clipped settings gear,
-  safe areas and Split View.
+- **Finish Phase D first:** long-press instead of right-click; the Notes panel in Split
+  View.
 - **Hide or replace what doesn't work on iPad:**
   - ✅ *Save As* and *Export PDF* work (Phase D, 2026-11-23);
   - anything that mentions the Mac (⌘ shortcuts in tooltips are fine with a keyboard).
