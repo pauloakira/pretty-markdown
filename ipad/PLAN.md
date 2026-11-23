@@ -178,7 +178,11 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   3. Copy them into `src-tauri/icons/ios/` and
      `src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/`.
 
-## Phase F: Publish to the App Store (optional; not decided)
+## Phase F: Publish to the App Store (decided 2026-11-23: the iPad only)
+
+**Decision:** the iPad app goes to the App Store; the Mac app stays free on GitHub
+(`scripts/install.sh`), outside the Mac App Store. The work is tracked on the board as
+"App Store: …" and "iPad: …" cards.
 
 The free Personal Team can't publish. Publishing needs the **Apple Developer Program**
 ($99/year), which also gives TestFlight and 1-year development builds. Suggested order:
@@ -197,13 +201,24 @@ first TestFlight for personal use, then the App Store once Phase D is done.
   with the new Xcode.
 
 **F2. Things Apple requires in the app**
-- **Privacy manifest** (`PrivacyInfo.xcprivacy` in the Xcode project). Declare:
+- ✅ **Privacy manifest** (2026-11-23): `src-tauri/gen/apple/pretty-markdown_iOS/PrivacyInfo.xcprivacy`,
+  a resource of the app target (added to `project.pbxproj` by hand: regenerating with
+  XcodeGen also picks up local build products under `Externals/` and rewrites
+  Info.plist). It declares:
   - no tracking and no data collected;
-  - the "required reason" APIs we use: `UserDefaults` (for the bookmarks; reason
-    `CA92.1`), plus any that WebKit or Tauri make us declare (check Xcode's privacy
-    report).
-- **Export compliance:** the app uses no custom encryption. Set
-  `ITSAppUsesNonExemptEncryption = NO` in Info.plist.
+  - the "required reason" APIs found with `nm -u` on the built binary: `UserDefaults`
+    (the bookmarks; `CA92.1`) and `stat`/`fstat`/`lstat` (Rust's file metadata) as file
+    timestamps (`3B52.1` for files the reader picked, `C617.1` for the app's container).
+    No boot-time or disk-space APIs. **Re-run the check before each submission** when
+    dependencies change:
+    `nm -u <app>/pretty-markdown | grep -E '_(f?l?stat|fstatat|getattrlist.*|f?statv?fs|mach_absolute_time)$|NSUserDefaults'`.
+- ✅ **Export compliance** (2026-11-23): `ITSAppUsesNonExemptEncryption = NO` in
+  `src-tauri/Info.ios.plist` (merged into the iOS Info.plist only).
+- **Version and build numbers:** `CFBundleShortVersionString` is the app's version
+  (`tauri.conf.json`). Each upload needs a higher `CFBundleVersion` (one to three integers);
+  the upload script will set `bundle.iOS.bundleVersion` to the commit count
+  (`git rev-list --count HEAD`), which only grows. Not `tauri ios build --build-number`,
+  which appends to the version.
 - **Distribution signing:** an App Store export (`--export-method app-store-connect`)
   with the paid team. `install.sh` stays for development builds.
 - **Bundle ID** `com.prettymarkdown.app`: register it in the developer account. Pick a

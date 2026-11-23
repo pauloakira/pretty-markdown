@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Privacy manifest (required by the App Store; see ipad/PLAN.md, Phase F2).
+  - No tracking and no data collected: the app makes no network requests of its own and
+    keeps everything on the device, beside the reader's files.
+  - The "required reason" APIs the app calls (checked with `nm -u` on the built binary):
+    UserDefaults, for the bookmarks of files the reader opened (IpadFilesPlugin.swift);
+    stat/fstat/lstat (Rust's file metadata), for files the reader picked and for the
+    app's own container.
+-->
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>CA92.1</string>
+      </array>
+    </dict>
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>3B52.1</string>
+        <string>C617.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

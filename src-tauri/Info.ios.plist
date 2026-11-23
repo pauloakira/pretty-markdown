@@ -8,9 +8,13 @@
   - iPadOS matches documents by content type, not extension, so markdown needs one
     (imported, as the system may not declare it). The document types themselves come
     from fileAssociations in tauri.ios.conf.json.
+  - ITSAppUsesNonExemptEncryption = NO: the app has no encryption of its own (only the
+    system's), so App Store uploads need no export compliance documents (ipad/PLAN.md F2).
 -->
 <plist version="1.0">
 <dict>
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
   <key>LSSupportsOpeningDocumentsInPlace</key>
   <true/>
   <key>UTImportedTypeDeclarations</key>

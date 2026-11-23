@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CBFFD01DFFBE27040C90F5A9 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AD09F0D333900934D1F4029C /* PrivacyInfo.xcprivacy */; };
 		42F3447CB5CD854FFCDD493C /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 0CB8CF8CE641442D1F865C6A /* main.mm */; };
 		67F9B3976AC62317F14B8DDD /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 228B70BC2448BFA971B53467 /* assets */; };
 		87F5E53D19C1691F711FE8DB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CEC826C0C72506C761A03777 /* Assets.xcassets */; };
@@ -22,6 +23,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		AD09F0D333900934D1F4029C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0CB8CF8CE641442D1F865C6A /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		16C3E40786BF72251F8D3724 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
 		1A177678EA9CEEE465363219 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
@@ -80,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				39D47030A501443B7BB6F5C5 /* Info.plist */,
+				AD09F0D333900934D1F4029C /* PrivacyInfo.xcprivacy */,
 				563360DDACFE686AF6759DD1 /* pretty-markdown_iOS.entitlements */,
 			);
 			path = "pretty-markdown_iOS";
@@ -208,6 +211,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CBFFD01DFFBE27040C90F5A9 /* PrivacyInfo.xcprivacy in Resources */,
 				87F5E53D19C1691F711FE8DB /* Assets.xcassets in Resources */,
 				88CFE4C0B579B4DB7787AB24 /* LaunchScreen.storyboard in Resources */,
 				67F9B3976AC62317F14B8DDD /* assets in Resources */,
