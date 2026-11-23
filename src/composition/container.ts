@@ -1,3 +1,5 @@
+import type { FileWatcher } from "../domain/ports/FileWatcher";
+import { TauriFileWatcher } from "../infrastructure/fs/TauriFileWatcher";
 import { DocumentService } from "../application/services/DocumentService";
 import { NotesService } from "../application/services/NotesService";
 import { PdfSaver } from "../application/services/PdfSaver";
@@ -52,6 +54,8 @@ export interface Container {
   /** Keeps excerpts in each document's notes file (docs/RESEARCH_READER.md). */
   readonly notesService: NotesService;
   readonly linkOpener: LinkOpener;
+  /** Tells about files changed on disk (open documents, notes files). */
+  readonly fileWatcher: FileWatcher;
 }
 
 export function createContainer(): Container {
@@ -76,6 +80,7 @@ export function createContainer(): Container {
   const pdfSaver = new PdfSaver(fileSystem, fileSystem);
   const notesService = new NotesService(new TauriNotesStore());
   const linkOpener = new TauriLinkOpener();
+  const fileWatcher = new TauriFileWatcher();
 
   return {
     documentService,
@@ -90,5 +95,6 @@ export function createContainer(): Container {
     pdfSaver,
     notesService,
     linkOpener,
+    fileWatcher,
   };
 }

@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { RemovedExcerpt } from "../../application/services/NotesService";
+import type { NoteSaved, RemovedExcerpt } from "../../application/services/NotesService";
 import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
 import { quoteToMarkdown, type Excerpt } from "../../domain/values/Excerpt";
@@ -25,6 +25,8 @@ import { ExcerptCard, Html } from "./ExcerptCard";
 
 /** The page keeps at least this much of the window beside the panel (px). */
 const PAGE_MIN_PX = 360;
+/** Quiet period after a change to the notes file on disk before it's read again. */
+const NOTES_SETTLE_MS = 120;
 /** How long a deleted quote can be brought back. */
 const UNDO_MS = 6000;
 
@@ -93,7 +95,7 @@ export function NotesPanel({
   onRemoveHighlight,
   onRecolorHighlight,
 }: NotesPanelProps) {
-  const { notesService, pipeline } = useContainer();
+  const { fileWatcher, notesService, pipeline } = useContainer();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
   const [reads, setReads] = useState(0);
   const [deleted, setDeleted] = useState<Deleted | null>(null);
@@ -123,6 +125,22 @@ export function NotesPanel({
   }, [reload]);
 
   const notesPath = loaded.kind === "notes" || loaded.kind === "none" ? loaded.notesPath : null;
+  // Read them again whenever the file changes on disk: edited in a tab, in another app, or
+  // synced from another device. (Saves made here come back too; they read as no change.)
+  const watchedPath = loaded.kind === "notes" ? loaded.notesPath : null;
+  useEffect(() => {
+    if (watchedPath === null) return;
+    let timer = 0;
+    // A write comes as a burst of events: read once it's over.
+    const end = fileWatcher.watch(watchedPath, () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(reload, NOTES_SETTLE_MS);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      end();
+    };
+  }, [fileWatcher, watchedPath, reload]);
   const text = loaded.kind === "notes" ? loaded.text : null;
   // Each part rendered once per change of the notes.
   const parts = useMemo<Part[]>(
@@ -200,9 +218,14 @@ export function NotesPanel({
     setFailure(result.ok ? null : result.error);
     return result.ok;
   };
-  const saveNote = (excerpt: Excerpt) => async (note: string) => {
-    if (!notesPath) return;
-    report(await notesService.setNote(notesPath, excerpt.id, note));
+  const saveNote = (excerpt: Excerpt) => async (note: string, from: string): Promise<NoteSaved | null> => {
+    if (!notesPath) return null;
+    const result = await notesService.setNote(notesPath, excerpt.id, note, from);
+    if (!report(result)) return null;
+    if (result.value.kind === "gone") {
+      setFailure("This quote was deleted in another place, so your note on it wasn't saved.");
+    }
+    return result.value;
   };
   // A deleted quote's highlight goes once Undo is no longer offered.
   const removeHighlightRef = useRef(onRemoveHighlight);

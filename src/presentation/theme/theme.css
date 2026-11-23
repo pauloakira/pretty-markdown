@@ -2055,6 +2055,59 @@ body {
   color: var(--fg-muted);
   font-size: 0.85em;
 }
+/* The note changed elsewhere while the reader was writing: they choose which to keep. */
+.excerpt-card__conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--error-fg) 35%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--error-fg) 6%, var(--bg));
+}
+.excerpt-card .excerpt-card__conflict-text {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.92em;
+}
+.excerpt-card .excerpt-card__theirs {
+  margin: 0;
+  padding: 4px 8px;
+  border-left: 2px solid var(--border);
+  color: var(--fg-muted);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.excerpt-card__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.excerpt-card__choice {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+.excerpt-card__choice:hover {
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+.excerpt-card__choice--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.excerpt-card__choice--primary:hover {
+  border-color: var(--accent);
+  filter: brightness(1.08);
+}
 .excerpt-card--new {
   animation: notes-new 2.4s ease-out;
 }

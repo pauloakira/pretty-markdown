@@ -139,4 +139,25 @@ describe("NotesService", () => {
     );
     expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual({ ok: true, value: [] });
   });
+
+  it("saves a note only over the one the reader started from; another is handed back", async () => {
+    const store = new FakeNotesStore();
+    const notes = new NotesService(store, sequence());
+    const added = await notes.addToNotes(PDF, { page: 1, text: "One.", color: "yellow" });
+    if (!added.ok) throw new Error(added.error);
+    const id = added.value.excerpt.id;
+
+    expect(await notes.setNote(NOTES, id, "Mine.", "")).toEqual(ok({ kind: "saved" }));
+    // Written elsewhere in the meantime: kept, and handed back.
+    store.files.set(NOTES, (store.files.get(NOTES) ?? "").replace("Mine.", "Theirs."));
+    expect(await notes.setNote(NOTES, id, "Mine, again.", "Mine.")).toEqual(ok({ kind: "changed", note: "Theirs." }));
+    expect(store.files.get(NOTES)).toContain("Theirs.");
+    // The same words either way is no conflict (spaces at line ends don't count).
+    expect(await notes.setNote(NOTES, id, "Theirs.  ", "Mine.")).toEqual(ok({ kind: "saved" }));
+    // Without `from`, it's written whatever is there.
+    expect(await notes.setNote(NOTES, id, "Forced.")).toEqual(ok({ kind: "saved" }));
+    expect(store.files.get(NOTES)).toContain("Forced.");
+    // The quote is gone: nothing to write it under.
+    expect(await notes.setNote(NOTES, "ffffff", "x", "")).toEqual(ok({ kind: "gone" }));
+  });
 });

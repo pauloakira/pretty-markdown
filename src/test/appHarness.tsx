@@ -1,3 +1,4 @@
+import { TauriFileWatcher } from "../infrastructure/fs/TauriFileWatcher";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -361,6 +362,7 @@ export function makeContainer(): TestContainer {
       () => 0.5,
     ),
     linkOpener: new FakeLinkOpener(),
+    fileWatcher: new TauriFileWatcher(),
     picks,
   };
 }

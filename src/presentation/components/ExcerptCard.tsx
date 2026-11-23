@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { NoteSaved } from "../../application/services/NotesService";
 import type { Excerpt } from "../../domain/values/Excerpt";
 import { HIGHLIGHT_COLORS, type HighlightColor } from "../../domain/values/Highlight";
+import { sameNote } from "../../domain/values/NotesFile";
 
 /** Quiet period after the last keystroke before a note is saved. */
 const SAVE_AFTER_MS = 400;
@@ -18,8 +20,13 @@ interface ExcerptCardProps {
   noteHtml: string;
   /** Just added: open its note to write in, take the focus, and mark it for a moment. */
   isNew: boolean;
-  /** Save the note (called as the reader types, and when they finish). */
-  onSaveNote: (note: string) => Promise<void>;
+  /**
+   * Save the note (as the reader types, and when they finish). `from` is the note it
+   * replaces, as this card last knew it; if the file holds another one now, nothing is
+   * saved and it resolves to that note ("changed"). Null when saving failed (the panel
+   * says so).
+   */
+  onSaveNote: (note: string, from: string) => Promise<NoteSaved | null>;
   /** The reader finished writing: read the notes again. */
   onDoneEditing: () => void;
   onDelete: () => void;
@@ -51,15 +58,38 @@ export function ExcerptCard({
   const [draft, setDraft] = useState(note);
   const [picking, setPicking] = useState(false);
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
+  // The note as changed elsewhere while the reader was writing (another tab or app), until
+  // they choose which to keep.
+  const [conflict, setConflictState] = useState<string | null>(null);
+  const conflictRef = useRef<string | null>(null);
+  const setConflict = (theirs: string | null) => {
+    conflictRef.current = theirs;
+    setConflictState(theirs);
+  };
 
   // Saving: shortly after the last keystroke, and right away when the reader is done.
+  // `saved` is the note in the file as this card last knew it; `ours` what it wrote since
+  // the reader started, to tell the echo of its own saves from changes made elsewhere.
   const saved = useRef(note);
+  const ours = useRef<string[]>([]);
   const timer = useRef(0);
-  const saveNow = (text: string) => {
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  const saveNow = async (text: string) => {
     window.clearTimeout(timer.current);
-    if (text === saved.current) return Promise.resolve();
+    timer.current = 0;
+    if (conflictRef.current !== null) return; // waits for the reader's choice
+    if (sameNote(text, saved.current)) return;
+    const from = saved.current;
     saved.current = text;
-    return onSaveNote(text);
+    ours.current.push(text);
+    const result = await onSaveNote(text, from);
+    if (result?.kind === "changed") {
+      saved.current = result.note;
+      setConflict(result.note);
+    }
   };
   const change = (text: string) => {
     setDraft(text);
@@ -67,17 +97,61 @@ export function ExcerptCard({
     timer.current = window.setTimeout(() => void saveNow(text), SAVE_AFTER_MS);
   };
   const finish = () => {
-    if (!editing) return;
+    // Still to choose which note to keep: stay open.
+    if (!editing || conflictRef.current !== null) return;
     setEditing(false);
     void saveNow(draft).then(onDoneEditing);
   };
-  // Leaving the panel mid-sentence still saves.
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
+  // Both, theirs first: nothing either of them wrote is lost.
+  const both = (theirs: string, mine: string) =>
+    theirs.trim() === "" ? mine : mine.trim() === "" ? theirs : `${theirs.trimEnd()}\n\n${mine.trim()}`;
+  const resolve = (choice: "both" | "mine" | "theirs") => {
+    const theirs = conflictRef.current;
+    if (theirs === null) return;
+    setConflict(null);
+    saved.current = theirs;
+    if (choice === "theirs") {
+      setDraft(theirs);
+      return;
+    }
+    const text = choice === "mine" ? draftRef.current : both(theirs, draftRef.current);
+    setDraft(text);
+    void saveNow(text);
+    fieldRef.current?.focus();
+  };
+
+  // The note changed in the file. While the reader isn't writing, the card just shows it.
+  // While they are: the echo of the card's own save is nothing new; another change is
+  // taken in if they've no unsaved words, and otherwise they choose.
+  useEffect(() => {
+    if (!editingRef.current) {
+      saved.current = note;
+      return;
+    }
+    if (conflictRef.current !== null) {
+      if (!sameNote(note, conflictRef.current)) {
+        saved.current = note;
+        setConflict(note);
+      }
+      return;
+    }
+    if (sameNote(note, saved.current) || ours.current.some((text) => sameNote(text, note))) return;
+    if (timer.current === 0 && sameNote(draftRef.current, saved.current)) {
+      setDraft(note);
+      saved.current = note;
+    } else {
+      saved.current = note;
+      setConflict(note);
+    }
+  }, [note]);
+
+  // Leaving the panel mid-sentence still saves (both notes, if there was a choice to make).
   useEffect(
     () => () => {
-      if (draftRef.current !== saved.current) void onSaveNote(draftRef.current);
       window.clearTimeout(timer.current);
+      const theirs = conflictRef.current;
+      if (theirs !== null) void onSaveNote(both(theirs, draftRef.current), theirs);
+      else if (!sameNote(draftRef.current, saved.current)) void onSaveNote(draftRef.current, saved.current);
     },
     // Only on unmount: `onSaveNote` writes this card's note whichever render it's from.
     [],
@@ -86,6 +160,7 @@ export function ExcerptCard({
   const startEditing = () => {
     setDraft(note);
     saved.current = note;
+    ours.current = [];
     setEditing(true);
   };
 
@@ -207,7 +282,34 @@ export function ExcerptCard({
               }
             }}
           />
-          <p className="excerpt-card__hint">Saved as you type · Esc to finish</p>
+          {conflict !== null ? (
+            <div className="excerpt-card__conflict" role="alert">
+              <p className="excerpt-card__conflict-text">This note was changed in another place while you were writing:</p>
+              <p className="excerpt-card__theirs">{conflict.trim() === "" ? "(no note)" : conflict}</p>
+              <div className="excerpt-card__choices">
+                {(
+                  [
+                    ["both", "Keep both"],
+                    ["mine", "Use mine"],
+                    ["theirs", "Use theirs"],
+                  ] as const
+                ).map(([choice, label]) => (
+                  <button
+                    key={choice}
+                    type="button"
+                    className={`excerpt-card__choice${choice === "both" ? " excerpt-card__choice--primary" : ""}`}
+                    // Keep the focus in the note.
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => resolve(choice)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="excerpt-card__hint">Saved as you type · Esc to finish</p>
+          )}
         </div>
       ) : note.trim() !== "" ? (
         <div

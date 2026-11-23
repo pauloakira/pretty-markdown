@@ -123,6 +123,22 @@ export function setNote(notes: string, id: string, note: string): string {
   return joinLines(updated, lineEnding(notes));
 }
 
+/** The note on excerpt `id` (as `segmentNotes` gives it), or null if it isn't there. */
+export function noteOf(notes: string, id: string): string | null {
+  const lines = splitLines(notes);
+  const card = cards(lines).find((c) => c.excerpt.id === id);
+  return card === undefined ? null : trimBlankEnds(lines.slice(card.quoteEnd, card.end)).join("\n");
+}
+
+/**
+ * Whether two notes say the same, once written: `setNote` drops spaces at line ends and
+ * blank lines at either end, so "idea " and "idea" are one note.
+ */
+export function sameNote(a: string, b: string): boolean {
+  const written = (note: string) => trimBlankEnds(splitLines(note).map((line) => line.trimEnd())).join("\n");
+  return written(a) === written(b);
+}
+
 /** What `takeExcerpt` removed, to put it back (Undo). */
 export interface TakenExcerpt {
   readonly notes: string;
