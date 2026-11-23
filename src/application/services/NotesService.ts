@@ -69,8 +69,11 @@ export class NotesService {
     return ok({ notesPath, text, excerptCount: text === null ? 0 : readExcerpts(text).length });
   }
 
-  /** Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted". */
-  addToNotes(documentPath: string, passage: TakenPassage): Promise<Result<AddedExcerpt>> {
+  /**
+   * Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted",
+   * with the reader's `comment` below it if there is one.
+   */
+  addToNotes(documentPath: string, passage: TakenPassage, comment?: string): Promise<Result<AddedExcerpt>> {
     const text = normalizeExcerptText(passage.text);
     if (text === "") return Promise.resolve(err("Select some text to add to your notes."));
     const notesPath = notesPathFor(documentPath);
@@ -87,7 +90,7 @@ export class NotesService {
     return this.queued(notesPath, async () => {
       const current = await this.store.read(notesPath);
       if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
-      const written = await this.store.write(notesPath, addExcerpt(current.value, excerpt, documentName));
+      const written = await this.store.write(notesPath, addExcerpt(current.value, excerpt, documentName, comment));
       if (!written.ok) return err(`Couldn't save your notes: ${written.error}`);
       return ok({ notesPath, excerpt, created: current.value === null });
     });
@@ -117,13 +120,16 @@ export class NotesService {
     );
   }
 
-  /** Take an excerpt out of a notes file again (Undo). Nothing to do if it's gone already. */
-  removeFromNotes(notesPath: string, id: string): Promise<Result<void>> {
+  /**
+   * Take an excerpt out of a notes file again (Remove), with the `comment` it was added
+   * with. Nothing to do if it's gone already.
+   */
+  removeFromNotes(notesPath: string, id: string, comment?: string): Promise<Result<void>> {
     return this.queued(notesPath, async () => {
       const current = await this.store.read(notesPath);
       if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
       if (current.value === null) return ok(undefined);
-      const updated = removeExcerpt(current.value, id);
+      const updated = removeExcerpt(current.value, id, comment);
       if (updated === current.value) return ok(undefined);
       const written = await this.store.write(notesPath, updated);
       return written.ok ? ok(undefined) : err(`Couldn't save your notes: ${written.error}`);

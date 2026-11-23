@@ -44,13 +44,15 @@ export function newNotesFile(documentName: string): string {
 /**
  * The notes with `excerpt` added at the end of the "Unsorted" section, which is created
  * at the end of the file if it isn't there. `notes` null means the file doesn't exist
- * yet: it's started with `newNotesFile(documentName)`.
+ * yet: it's started with `newNotesFile(documentName)`. A `comment` (the reader's own
+ * Markdown) goes in its own paragraph below the quote.
  */
-export function addExcerpt(notes: string | null, excerpt: Excerpt, documentName: string): string {
+export function addExcerpt(notes: string | null, excerpt: Excerpt, documentName: string, comment?: string): string {
   const text = notes ?? newNotesFile(documentName);
   const eol = lineEnding(text);
   const lines = splitLines(text);
-  const block = excerptToMarkdown(excerpt).split("\n");
+  const written = commentLines(comment);
+  const block = [...excerptToMarkdown(excerpt).split("\n"), ...(written.length > 0 ? ["", ...written] : [])];
 
   const section = findSection(lines, UNSORTED_HEADING);
   if (section === null) {
@@ -67,14 +69,35 @@ export function addExcerpt(notes: string | null, excerpt: Excerpt, documentName:
 /**
  * The notes without the excerpt whose id is `id` (its whole quote, and the blank line
  * before it). Unchanged if it isn't there, e.g. the reader already deleted it by hand.
+ * With the `comment` it was added with, that goes too, if it's still just as written
+ * below the quote (an edited comment is the reader's and stays).
  */
-export function removeExcerpt(notes: string, id: string): string {
+export function removeExcerpt(notes: string, id: string, comment?: string): string {
   const lines = splitLines(notes);
   const found = parseQuotes(lines).find((quote) => quote.excerpt.id === id);
   if (found === undefined) return notes;
   let start = found.start;
   if (start > 0 && lines[start - 1].trim() === "") start -= 1;
-  return joinLines([...lines.slice(0, start), ...lines.slice(found.end)], lineEnding(notes));
+  let end = found.end;
+  const written = commentLines(comment);
+  if (written.length > 0 && lines[end]?.trim() === "") {
+    const below = lines.slice(end + 1, end + 1 + written.length);
+    const after = lines[end + 1 + written.length];
+    if (below.join("\n") === written.join("\n") && (after === undefined || after.trim() === "")) {
+      end += 1 + written.length;
+    }
+  }
+  return joinLines([...lines.slice(0, start), ...lines.slice(end)], lineEnding(notes));
+}
+
+/**
+ * A comment's lines as written into the notes: trimmed, with no blank lines inside (a
+ * blank line would end its paragraph, and it's removed with its quote as one paragraph).
+ * None for a missing or empty comment.
+ */
+function commentLines(comment: string | undefined): string[] {
+  if (comment === undefined) return [];
+  return splitLines(comment.trim()).map((line) => line.trimEnd()).filter((line) => line.trim() !== "");
 }
 
 /** An excerpt found in a notes file, with the heading it's filed under. */

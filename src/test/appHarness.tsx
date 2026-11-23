@@ -159,6 +159,18 @@ export class FakePdfHandle implements PdfViewerHandle {
   reportFind(state: FindState) {
     this.findListener?.(state);
   }
+  /**
+   * Simulate the reader finishing a selection (or clearing it, with null): sets what's
+   * selected and reports it, with its place on screen, as the adapter's selection watch.
+   */
+  select(passage: SelectedPassage | null, bounds = { left: 100, top: 300, right: 400, bottom: 316 }) {
+    this.selection = passage;
+    this.options.onSelectionChange?.(passage ? { passage, bounds } : null);
+  }
+  /** Whether the app asked for its own selection actions (the popover). */
+  get selectionActions() {
+    return this.options.selectionActions;
+  }
   /** Simulate pdf.js switching tools itself (e.g. the Highlight button by a selection). */
   switchToolItself(tool: PdfTool) {
     this.tool = tool;

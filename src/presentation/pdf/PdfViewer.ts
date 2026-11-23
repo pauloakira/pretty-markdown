@@ -36,6 +36,33 @@ export interface PdfMountOptions {
    * `removeHighlight`. Lets the reader be offered to take its quote out of the notes too.
    */
   readonly onHighlightRemoved: (place: HighlightPlace) => void;
+  /**
+   * Whether the app shows its own actions by a selection (the selection popover). Then
+   * the viewer offers no Highlight button of its own next to a selection, and reports
+   * selections through `onSelectionChange`.
+   */
+  readonly selectionActions: boolean;
+  /**
+   * With `selectionActions`: the reader finished selecting text (released the pointer, or
+   * changed the selection by keyboard), or the selection moved on screen (scrolling,
+   * zooming); null once there's no selection (or while one is being dragged out, or in
+   * highlight mode, where a selection is highlighted straight away).
+   */
+  readonly onSelectionChange?: (selection: SelectionPlace | null) => void;
+}
+
+/** A selection and where it is on screen, to show actions beside it. */
+export interface SelectionPlace {
+  readonly passage: SelectedPassage;
+  /** The selection's bounding box, in viewport (client) pixels. */
+  readonly bounds: ScreenBox;
+}
+
+export interface ScreenBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
 }
 
 export interface EditHistory {
