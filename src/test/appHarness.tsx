@@ -119,6 +119,13 @@ export class FakePdfHandle implements PdfViewerHandle {
     this.places.push(place);
     return place;
   }
+  /** Highlights recoloured through `recolorHighlight`, in order. */
+  readonly recoloured: { place: HighlightPlace; color: HighlightColor }[] = [];
+  recolorHighlight(place: HighlightPlace, color: HighlightColor) {
+    if (!this.places.some((p) => p.page === place.page && sameArea(p.rect, place.rect))) return false;
+    this.recoloured.push({ place, color });
+    return true;
+  }
   removeHighlight(place: HighlightPlace) {
     const index = this.places.findIndex((p) => p.page === place.page && sameArea(p.rect, place.rect));
     if (index < 0) return false;

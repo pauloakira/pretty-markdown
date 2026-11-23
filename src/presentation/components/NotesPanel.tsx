@@ -1,21 +1,55 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import type { RemovedExcerpt } from "../../application/services/NotesService";
 import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
+import { quoteToMarkdown, type Excerpt } from "../../domain/values/Excerpt";
+import type { HighlightColor } from "../../domain/values/Highlight";
 import { resolveFileLink } from "../../domain/values/Link";
+import { segmentNotes } from "../../domain/values/NotesFile";
+import type { HighlightPlace } from "../../domain/values/PdfRect";
+import type { Result } from "../../domain/values/Result";
 import { NOTES_PANEL_WIDTH } from "../../domain/values/ViewState";
+import { copyText } from "../clipboard/copyText";
 import { FileLinkContext, useDocumentLinks } from "../hooks/useDocumentLinks";
 import type { PassageTarget } from "../pdf/PdfViewer";
+import { ExcerptCard, Html } from "./ExcerptCard";
 
 /** The page keeps at least this much of the window beside the panel (px). */
 const PAGE_MIN_PX = 360;
-/** How long a quote just added stays marked in the panel (matches `notes-new` in theme.css). */
-const NEW_EXCERPT_MS = 2400;
+/** How long a deleted quote can be brought back. */
+const UNDO_MS = 6000;
 
 type Loaded =
   | { readonly kind: "loading" }
   | { readonly kind: "none"; readonly notesPath: string }
-  | { readonly kind: "notes"; readonly notesPath: string; readonly html: string; readonly excerptCount: number }
+  | { readonly kind: "notes"; readonly notesPath: string; readonly text: string }
   | { readonly kind: "error"; readonly message: string };
+
+/** The notes as shown: text around the quotes, and the quotes with their notes, rendered. */
+type Part =
+  | { readonly kind: "text"; readonly html: string }
+  | {
+      readonly kind: "excerpt";
+      readonly excerpt: Excerpt;
+      readonly quoteHtml: string;
+      readonly note: string;
+      readonly noteHtml: string;
+    };
+
+/** A quote just deleted: what Undo puts back, and its highlight, removed when Undo goes. */
+interface Deleted {
+  readonly removed: RemovedExcerpt;
+  readonly place: HighlightPlace | null;
+}
 
 interface NotesPanelProps {
   /** The PDF whose notes these are. */
@@ -24,7 +58,7 @@ interface NotesPanelProps {
   onResize: (widthPx: number) => void;
   /** Bumped when the notes changed here (Add to notes, Remove), to read them again. */
   revision: number;
-  /** A quote just added: bring it into view and mark it for a moment. */
+  /** A quote just added: bring it into view, mark it, and open its note. */
   newExcerptId: string | null;
   /** A quote's link to a passage of this PDF was followed. */
   onFollow: (target: PassageTarget) => void;
@@ -32,15 +66,19 @@ interface NotesPanelProps {
   onMark: (target: PassageTarget | null) => void;
   /** Follow any other link to a file, relative to the notes file at `fromPath`. */
   onFileLink: (href: string, fromPath: string) => void;
-  /** Open a file in a tab (the notes file itself, to edit it). */
+  /** Open a file in a tab (the notes file itself). */
   onOpenFile: (path: string) => void;
+  /** A quote was deleted for good: take its highlight off the page. */
+  onRemoveHighlight: (place: HighlightPlace) => void;
+  /** A quote was recoloured: recolour its highlight. */
+  onRecolorHighlight: (place: HighlightPlace, color: HighlightColor) => void;
 }
 
 /**
  * The Notes panel (docs/RESEARCH_READER.md): the PDF's notes file, `<name>.notes.md`,
- * rendered beside the page. A quote's "↗ p. 133" jumps to its passage in this tab (with
- * Back), and hovering a quote outlines its passage on the page. Writing happens in the
- * notes file's own tab for now ("Open as tab").
+ * beside the page, each quote a card with the reader's note on it. Notes are written in
+ * place; a card's menu recolours, copies or deletes its quote. A quote's "↗ p. 133" jumps
+ * to its passage in this tab (with Back), and hovering a card outlines its passage.
  */
 export function NotesPanel({
   documentPath,
@@ -52,63 +90,59 @@ export function NotesPanel({
   onMark,
   onFileLink,
   onOpenFile,
+  onRemoveHighlight,
+  onRecolorHighlight,
 }: NotesPanelProps) {
   const { notesService, pipeline } = useContainer();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
   const [reads, setReads] = useState(0);
+  const [deleted, setDeleted] = useState<Deleted | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const reload = useCallback(() => setReads((n) => n + 1), []);
 
-  // Read the notes on opening, after a change made here, and when the app comes back to
-  // the front (they may have been edited in another app).
+  // Read the notes on opening, after a change, and when the app comes back to the front
+  // (they may have been edited in another app).
   useEffect(() => {
     let cancelled = false;
     void notesService.readNotes(documentPath).then((read) => {
       if (cancelled) return;
       if (!read.ok) setLoaded({ kind: "error", message: read.error });
       else if (read.value.text === null) setLoaded({ kind: "none", notesPath: read.value.notesPath });
-      else
-        setLoaded({
-          kind: "notes",
-          notesPath: read.value.notesPath,
-          html: pipeline.render(read.value.text),
-          excerptCount: read.value.excerptCount,
-        });
+      else setLoaded({ kind: "notes", notesPath: read.value.notesPath, text: read.value.text });
     });
     return () => {
       cancelled = true;
     };
-  }, [notesService, pipeline, documentPath, revision, reads]);
+  }, [notesService, documentPath, revision, reads]);
   useEffect(() => {
-    const onFocus = () => setReads((n) => n + 1);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
-
-  // Set imperatively (as Reader does), only when the rendered notes change.
-  const html = loaded.kind === "notes" ? loaded.html : null;
-  useLayoutEffect(() => {
-    if (articleRef.current && html !== null) articleRef.current.innerHTML = html;
-  }, [html]);
-
-  // A quote just added: scroll it into view and mark it.
-  useEffect(() => {
-    const scroll = scrollRef.current;
-    if (!newExcerptId || html === null || !scroll) return;
-    const quote = articleRef.current?.querySelector<HTMLElement>(`[data-excerpt="${CSS.escape(newExcerptId)}"]`);
-    if (!quote) return;
-    // By hand: `scrollIntoView` doesn't move nested overflow in WKWebView.
-    const offset = quote.getBoundingClientRect().top - scroll.getBoundingClientRect().top;
-    if (offset < 0 || offset + quote.offsetHeight > scroll.clientHeight) {
-      scroll.scrollTop = Math.max(0, scroll.scrollTop + offset - scroll.clientHeight / 3);
-    }
-    quote.classList.add("excerpt--new");
-    const timer = window.setTimeout(() => quote.classList.remove("excerpt--new"), NEW_EXCERPT_MS);
-    return () => window.clearTimeout(timer);
-  }, [newExcerptId, html]);
+    window.addEventListener("focus", reload);
+    return () => window.removeEventListener("focus", reload);
+  }, [reload]);
 
   const notesPath = loaded.kind === "notes" || loaded.kind === "none" ? loaded.notesPath : null;
+  const text = loaded.kind === "notes" ? loaded.text : null;
+  // Each part rendered once per change of the notes.
+  const parts = useMemo<Part[]>(
+    () =>
+      text === null
+        ? []
+        : segmentNotes(text).map((segment) =>
+            segment.kind === "text"
+              ? { kind: "text", html: pipeline.render(segment.markdown) }
+              : {
+                  kind: "excerpt",
+                  excerpt: segment.excerpt,
+                  quoteHtml: pipeline.render(segment.quote),
+                  note: segment.note,
+                  noteHtml: segment.note === "" ? "" : pipeline.render(segment.note),
+                },
+          ),
+    [text, pipeline],
+  );
+  const excerptCount = parts.filter((part) => part.kind === "excerpt").length;
 
   // Where a quote's link goes, if it's a passage of this PDF.
   const passageOf = useCallback(
@@ -131,7 +165,7 @@ export function NotesPanel({
     [passageOf, onFollow, onFileLink, notesPath],
   );
 
-  // Hovering a quote outlines its passage on the page.
+  // Hovering a card outlines its passage on the page.
   const markRef = useRef(onMark);
   markRef.current = onMark;
   useEffect(() => {
@@ -139,10 +173,10 @@ export function NotesPanel({
     if (!article) return;
     let current: Element | null = null;
     const onOver = (event: MouseEvent) => {
-      const quote = (event.target as Element | null)?.closest?.("blockquote.excerpt") ?? null;
-      if (quote === current) return;
-      current = quote;
-      const href = quote?.querySelector(".excerpt__source a")?.getAttribute("href") ?? null;
+      const card = (event.target as Element | null)?.closest?.(".excerpt-card") ?? null;
+      if (card === current) return;
+      current = card;
+      const href = card?.querySelector(".excerpt__source a")?.getAttribute("href") ?? null;
       markRef.current(passageOf(href));
     };
     const onLeave = () => {
@@ -155,9 +189,62 @@ export function NotesPanel({
       article.removeEventListener("mouseover", onOver);
       article.removeEventListener("mouseleave", onLeave);
     };
-  }, [passageOf, html]);
+  }, [passageOf]);
   // The outline goes with the panel.
   useEffect(() => () => markRef.current(null), []);
+
+  // The card actions.
+  const placeOf = (excerpt: Excerpt): HighlightPlace | null =>
+    excerpt.rect ? { page: excerpt.page, rect: excerpt.rect } : null;
+  const report = <T,>(result: Result<T>) => {
+    setFailure(result.ok ? null : result.error);
+    return result.ok;
+  };
+  const saveNote = (excerpt: Excerpt) => async (note: string) => {
+    if (!notesPath) return;
+    report(await notesService.setNote(notesPath, excerpt.id, note));
+  };
+  // A deleted quote's highlight goes once Undo is no longer offered.
+  const removeHighlightRef = useRef(onRemoveHighlight);
+  removeHighlightRef.current = onRemoveHighlight;
+  const commitDelete = useCallback((done: Deleted | null) => {
+    if (done?.place) removeHighlightRef.current(done.place);
+  }, []);
+  const deletedRef = useRef(deleted);
+  deletedRef.current = deleted;
+  const deleteExcerpt = async (excerpt: Excerpt) => {
+    if (!notesPath) return;
+    const result = await notesService.removeFromNotes(notesPath, excerpt.id);
+    reload();
+    if (!report(result) || !result.value) return;
+    commitDelete(deletedRef.current);
+    setDeleted({ removed: result.value, place: placeOf(excerpt) });
+  };
+  const undoDelete = async () => {
+    const done = deleted;
+    if (!done) return;
+    setDeleted(null);
+    report(await notesService.restoreToNotes(done.removed));
+    reload();
+  };
+  useEffect(() => {
+    if (!deleted) return;
+    const timer = window.setTimeout(() => {
+      commitDelete(deleted);
+      setDeleted(null);
+    }, UNDO_MS);
+    return () => window.clearTimeout(timer);
+  }, [deleted, commitDelete]);
+  // Closing the panel ends the chance to undo.
+  useEffect(() => () => commitDelete(deletedRef.current), [commitDelete]);
+  const recolor = async (excerpt: Excerpt, color: HighlightColor) => {
+    if (!notesPath) return;
+    const ok = report(await notesService.setColor(notesPath, excerpt.id, color));
+    const place = placeOf(excerpt);
+    if (ok && place) onRecolorHighlight(place, color);
+    reload();
+  };
+  const copy = (excerpt: Excerpt) => copyText(quoteToMarkdown(excerpt, excerpt.source));
 
   // Drag the left edge to resize; the page keeps room beside it.
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -207,15 +294,49 @@ export function NotesPanel({
             </span>
           </div>
         </header>
-        <NotesBody loaded={loaded} scrollRef={scrollRef} articleRef={articleRef} />
+        <NotesBody loaded={loaded} scrollRef={scrollRef}>
+          <article ref={articleRef} className="reader markdown-body notes-panel__notes" hidden={loaded.kind !== "notes"}>
+            {parts.map((part, index) =>
+              part.kind === "text" ? (
+                <Html key={`text-${index}`} className="notes-panel__text" html={part.html} />
+              ) : (
+                <ExcerptCard
+                  key={part.excerpt.id}
+                  excerpt={part.excerpt}
+                  quoteHtml={part.quoteHtml}
+                  note={part.note}
+                  noteHtml={part.noteHtml}
+                  isNew={part.excerpt.id === newExcerptId}
+                  onSaveNote={saveNote(part.excerpt)}
+                  onDoneEditing={reload}
+                  onDelete={() => void deleteExcerpt(part.excerpt)}
+                  onColor={(color) => void recolor(part.excerpt, color)}
+                  onCopy={() => copy(part.excerpt)}
+                />
+              ),
+            )}
+          </article>
+        </NotesBody>
+        {(deleted || failure) && (
+          <div className="notes-panel__toast" role="status">
+            <span>{failure ?? "Quote deleted"}</span>
+            {failure ? (
+              <button type="button" className="notes-panel__toast-btn" onClick={() => setFailure(null)}>
+                OK
+              </button>
+            ) : (
+              <button type="button" className="notes-panel__toast-btn" onClick={() => void undoDelete()}>
+                Undo
+              </button>
+            )}
+          </div>
+        )}
         <footer className="notes-panel__footer">
           <span>
-            {loaded.kind === "notes"
-              ? `${loaded.excerptCount} ${loaded.excerptCount === 1 ? "excerpt" : "excerpts"} · plain Markdown`
-              : ""}
+            {loaded.kind === "notes" ? `${excerptCount} ${excerptCount === 1 ? "quote" : "quotes"} · plain Markdown` : ""}
           </span>
           {loaded.kind === "notes" && (
-            <button className="notes-panel__open" onClick={() => onOpenFile(loaded.notesPath)} title="Open the notes in a tab, to write in them">
+            <button className="notes-panel__open" onClick={() => onOpenFile(loaded.notesPath)} title="Open the whole notes file in a tab">
               Open as tab ↗
             </button>
           )}
@@ -225,15 +346,15 @@ export function NotesPanel({
   );
 }
 
-/** The rendered notes, or what to say when there are none. */
+/** The notes, or what to say when there are none. */
 function NotesBody({
   loaded,
   scrollRef,
-  articleRef,
+  children,
 }: {
   loaded: Loaded;
   scrollRef: RefObject<HTMLDivElement | null>;
-  articleRef: RefObject<HTMLElement | null>;
+  children: ReactNode;
 }) {
   // Inside the provider, so links in the notes go to the panel's handler.
   useDocumentLinks(scrollRef);
@@ -244,7 +365,7 @@ function NotesBody({
           <p className="notes-panel__empty-title">No notes yet</p>
           <p>
             Select a passage in the PDF and choose <strong>Add to notes</strong> (⌘E). It's
-            highlighted on the page and quoted here, with a link back to it.
+            highlighted on the page and quoted here, ready for your note on it.
           </p>
         </div>
       )}
@@ -253,7 +374,7 @@ function NotesBody({
           {loaded.message}
         </p>
       )}
-      <article ref={articleRef} className="reader markdown-body notes-panel__notes" hidden={loaded.kind !== "notes"} />
+      {children}
     </div>
   );
 }

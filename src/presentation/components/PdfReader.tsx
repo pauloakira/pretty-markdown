@@ -15,7 +15,6 @@ import type {
   PdfInfo,
   PdfTool,
   PdfViewerHandle,
-  ScreenBox,
   SelectedPassage,
   SelectionPlace,
 } from "../pdf/PdfViewer";
@@ -42,18 +41,11 @@ const SELECTION_POPOVER = !(typeof navigator !== "undefined" && navigator.maxTou
 /** How long a notes notice stays (errors stay until dismissed). */
 const NOTICE_MS = 8000;
 
-/** What the reader is told about their notes: after Add to notes, or removing a highlight. */
+/**
+ * What the reader is told about their notes: that a highlight they removed is quoted, or
+ * an error. (A quote just added shows in the Notes panel, with its note open.)
+ */
 type NotesNotice =
-  | {
-      readonly kind: "added";
-      readonly notesPath: string;
-      readonly excerptId: string;
-      readonly created: boolean;
-      /** The highlight made with it, to remove along with it. */
-      readonly place: HighlightPlace | null;
-      /** The comment written with it, removed along with it too. */
-      readonly comment?: string;
-    }
   | {
       /** The reader removed a highlight whose passage is quoted in the notes. */
       readonly kind: "quoted";
@@ -104,15 +96,6 @@ interface PdfReaderProps {
   onNotesChange: (notes: NotesPanelView) => void;
   /** Follow a link in the notes to another file, relative to the notes file at `fromPath`. */
   onFileLink: (href: string, fromPath: string) => void;
-}
-
-/** A comment being written in the selection popover, for a passage already highlighted. */
-interface PendingComment {
-  /** Where the passage was on screen when Comment was chosen. */
-  readonly bounds: ScreenBox;
-  readonly passage: SelectedPassage;
-  /** Its new highlight, taken off again if the comment is cancelled. */
-  readonly place: HighlightPlace | null;
 }
 
 type Status =
@@ -170,9 +153,10 @@ export function PdfReader({
   const [notesRevision, setNotesRevision] = useState(0);
   const [newExcerptId, setNewExcerptId] = useState<string | null>(null);
   const notesChanged = useCallback(() => setNotesRevision((n) => n + 1), []);
-  // The selection popover: the selection it's for, or the comment being written.
+  // Opens the Notes panel (set below, once `showNotes` exists).
+  const openNotesRef = useRef<() => void>(() => {});
+  // The selection popover: the selection it's for.
   const [selection, setSelection] = useState<SelectionPlace | null>(null);
-  const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -364,7 +348,7 @@ export function PdfReader({
   // Quote a passage in this PDF's notes file (docs/RESEARCH_READER.md), with the place of
   // its highlight (if it was highlighted) so each can find the other later.
   const saveToNotes = useCallback(
-    async (passage: SelectedPassage, place: HighlightPlace | null, comment?: string) => {
+    async (passage: SelectedPassage, place: HighlightPlace | null) => {
       const added = await notesService.addToNotes(
         path,
         {
@@ -373,24 +357,15 @@ export function PdfReader({
           color: colorRef.current,
           ...(place ? { rect: place.rect } : {}),
         },
-        comment,
       );
-      if (added.ok) {
-        notesChanged();
-        setNewExcerptId(added.value.excerpt.id);
+      if (!added.ok) {
+        setNotesNotice({ kind: "error", message: added.error });
+        return;
       }
-      setNotesNotice(
-        added.ok
-          ? {
-              kind: "added",
-              notesPath: added.value.notesPath,
-              excerptId: added.value.excerpt.id,
-              created: added.value.created,
-              place,
-              ...(comment ? { comment } : {}),
-            }
-          : { kind: "error", message: added.error },
-      );
+      // The new quote shows in the Notes panel (opened if it isn't), its note ready to write.
+      notesChanged();
+      setNewExcerptId(added.value.excerpt.id);
+      openNotesRef.current();
     },
     [notesService, path, notesChanged],
   );
@@ -424,30 +399,6 @@ export function PdfReader({
     },
     [onHighlightColorChange],
   );
-  const startComment = useCallback(async () => {
-    const handle = handleRef.current;
-    if (!handle || selection === null) return;
-    const passage = handle.selectedPassage() ?? selection.passage;
-    const bounds = selection.bounds;
-    setSelection(null);
-    // Highlighted now, so the reader sees what they're commenting on as they write.
-    const place = await handle.highlightSelection();
-    setPendingComment({ bounds, passage, place });
-  }, [selection]);
-  const submitComment = useCallback(
-    async (comment: string) => {
-      if (pendingComment === null) return;
-      setPendingComment(null);
-      const written = comment.trim();
-      await saveToNotes(pendingComment.passage, pendingComment.place, written === "" ? undefined : written);
-    },
-    [pendingComment, saveToNotes],
-  );
-  const cancelComment = useCallback(() => {
-    if (pendingComment === null) return;
-    setPendingComment(null);
-    if (pendingComment.place) handleRef.current?.removeHighlight(pendingComment.place);
-  }, [pendingComment]);
   const copyAsQuote = useCallback(async () => {
     const passage = handleRef.current?.selectedPassage() ?? selection?.passage;
     if (!passage) return false;
@@ -455,7 +406,7 @@ export function PdfReader({
     return copyText(quoteToMarkdown(passage, fileName(path)));
   }, [selection, path]);
   const dismissSelection = useCallback(() => setSelection(null), []);
-  const popoverBounds = pendingComment?.bounds ?? selection?.bounds ?? null;
+  const popoverBounds = selection?.bounds ?? null;
 
   // A highlight the reader removed may be quoted in the notes: offer to remove the quote
   // too (it's kept unless they say so).
@@ -476,20 +427,6 @@ export function PdfReader({
     const timer = window.setTimeout(() => setNotesNotice(null), NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notesNotice]);
-
-  // Remove: take back the Add to notes, the quote and its highlight.
-  const undoAddToNotes = useCallback(async () => {
-    if (notesNotice?.kind !== "added") return;
-    setNotesNotice(null);
-    if (notesNotice.place) handleRef.current?.removeHighlight(notesNotice.place);
-    const removed = await notesService.removeFromNotes(
-      notesNotice.notesPath,
-      notesNotice.excerptId,
-      notesNotice.comment,
-    );
-    notesChanged();
-    if (!removed.ok) setNotesNotice({ kind: "error", message: removed.error });
-  }, [notesNotice, notesService, notesChanged]);
 
   // The reader removed a quoted highlight and wants the quote gone as well.
   const removeQuotes = useCallback(async () => {
@@ -515,6 +452,9 @@ export function PdfReader({
     if (!open) setNewExcerptId(null);
     notesChangeRef.current({ ...notesRef.current, open });
   }, []);
+  openNotesRef.current = () => {
+    if (!notesRef.current.open) showNotes(true);
+  };
   const resizeNotes = useCallback((widthPx: number) => {
     notesChangeRef.current({ ...notesRef.current, widthPx });
   }, []);
@@ -529,6 +469,13 @@ export function PdfReader({
       }),
     [jump],
   );
+  // A quote deleted or recoloured in the panel: its highlight follows.
+  const removeHighlight = useCallback((place: HighlightPlace) => {
+    handleRef.current?.removeHighlight(place);
+  }, []);
+  const recolorHighlight = useCallback((place: HighlightPlace, color: HighlightColor) => {
+    handleRef.current?.recolorHighlight(place, color);
+  }, []);
   const markPassage = useCallback((target: PassageTarget | null) => {
     try {
       handleRef.current?.markPassage(target);
@@ -621,29 +568,6 @@ export function PdfReader({
         notesOpen={notes.open}
         onShowNotes={showNotes}
       />
-      {notesNotice?.kind === "added" && (
-        <div className="banner banner--warn notes-notice" role="status">
-          <span>
-            {notesNotice.created ? "Started your notes: " : "Added to "}
-            <strong>{fileName(notesNotice.notesPath)}</strong>
-          </span>
-          <span className="banner__actions">
-            {!notes.open && (
-              <button className="banner__btn" onClick={() => showNotes(true)} title="Show the notes beside the page (⇧⌘N)">
-                Show notes
-              </button>
-            )}
-            <button
-              className="banner__btn"
-              onClick={() => void undoAddToNotes()}
-              aria-label="Remove from notes"
-              title="Take this passage out of the notes again, and its highlight"
-            >
-              Remove
-            </button>
-          </span>
-        </div>
-      )}
       {notesNotice?.kind === "quoted" && (
         <div className="banner banner--warn notes-notice" role="status">
           <span>
@@ -712,10 +636,6 @@ export function PdfReader({
             color={highlightColor}
             onHighlight={(color) => void highlightIn(color)}
             onAddToNotes={() => void addToNotes()}
-            onComment={() => void startComment()}
-            commenting={pendingComment !== null}
-            onSubmitComment={(comment) => void submitComment(comment)}
-            onCancelComment={cancelComment}
             onCopy={copyAsQuote}
             onDismiss={dismissSelection}
           />
@@ -738,6 +658,8 @@ export function PdfReader({
           onMark={markPassage}
           onFileLink={onFileLink}
           onOpenFile={onOpenFile}
+          onRemoveHighlight={removeHighlight}
+          onRecolorHighlight={recolorHighlight}
         />
       )}
       </div>

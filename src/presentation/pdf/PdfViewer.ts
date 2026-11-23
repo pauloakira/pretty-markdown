@@ -144,6 +144,11 @@ export interface PdfViewerHandle {
    */
   highlightSelection(): Promise<HighlightPlace | null>;
   /**
+   * Recolour the highlight at `place` (its quote was recoloured in the notes), if it's one
+   * made or edited since the document opened. False if there's none such.
+   */
+  recolorHighlight(place: HighlightPlace, color: HighlightColor): boolean;
+  /**
    * Remove the highlight at `place` (e.g. its quote was taken out of the notes), if it's
    * one made or edited since the document opened. False if there's none such.
    */

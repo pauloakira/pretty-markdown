@@ -247,6 +247,7 @@ interface PdfEditor {
   isEmpty(): boolean;
   getPDFRect(): number[];
   remove(): void;
+  updateParams(type: number, value: unknown): void;
 }
 
 /** The editor registry of pdf.js's UI manager, which every new and removed editor passes. */
@@ -984,6 +985,19 @@ export async function mountPdfJs(
       }
       uiManager.highlightSelection("main_toolbar");
       return made;
+    },
+    recolorHighlight(place, color) {
+      if (!uiManager) return false;
+      let recoloured = false;
+      for (const editor of [...(uiManager as unknown as EditorRegistry).getEditors(place.page - 1)]) {
+        if (!isHighlight(editor) || editor.deleted === true) continue;
+        if (editor.annotationElementId !== null && editor.parent === null) continue;
+        if (!sameArea(placeOf(editor).rect, place.rect)) continue;
+        editor.updateParams(AnnotationEditorParamsType.HIGHLIGHT_COLOR, highlightHex(color));
+        recoloured = true;
+      }
+      if (recoloured) scheduleSave();
+      return recoloured;
     },
     removeHighlight(place) {
       if (!uiManager) return false;

@@ -14,7 +14,7 @@ import {
 
 /*
  * The selection popover (docs/RESEARCH_READER.md, R1): on the Mac, a selection in a PDF
- * offers its colours, Add to notes, Comment and Copy as quote. The fake viewer stands in
+ * offers its colours, Add to notes and Copy as quote. The fake viewer stands in
  * for pdf.js; `select` is the reader finishing a selection.
  */
 
@@ -105,60 +105,6 @@ describe("The selection popover", () => {
     expect(readExcerpts(notesFile()).map((f) => f.excerpt.text)).toEqual(["Gauss–Legendre nodes are the roots of P_n."]);
     expect(viewer.highlighted).toEqual(["yellow"]);
     expect(popover()).toBeNull();
-  });
-
-  it("Comment highlights the passage at once, then adds it with the comment below", async () => {
-    const app = makeContainer();
-    await launch(app);
-    const viewer = await openPdf(app);
-    await act(async () => viewer.select(PASSAGE));
-
-    await act(async () => action("Comment").click());
-    await settle();
-    expect(viewer.places).toHaveLength(1); // highlighted while the comment is written
-    const field = popover()?.querySelector("textarea");
-    if (!field) throw new Error("no comment field");
-    expect(document.activeElement).toBe(field);
-    // pdf.js drops the selection as it highlights; the field stays.
-    await act(async () => viewer.select(null));
-
-    await act(async () => {
-      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-      setValue?.call(field, "Compare Golub–Welsch.");
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
-    await settle();
-
-    expect(popover()).toBeNull();
-    expect(readExcerpts(notesFile())).toHaveLength(1);
-    expect(notesFile()).toMatch(/&rect=72,668,300,680\)\n\nCompare Golub–Welsch\.\n$/);
-    expect(viewer.highlighted).toEqual(["yellow"]); // the one highlight, not a second
-
-    // The notice's Remove takes the quote, its comment and its highlight away again.
-    await act(async () => {
-      const remove = document.querySelector<HTMLButtonElement>('.notes-notice button[aria-label="Remove from notes"]');
-      remove?.click();
-    });
-    await settle();
-    expect(readExcerpts(notesFile())).toHaveLength(0);
-    expect(notesFile()).not.toContain("Golub");
-    expect(viewer.places).toHaveLength(0);
-  });
-
-  it("cancelling a comment takes its highlight off again and writes nothing", async () => {
-    const app = makeContainer();
-    await launch(app);
-    const viewer = await openPdf(app);
-    await act(async () => viewer.select(PASSAGE));
-    await act(async () => action("Comment").click());
-    await settle();
-
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
-
-    expect(popover()).toBeNull();
-    expect(viewer.places).toHaveLength(0);
-    expect(notesFile()).toBe("");
   });
 
   it("Copy as quote copies a Markdown quote linking to the page", async () => {
