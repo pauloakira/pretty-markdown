@@ -77,7 +77,7 @@ export function PdfToolbar({
   };
 
   return (
-    <div className="doctoolbar">
+    <div className="doctoolbar doctoolbar--pdf">
       <div className="doctoolbar__lead">
         <ContentsButton open={contentsOpen} onToggle={onToggleContents} />
         <span className="doctoolbar__name" title={title ?? undefined}>
@@ -110,8 +110,10 @@ export function PdfToolbar({
           onClick={onAddToNotes}
           disabled={!ready}
           title="Add the selected text to this PDF's notes (⌘E)"
+          aria-label="Add to notes"
         >
-          Add to notes
+          <AddToNotesIcon />
+          <span className="doctoolbar__label">Add to notes</span>
         </button>
         <HighlightControl
           availability={highlighting}
@@ -121,7 +123,7 @@ export function PdfToolbar({
           onColorChange={onHighlightColorChange}
         />
         {highlighting?.allowed && (
-          <div className="segmented" role="group" aria-label="Highlight history">
+          <div className="segmented pdftoolbar__history" role="group" aria-label="Highlight history">
             <button
               className="segmented__btn pdftoolbar__history-btn"
               onClick={onUndo}
@@ -164,7 +166,7 @@ export function PdfToolbar({
           />
           <span className="pdftoolbar__page-count">/ {ready ? pageCount : "–"}</span>
         </label>
-        <div className="segmented" role="group" aria-label="Zoom">
+        <div className="segmented pdftoolbar__zoom-group" role="group" aria-label="Zoom">
           <button
             className="segmented__btn"
             onClick={onZoomOut}
@@ -188,15 +190,34 @@ export function PdfToolbar({
           </button>
         </div>
         <button
-          className={`doctoolbar__btn${fitWidth ? " doctoolbar__btn--on" : ""}`}
+          className={`doctoolbar__btn pdftoolbar__fit${fitWidth ? " doctoolbar__btn--on" : ""}`}
           onClick={onFitWidth}
           disabled={!ready}
           aria-pressed={fitWidth}
           title="Fit to width (⌘0)"
+          aria-label="Fit width"
         >
-          Fit width
+          <FitWidthIcon />
+          <span className="doctoolbar__label">Fit width</span>
         </button>
       </div>
     </div>
+  );
+}
+
+/* Shown in place of a button's label when the toolbar is narrow (Split View). */
+function AddToNotesIcon() {
+  return (
+    <svg className="doctoolbar__compact-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.5 1.5h6l3 3v10h-9z" />
+      <path d="M8 7v5M5.5 9.5h5" />
+    </svg>
+  );
+}
+function FitWidthIcon() {
+  return (
+    <svg className="doctoolbar__compact-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M1.5 8h13M4 5.5 1.5 8 4 10.5M12 5.5 14.5 8 12 10.5" />
+    </svg>
   );
 }

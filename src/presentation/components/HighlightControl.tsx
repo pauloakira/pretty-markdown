@@ -48,6 +48,7 @@ export function HighlightControl({
           onClick={() => onToolChange(on ? "select" : "highlight")}
           disabled={!allowed}
           aria-pressed={on}
+          aria-label="Highlight"
           title={tooltip}
         >
           <span
@@ -55,7 +56,7 @@ export function HighlightControl({
             style={{ background: highlightHex(color) }}
             aria-hidden="true"
           />
-          Highlight
+          <span className="doctoolbar__label">Highlight</span>
         </button>
         <button
           className="segmented__btn pdftoolbar__color-btn"

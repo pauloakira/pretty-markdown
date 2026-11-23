@@ -1,3 +1,4 @@
+import { SettingsIcon } from "./SettingsIcon";
 import {
   useEffect,
   useLayoutEffect,
@@ -528,7 +529,7 @@ export function TabBar({
         title="Settings"
         onClick={onOpenSettings}
       >
-        ⚙
+        <SettingsIcon />
       </button>
       {hint && (
         <div className="tabbar__drop-hint" style={{ ...groupColorStyle(hint.color), left: hint.x }}>

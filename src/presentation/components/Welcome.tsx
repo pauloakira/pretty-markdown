@@ -1,3 +1,4 @@
+import { SettingsIcon } from "./SettingsIcon";
 import type { RecentFile } from "../../domain/values/RecentFile";
 
 interface WelcomeProps {
@@ -16,7 +17,7 @@ export function Welcome({ recents, onOpen, onOpenRecent, onOpenSettings }: Welco
         title="Settings"
         onClick={onOpenSettings}
       >
-        ⚙
+        <SettingsIcon />
       </button>
       <h1 className="welcome__title">pretty-markdown</h1>
       <p className="welcome__subtitle">
