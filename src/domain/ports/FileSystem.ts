@@ -22,4 +22,11 @@ export interface FilePicker {
   /** Pick a document to open: markdown or PDF. */
   pickDocument(): Promise<string | null>;
   pickSavePath(defaultName?: string): Promise<string | null>;
+  /**
+   * Where the system places a new file itself, with its contents (iPadOS: the Files "Save
+   * to" sheet; an app can't write to a path it wasn't given): save `content` as `name` and
+   * resolve to its path, or null if the user cancels. Without it, Save As picks a path and
+   * then writes there.
+   */
+  saveNew?(name: string, content: string): Promise<Result<string | null>>;
 }

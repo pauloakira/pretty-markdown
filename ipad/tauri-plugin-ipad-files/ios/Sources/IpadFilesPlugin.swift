@@ -21,6 +21,16 @@ class PathArgs: Decodable {
   let path: String
 }
 
+class PrintArgs: Decodable {
+  let title: String
+}
+
+class ExportArgs: Decodable {
+  /// The file name to suggest, e.g. "notes.md".
+  let name: String
+  let contents: String
+}
+
 /// The bookmarks, by the path the app knows each document under (in UserDefaults).
 enum Bookmarks {
   private static let key = "pretty-markdown.bookmarks"
@@ -95,7 +105,7 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
   private var accessing = Set<String>()
   private let lock = NSLock()
   /// Off the main thread: a coordinated read blocks while iCloud downloads the file.
-  private let work = DispatchQueue(label: "pretty-markdown.ipad-files", qos: .userInitiated)
+  let work = DispatchQueue(label: "pretty-markdown.ipad-files", qos: .userInitiated)
 
   private weak var webView: WKWebView?
 
@@ -114,7 +124,7 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
     webView?.evaluateJavaScript("window.dispatchEvent(new Event('pencil-double-tap'))")
   }
 
-  private func startAccess(_ url: URL) {
+  func startAccess(_ url: URL) {
     lock.lock()
     defer { lock.unlock() }
     if !accessing.contains(url.path), url.startAccessingSecurityScopedResource() {
@@ -181,6 +191,107 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
       return
     }
     invoke.resolve(["path": readable.path])
+  }
+}
+
+// MARK: - Printing and Save As
+
+extension IpadFilesPlugin {
+  /// Print the page (Export PDF): the system print sheet, whose share button also saves or
+  /// sends the PDF. WKWebView on iOS ignores `window.print()`, so the page asks for this.
+  /// The page's print stylesheet applies, as it does on the Mac, so only the document it
+  /// put in `#print-root` is printed. Resolves when the sheet closes.
+  @objc public func printPage(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PrintArgs.self)
+    DispatchQueue.main.async {
+      guard let webView = self.webView else {
+        invoke.reject("Nothing to print.")
+        return
+      }
+      let info = UIPrintInfo(dictionary: nil)
+      // The job name is the saved PDF's name: "notes", not "notes.md".
+      info.jobName = (args.title as NSString).deletingPathExtension
+      info.outputType = .general
+      let controller = UIPrintInteractionController.shared
+      controller.printInfo = info
+      controller.printFormatter = webView.viewPrintFormatter()
+      controller.present(animated: true) { _, _, _ in
+        invoke.resolve()
+      }
+    }
+  }
+
+  /// Save As: write `contents` to a file named `name` and let the reader choose where it
+  /// goes (the Files "Save to" sheet). The saved file is remembered like an opened one, so
+  /// the tab keeps editing it and it reopens after a relaunch. Resolves with its path, or
+  /// no path if the reader cancelled.
+  @objc public func exportFile(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(ExportArgs.self)
+    let folder = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let draft = folder.appendingPathComponent(args.name)
+    do {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      try args.contents.write(to: draft, atomically: true, encoding: .utf8)
+    } catch {
+      invoke.reject("Couldn't prepare '\(args.name)': \(error.localizedDescription)")
+      return
+    }
+    DispatchQueue.main.async {
+      guard let presenter = self.topViewController() else {
+        try? FileManager.default.removeItem(at: folder)
+        invoke.reject("Couldn't show where to save.")
+        return
+      }
+      let picker = UIDocumentPickerViewController(forExporting: [draft], asCopy: true)
+      let delegate = ExportDelegate { url in
+        try? FileManager.default.removeItem(at: folder)
+        guard let url = url else {
+          invoke.resolve(["path": NSNull()])
+          return
+        }
+        self.work.async {
+          self.startAccess(url)
+          if let data = try? url.bookmarkData(
+            options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+          {
+            Bookmarks.store(data, for: url.path)
+          }
+          invoke.resolve(["path": url.path])
+        }
+      }
+      picker.delegate = delegate
+      // The picker holds its delegate weakly: keep it until the sheet is done.
+      objc_setAssociatedObject(picker, &ExportDelegate.key, delegate, .OBJC_ASSOCIATION_RETAIN)
+      presenter.present(picker, animated: true)
+    }
+  }
+
+  private func topViewController() -> UIViewController? {
+    var top = webView?.window?.rootViewController
+    while let presented = top?.presentedViewController { top = presented }
+    return top
+  }
+}
+
+/// Reports where the Files sheet saved the file, or nil if it was cancelled.
+private final class ExportDelegate: NSObject, UIDocumentPickerDelegate {
+  static var key = 0
+  private var done: ((URL?) -> Void)?
+
+  init(_ done: @escaping (URL?) -> Void) { self.done = done }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    finish(urls.first)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    finish(nil)
+  }
+
+  private func finish(_ url: URL?) {
+    done?(url)
+    done = nil
   }
 }
 

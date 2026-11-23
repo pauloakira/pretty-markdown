@@ -83,6 +83,12 @@ export class DocumentService {
 
   /** Always prompt for a path, then write. */
   async saveAs(content: string, suggestedName?: string): Promise<SaveOutcome> {
+    if (this.picker.saveNew) {
+      const saved = await this.picker.saveNew(suggestedName ?? "Untitled.md", content);
+      if (!saved.ok) return { kind: "error", message: saved.error };
+      if (saved.value === null) return { kind: "cancelled" };
+      return { kind: "saved", path: saved.value, name: fileName(saved.value) };
+    }
     const path = await this.picker.pickSavePath(suggestedName);
     if (!path) return { kind: "cancelled" };
     return this.writeTo(path, content);

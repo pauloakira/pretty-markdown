@@ -199,4 +199,29 @@ describe("DocumentService — PDF data for the viewer", () => {
     );
     expect(await missing.loadPdfData("/p/a.pdf")).toEqual(err("Failed to read '/p/a.pdf'"));
   });
+
+  it("lets the system place a new file where it does (iPadOS Save As)", async () => {
+    const placed: { name: string; content: string }[] = [];
+    const picker: FilePicker = {
+      pickDocument: async () => null,
+      pickSavePath: async () => {
+        throw new Error("not used when the system places the file");
+      },
+      saveNew: async (name, content) => {
+        placed.push({ name, content });
+        return ok(placed.length === 1 ? "/Files/notes copy.md" : null);
+      },
+    };
+    const writer = new FakeWriter();
+    const service = new DocumentService(picker, reader(ok("")), writer);
+
+    expect(await service.saveAs("body", "notes.md")).toEqual({
+      kind: "saved",
+      path: "/Files/notes copy.md",
+      name: "notes copy.md",
+    });
+    expect(placed).toEqual([{ name: "notes.md", content: "body" }]);
+    expect(writer.written).toBeNull(); // already written by the system
+    expect((await service.saveAs("body", "notes.md")).kind).toBe("cancelled");
+  });
 });

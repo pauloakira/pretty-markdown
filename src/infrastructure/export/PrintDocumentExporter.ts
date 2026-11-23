@@ -8,8 +8,14 @@ import type { DocumentExporter, ExportInput } from "../../domain/ports/DocumentE
  *
  * The print root is removed after printing finishes (afterprint), with a timeout fallback
  * for webviews that don't fire the event.
+ *
+ * `print` starts printing: the webview's `window.print()` by default. WKWebView on iPadOS
+ * ignores that, so there it asks the system print sheet (which can also save or share the
+ * PDF) and resolves when the sheet closes.
  */
 export class PrintDocumentExporter implements DocumentExporter {
+  constructor(private readonly print: (title: string) => void | Promise<void> = () => window.print()) {}
+
   async exportPdf({ title, html }: ExportInput): Promise<void> {
     document.getElementById("print-root")?.remove();
 
@@ -32,7 +38,9 @@ export class PrintDocumentExporter implements DocumentExporter {
     fallback = window.setTimeout(cleanup, 60_000);
 
     try {
-      window.print();
+      // A print that resolves (the iPad's sheet) is over when it does.
+      const done = this.print(title);
+      if (done) await done.finally(cleanup);
     } catch {
       cleanup();
     }

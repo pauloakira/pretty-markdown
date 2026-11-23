@@ -3,7 +3,8 @@
 //!
 //! The app depends on this crate only when building for iOS, so the desktop build never
 //! compiles it. Nothing here is callable from the webview: the app's own file commands
-//! call [`IpadFiles::remember`] and [`IpadFiles::access`].
+//! call [`IpadFiles::remember`], [`IpadFiles::access`], [`IpadFiles::print`] and
+//! [`IpadFiles::export`].
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -24,6 +25,22 @@ struct PathResponse {
     path: String,
 }
 
+#[derive(Serialize)]
+struct PrintArgs<'a> {
+    title: &'a str,
+}
+
+#[derive(Serialize)]
+struct ExportArgs<'a> {
+    name: &'a str,
+    contents: &'a str,
+}
+
+#[derive(Deserialize)]
+struct MaybePathResponse {
+    path: Option<String>,
+}
+
 /// Handle to the Swift side; available as managed state once the plugin is set up.
 pub struct IpadFiles<R: Runtime>(PluginHandle<R>);
 
@@ -42,6 +59,24 @@ impl<R: Runtime> IpadFiles<R> {
     pub fn access(&self, path: &str) -> Result<String, String> {
         self.0
             .run_mobile_plugin::<PathResponse>("access", PathArgs { path })
+            .map(|r| r.path)
+            .map_err(|e| e.to_string())
+    }
+
+    /// Print the page with the system print sheet (which can also save or share a PDF).
+    /// Returns when the sheet closes.
+    pub fn print(&self, title: &str) -> Result<(), String> {
+        self.0
+            .run_mobile_plugin::<serde::de::IgnoredAny>("printPage", PrintArgs { title })
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Save `contents` as a new file named `name` where the user chooses (the Files "Save
+    /// to" sheet). Returns its path, already remembered, or None if they cancelled.
+    pub fn export(&self, name: &str, contents: &str) -> Result<Option<String>, String> {
+        self.0
+            .run_mobile_plugin::<MaybePathResponse>("exportFile", ExportArgs { name, contents })
             .map(|r| r.path)
             .map_err(|e| e.to_string())
     }
