@@ -79,6 +79,7 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Infrastructure | `PdfJsViewer.revealPassage(target)` (with `pdf/revealArea.ts`): scrolls a passage into view and flashes it |
 | Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()`, `highlightSelection()` (resolves to the new highlight's place), `removeHighlight(place)`, and `onHighlightRemoved`, seen at pdf.js's editor registry (`addEditor` / `removeEditor` on its UI manager, which has no events for these) |
 | Presentation | `useFileLinks` (links in a Markdown document to other files, via `FileLinkContext`), the PDF tab's **Back** pill and ⌘[, over `ViewState.back` |
+| Presentation | `NotesPanel` (the notes beside the page) and the toolbar's **Read · Notes**, over `ViewState.notes`; `NotesService.readNotes`; `PdfViewerHandle.markPassage` outlines a hovered quote's passage |
 | Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove**. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
 ### Add to notes (PDF)
@@ -86,7 +87,7 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 Select text, then **Add to notes** in the PDF toolbar or ⌘E. The passage is highlighted in
 the PDF (saved into it as before; the tool stays as it was) and added to the end of
 "Unsorted" in `<name>.notes.md`; the first time, the file is created. The notice names the
-file and offers **Open notes** (opens it in a tab) and **Remove** (takes the quote out of
+file and offers **Show notes** (opens the Notes panel, unless it's open already) and **Remove** (takes the quote out of
 the notes again, and the highlight it made). The notice's button isn't called "Undo"
 because the toolbar's Undo already means "undo the last highlight change". On a PDF that
 can't be highlighted (signed, locked), the passage is still added to the notes, without a
@@ -99,7 +100,7 @@ deletion: pdf.js drops its editors for the file's own highlights then, and the a
 only counts a highlight of the file as removed once pdf.js has marked it deleted.
 
 Not yet: the iPad (writing beside a PDF opened from Files needs folder access; its own
-card), the selection popover, and the Notes side panel. `removeHighlight` reaches only
+card) and the selection popover. `removeHighlight` reaches only
 highlights pdf.js has an editor for (made or opened for editing since the document
 opened); removing a quote from the Notes panel will need the file's other highlights too.
 
@@ -129,20 +130,38 @@ If the PDF was already open, its tab remembers where the reader was, and a
 **‹ Back to p. 12** pill at the top of the page returns there (⌘[ does too). Each PDF tab
 keeps its own list, so several jumps are undone one at a time. The contents sidebar and
 Go to page are jumps as well. A PDF opened by the link has nowhere to go back to: the notes
-are a tab switch away until the Notes panel puts them beside the page.
+are a tab switch away (or open the Notes panel beside the page).
 
 Other links to files work the same way from any Markdown document: `other.notes.md` or
 `../paper.pdf#page=3` opens in a tab, relative to the document's folder. Links to files
 the app doesn't read (images, folders) and `file:` URLs still do nothing.
 
-Not yet: hovering a quote to outline its passage. That needs the quote and the page on
-screen together, so it comes with the Notes panel.
+### The Notes panel
+
+**Read · Notes** in a PDF's toolbar, or ⇧⌘N, puts the PDF's notes file beside the page.
+Reading looks exactly as before until it's opened. The panel shows the notes as the reader
+shows any Markdown file (math and excerpt blocks included), with the file's name and how
+many excerpts it holds. Each PDF tab remembers whether its panel is open and how wide it
+is (drag its left edge; the page keeps at least 360 px), and so does the saved session.
+
+- **Following a quote** ("↗ p. 133") stays in this tab: the page scrolls to the passage and
+  flashes it, and Back (⌘[) returns. Other links open from the notes file's folder.
+- **Hovering a quote** outlines its passage on the page where it is, without scrolling.
+  Quotes from other documents have nothing to outline.
+- **Add to notes** shows the new quote in the panel at once, scrolled into view and marked
+  for a moment; **Remove** takes it out again.
+- With no notes yet, the panel says how to start them (Add to notes, ⌘E).
+- **Open as tab ↗** opens the notes file in its own tab, to write in it. The panel shows
+  the notes and reads them again when the window comes back to the front, so edits made
+  elsewhere appear.
+
+Board joins the switch in R4. The Notes · Outline switch of the design comes with R3.
 
 ## Milestones
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, and following a quote's link (with Back) done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, following a quote's link (with Back), and the Notes panel (Mac) done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |

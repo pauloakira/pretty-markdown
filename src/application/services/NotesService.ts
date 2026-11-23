@@ -29,6 +29,14 @@ export interface AddedExcerpt {
   readonly created: boolean;
 }
 
+/** A document's notes file, as read for the Notes panel. */
+export interface DocumentNotes {
+  readonly notesPath: string;
+  /** The file's text, or null if it doesn't exist yet (made at the first Add to notes). */
+  readonly text: string | null;
+  readonly excerptCount: number;
+}
+
 /**
  * Keeps excerpts in each document's notes file, `<name>.notes.md` beside it
  * (docs/RESEARCH_READER.md). Each change reads the file, edits its text and writes it
@@ -47,6 +55,18 @@ export class NotesService {
   /** The notes file of the document at `documentPath`. */
   notesPathFor(documentPath: string): string {
     return notesPathFor(documentPath);
+  }
+
+  /**
+   * The notes of the document at `documentPath`: where its notes file is, its text (null
+   * if there's none yet), and how many excerpts it holds.
+   */
+  async readNotes(documentPath: string): Promise<Result<DocumentNotes>> {
+    const notesPath = notesPathFor(documentPath);
+    const current = await this.store.read(notesPath);
+    if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
+    const text = current.value;
+    return ok({ notesPath, text, excerptCount: text === null ? 0 : readExcerpts(text).length });
   }
 
   /** Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted". */

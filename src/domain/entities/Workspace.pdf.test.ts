@@ -89,3 +89,24 @@ describe("Workspace with PDF tabs", () => {
     });
   });
 });
+
+describe("A PDF tab's Notes panel", () => {
+  it("is absent (closed) until set, clamped, and only on PDF tabs", () => {
+    const ws = workspaceOf(pdf("paper"), md("notes"));
+    expect(ws.tabs[0].viewState.notes).toBeUndefined();
+    const opened = W.setNotesPanel(ws, "paper", { open: true, widthPx: 2000 });
+    expect(opened.tabs[0].viewState.notes).toEqual({ open: true, widthPx: 900 });
+    expect(W.setNotesPanel(opened, "paper", { open: true, widthPx: 900 })).toBe(opened);
+    expect(W.setNotesPanel(ws, "notes", { open: true, widthPx: 400 })).toBe(ws);
+  });
+
+  it("is saved in the session for PDF tabs that have one, and read back", () => {
+    const ws = W.setNotesPanel(workspaceOf(pdf("paper"), pdf("other"), md("notes")), "paper", {
+      open: true,
+      widthPx: 480,
+    });
+    const session = W.toSession(ws);
+    expect(session.tabs.map((t) => t.notes)).toEqual([{ open: true, widthPx: 480 }, undefined, undefined]);
+    expect(parseSession(JSON.parse(JSON.stringify(session)))).toEqual(session);
+  });
+});

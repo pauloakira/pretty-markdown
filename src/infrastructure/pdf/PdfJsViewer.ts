@@ -165,27 +165,38 @@ const FLASH_MS = 1600;
 const FLASH_PAD_PX = 4;
 
 /**
- * Outline an area of a page for a moment (it fades out by itself). The outline goes in the
- * scroll container, over the page, not in the page itself: pdf.js empties a page's element
- * whenever it resizes it (a zoom, the window settling), which would take the outline too.
+ * Outline an area of a page: `pdf-flash` fades out by itself, `pdf-mark` stays until
+ * cleared. The outline goes in the scroll container, over the page, not in the page itself:
+ * pdf.js empties a page's element whenever it resizes it (a zoom, the window settling),
+ * which would take the outline too.
  */
-function flashArea(container: HTMLElement, page: HTMLElement, area: PageArea): void {
-  container.querySelector(":scope > .pdf-flash")?.remove();
+function outlineArea(
+  container: HTMLElement,
+  page: HTMLElement,
+  area: PageArea,
+  kind: "pdf-flash" | "pdf-mark",
+): HTMLElement {
+  container.querySelector(`:scope > .${kind}`)?.remove();
   const box = container.getBoundingClientRect();
   const at = page.getBoundingClientRect();
   // In the container's scroll coordinates; the page's area starts inside its border.
   const left = at.left - box.left + container.scrollLeft + page.clientLeft + area.left;
   const top = at.top - box.top + container.scrollTop + page.clientTop + area.top;
-  const flash = document.createElement("div");
-  flash.className = "pdf-flash";
-  flash.setAttribute("aria-hidden", "true");
-  Object.assign(flash.style, {
+  const outline = document.createElement("div");
+  outline.className = kind;
+  outline.setAttribute("aria-hidden", "true");
+  Object.assign(outline.style, {
     left: `${left - FLASH_PAD_PX}px`,
     top: `${top - FLASH_PAD_PX}px`,
     width: `${area.width + 2 * FLASH_PAD_PX}px`,
     height: `${area.height + 2 * FLASH_PAD_PX}px`,
   });
-  container.append(flash);
+  container.append(outline);
+  return outline;
+}
+
+function flashArea(container: HTMLElement, page: HTMLElement, area: PageArea): void {
+  const flash = outlineArea(container, page, area, "pdf-flash");
   window.setTimeout(() => flash.remove(), FLASH_MS);
 }
 
@@ -907,6 +918,15 @@ export async function mountPdfJs(
       const top = box.top + pageView.div.clientTop + area.top;
       container.scrollTop = Math.max(0, top - container.clientHeight * REVEAL_FROM_TOP);
       flashArea(container, pageView.div, area);
+    },
+    markPassage(target) {
+      container.querySelector(":scope > .pdf-mark")?.remove();
+      if (!target?.rect) return;
+      const index = Math.round(target.page) - 1;
+      if (index < 0 || index >= viewer.pagesCount) return;
+      const pageView = viewer.getPageView(index) as RevealPageView | undefined;
+      if (!pageView) return;
+      outlineArea(container, pageView.div, viewportArea(pageView.viewport, target.rect), "pdf-mark");
     },
     setTool(tool: PdfTool) {
       if (!highlighting.allowed) return;
