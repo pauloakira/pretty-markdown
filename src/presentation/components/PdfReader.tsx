@@ -3,8 +3,10 @@ import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { HighlightPlace } from "../../domain/values/PdfRect";
+import { quoteToMarkdown } from "../../domain/values/Excerpt";
 import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
 import { stepPdfZoom, type NotesPanelView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import { copyText } from "../clipboard/copyText";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type {
   EditHistory,
@@ -13,10 +15,14 @@ import type {
   PdfInfo,
   PdfTool,
   PdfViewerHandle,
+  ScreenBox,
+  SelectedPassage,
+  SelectionPlace,
 } from "../pdf/PdfViewer";
 import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
 import { NotesPanel } from "./NotesPanel";
 import { PdfToolbar } from "./PdfToolbar";
+import { SelectionPopover } from "./SelectionPopover";
 
 /** Quiet period after the last scroll/zoom before the position is recorded (as Reader). */
 const VIEW_SETTLE_MS = 400;
@@ -26,6 +32,12 @@ const VIEW_SETTLE_MS = 400;
  * title's top margin), so at the top of a chapter's page that chapter is current.
  */
 const CURRENT_LOOKAHEAD_PAGES = 0.2;
+
+/**
+ * Whether selections get the app's popover (the Mac). On a touch screen pdf.js's own
+ * Highlight button and the system's menu stay, until the iPad's own Add to notes.
+ */
+const SELECTION_POPOVER = !(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0);
 
 /** How long a notes notice stays (errors stay until dismissed). */
 const NOTICE_MS = 8000;
@@ -39,6 +51,8 @@ type NotesNotice =
       readonly created: boolean;
       /** The highlight made with it, to remove along with it. */
       readonly place: HighlightPlace | null;
+      /** The comment written with it, removed along with it too. */
+      readonly comment?: string;
     }
   | {
       /** The reader removed a highlight whose passage is quoted in the notes. */
@@ -92,6 +106,15 @@ interface PdfReaderProps {
   onFileLink: (href: string, fromPath: string) => void;
 }
 
+/** A comment being written in the selection popover, for a passage already highlighted. */
+interface PendingComment {
+  /** Where the passage was on screen when Comment was chosen. */
+  readonly bounds: ScreenBox;
+  readonly passage: SelectedPassage;
+  /** Its new highlight, taken off again if the comment is cancelled. */
+  readonly place: HighlightPlace | null;
+}
+
 type Status =
   | { readonly kind: "loading" }
   | { readonly kind: "ready"; readonly info: PdfInfo; readonly highlighting: HighlightAvailability }
@@ -131,6 +154,7 @@ export function PdfReader({
   const { documentService, pdfViewer, pdfSaver, linkOpener, notesService } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
   const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<PdfViewerHandle | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "loading" });
   const [page, setPage] = useState(initialView.page);
@@ -146,6 +170,9 @@ export function PdfReader({
   const [notesRevision, setNotesRevision] = useState(0);
   const [newExcerptId, setNewExcerptId] = useState<string | null>(null);
   const notesChanged = useCallback(() => setNotesRevision((n) => n + 1), []);
+  // The selection popover: the selection it's for, or the comment being written.
+  const [selection, setSelection] = useState<SelectionPlace | null>(null);
+  const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -215,6 +242,10 @@ export function PdfReader({
         },
         onHighlightRemoved: (place) => {
           if (!cancelled) onHighlightRemovedRef.current(place);
+        },
+        selectionActions: SELECTION_POPOVER,
+        onSelectionChange: (next) => {
+          if (!cancelled) setSelection(next);
         },
       });
       if (!mounted.ok) {
@@ -330,8 +361,42 @@ export function PdfReader({
     setToolState(next);
   }, []);
 
-  // Add the selected text to this PDF's notes file (docs/RESEARCH_READER.md), highlighting
-  // it in the PDF too when the PDF can be highlighted.
+  // Quote a passage in this PDF's notes file (docs/RESEARCH_READER.md), with the place of
+  // its highlight (if it was highlighted) so each can find the other later.
+  const saveToNotes = useCallback(
+    async (passage: SelectedPassage, place: HighlightPlace | null, comment?: string) => {
+      const added = await notesService.addToNotes(
+        path,
+        {
+          ...passage,
+          page: place?.page ?? passage.page,
+          color: colorRef.current,
+          ...(place ? { rect: place.rect } : {}),
+        },
+        comment,
+      );
+      if (added.ok) {
+        notesChanged();
+        setNewExcerptId(added.value.excerpt.id);
+      }
+      setNotesNotice(
+        added.ok
+          ? {
+              kind: "added",
+              notesPath: added.value.notesPath,
+              excerptId: added.value.excerpt.id,
+              created: added.value.created,
+              place,
+              ...(comment ? { comment } : {}),
+            }
+          : { kind: "error", message: added.error },
+      );
+    },
+    [notesService, path, notesChanged],
+  );
+
+  // Add the selected text to the notes, highlighting it in the PDF too when the PDF can be
+  // highlighted.
   const addToNotes = useCallback(async () => {
     const handle = handleRef.current;
     if (!handle) return;
@@ -340,30 +405,57 @@ export function PdfReader({
       setNotesNotice({ kind: "error", message: "Select some text in the PDF first, then Add to notes." });
       return;
     }
-    // The highlight's place goes into the quote's link, so each can find the other later.
+    setSelection(null);
     const place = await handle.highlightSelection();
-    const added = await notesService.addToNotes(path, {
-      ...passage,
-      page: place?.page ?? passage.page,
-      color: colorRef.current,
-      ...(place ? { rect: place.rect } : {}),
-    });
-    if (added.ok) {
-      notesChanged();
-      setNewExcerptId(added.value.excerpt.id);
-    }
-    setNotesNotice(
-      added.ok
-        ? {
-            kind: "added",
-            notesPath: added.value.notesPath,
-            excerptId: added.value.excerpt.id,
-            created: added.value.created,
-            place,
-          }
-        : { kind: "error", message: added.error },
-    );
-  }, [notesService, path, notesChanged]);
+    await saveToNotes(passage, place);
+  }, [saveToNotes]);
+
+  // The selection popover's other actions.
+  const highlightIn = useCallback(
+    async (color: HighlightColor) => {
+      const handle = handleRef.current;
+      if (!handle) return;
+      // The colour picked becomes the highlighter's, as in the toolbar.
+      colorRef.current = color;
+      handle.setHighlightColor(color);
+      onHighlightColorChange(color);
+      setSelection(null);
+      await handle.highlightSelection();
+    },
+    [onHighlightColorChange],
+  );
+  const startComment = useCallback(async () => {
+    const handle = handleRef.current;
+    if (!handle || selection === null) return;
+    const passage = handle.selectedPassage() ?? selection.passage;
+    const bounds = selection.bounds;
+    setSelection(null);
+    // Highlighted now, so the reader sees what they're commenting on as they write.
+    const place = await handle.highlightSelection();
+    setPendingComment({ bounds, passage, place });
+  }, [selection]);
+  const submitComment = useCallback(
+    async (comment: string) => {
+      if (pendingComment === null) return;
+      setPendingComment(null);
+      const written = comment.trim();
+      await saveToNotes(pendingComment.passage, pendingComment.place, written === "" ? undefined : written);
+    },
+    [pendingComment, saveToNotes],
+  );
+  const cancelComment = useCallback(() => {
+    if (pendingComment === null) return;
+    setPendingComment(null);
+    if (pendingComment.place) handleRef.current?.removeHighlight(pendingComment.place);
+  }, [pendingComment]);
+  const copyAsQuote = useCallback(async () => {
+    const passage = handleRef.current?.selectedPassage() ?? selection?.passage;
+    if (!passage) return false;
+    // Linked by the PDF's name: right for notes beside it, and readable anywhere else.
+    return copyText(quoteToMarkdown(passage, fileName(path)));
+  }, [selection, path]);
+  const dismissSelection = useCallback(() => setSelection(null), []);
+  const popoverBounds = pendingComment?.bounds ?? selection?.bounds ?? null;
 
   // A highlight the reader removed may be quoted in the notes: offer to remove the quote
   // too (it's kept unless they say so).
@@ -390,7 +482,11 @@ export function PdfReader({
     if (notesNotice?.kind !== "added") return;
     setNotesNotice(null);
     if (notesNotice.place) handleRef.current?.removeHighlight(notesNotice.place);
-    const removed = await notesService.removeFromNotes(notesNotice.notesPath, notesNotice.excerptId);
+    const removed = await notesService.removeFromNotes(
+      notesNotice.notesPath,
+      notesNotice.excerptId,
+      notesNotice.comment,
+    );
     notesChanged();
     if (!removed.ok) setNotesNotice({ kind: "error", message: removed.error });
   }, [notesNotice, notesService, notesChanged]);
@@ -591,7 +687,10 @@ export function PdfReader({
           onSelect={goToSection}
         />
       )}
-      <div className={`pdf-reader__stage${tool === "highlight" ? " pdf-reader__stage--highlighting" : ""}`}>
+      <div
+        className={`pdf-reader__stage${tool === "highlight" ? " pdf-reader__stage--highlighting" : ""}`}
+        ref={stageRef}
+      >
         <div className="pdf-reader__host" ref={hostRef} />
         {back && ready && (
           <button
@@ -604,6 +703,22 @@ export function PdfReader({
             <span>Back to p. {back.page}</span>
             <kbd className="back-pill__key">⌘[</kbd>
           </button>
+        )}
+        {ready && tool === "select" && popoverBounds && (
+          <SelectionPopover
+            bounds={popoverBounds}
+            stageRef={stageRef}
+            canHighlight={status.highlighting.allowed}
+            color={highlightColor}
+            onHighlight={(color) => void highlightIn(color)}
+            onAddToNotes={() => void addToNotes()}
+            onComment={() => void startComment()}
+            commenting={pendingComment !== null}
+            onSubmitComment={(comment) => void submitComment(comment)}
+            onCancelComment={cancelComment}
+            onCopy={copyAsQuote}
+            onDismiss={dismissSelection}
+          />
         )}
         {status.kind === "loading" && <div className="pdf-reader__status">Opening {name}…</div>}
         {status.kind === "error" && (

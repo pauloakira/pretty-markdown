@@ -103,6 +103,17 @@ export function excerptToMarkdown(excerpt: Excerpt): string {
 }
 
 /**
+ * A passage as a plain Markdown quote with a link to its page, for the clipboard (Copy as
+ * quote): what an excerpt looks like, but without an excerpt id, so pasted anywhere it's
+ * an ordinary quote, and its link opens the PDF at the page. `source` is the document's
+ * path relative to where it'll be pasted (its name, for notes beside it).
+ */
+export function quoteToMarkdown(passage: { readonly text: string; readonly page: number }, source: string): string {
+  const text = escapeQuoteText(normalizeExcerptText(passage.text));
+  return `> ${text}\n> — [p. ${passage.page}](${encodeSource(source)}#page=${passage.page})`;
+}
+
+/**
  * Escape what Markdown (and the math plugin) would otherwise read as syntax: emphasis,
  * code, HTML, `$…$` math, tables, a link's `](` or `][`, and a list, quote or heading
  * marker at the start (`->` mid-line stays as it is). Ordinary punctuation is left alone, so the quote still reads well in other

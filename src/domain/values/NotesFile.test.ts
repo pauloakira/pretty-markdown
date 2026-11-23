@@ -120,3 +120,34 @@ describe("removeExcerpt", () => {
     expect(removeExcerpt(notes, "ffff00")).toBe(notes);
   });
 });
+
+describe("a comment with an excerpt", () => {
+  it("goes in its own paragraph below the quote, trimmed, without blank lines inside", () => {
+    const notes = addExcerpt(newNotesFile("Geometric Methods.pdf"), first, "Geometric Methods.pdf", "  So every rotation\n\n has a log: $X$.  \n");
+    expect(notes.endsWith(
+      "> — [p. 133](Geometric%20Methods.pdf#page=133&ex=aaaa01&color=yellow)\n" +
+        "\n" +
+        "So every rotation\n" +
+        " has a log: $X$.\n",
+    )).toBe(true);
+    expect(readExcerpts(notes).map((f) => f.excerpt.id)).toEqual(["aaaa01"]);
+  });
+
+  it("is removed with its excerpt while it's as written, and kept once the reader edits it", () => {
+    const start = addExcerpt(newNotesFile("Geometric Methods.pdf"), first, "Geometric Methods.pdf");
+    const withComment = addExcerpt(start, second, "Geometric Methods.pdf", "Cheap.");
+    expect(removeExcerpt(withComment, second.id, "Cheap.")).toBe(start);
+
+    const edited = withComment.replace("Cheap.", "Cheap, really.");
+    expect(removeExcerpt(edited, second.id, "Cheap.")).toBe(`${start}\nCheap, really.\n`);
+    // Without the comment, only the quote goes (as before).
+    expect(removeExcerpt(withComment, second.id)).toBe(`${start}\nCheap.\n`);
+  });
+
+  it("keeps the file's CRLF line endings", () => {
+    const crlf = newNotesFile("Geometric Methods.pdf").replace(/\n/g, "\r\n");
+    const notes = addExcerpt(crlf, first, "Geometric Methods.pdf", "One\nTwo");
+    expect(notes.endsWith("\r\n\r\nOne\r\nTwo\r\n")).toBe(true);
+    expect(notes.replace(/\r\n/g, "").includes("\n")).toBe(false);
+  });
+});

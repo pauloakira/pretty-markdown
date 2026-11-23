@@ -7,6 +7,7 @@ import {
   newExcerptId,
   normalizeExcerptText,
   parseExcerptHref,
+  quoteToMarkdown,
   unescapeQuoteText,
   type Excerpt,
 } from "./Excerpt";
@@ -106,5 +107,18 @@ describe("excerptToMarkdown", () => {
       "> The exponential map is surjective.\n" +
         "> — [p. 133](Geometric%20Methods.pdf#page=133&ex=7f3a9c&color=blue)",
     );
+  });
+});
+
+describe("quoteToMarkdown (Copy as quote)", () => {
+  it("is a plain quote linking to the page, cleaned up and escaped like an excerpt", () => {
+    expect(quoteToMarkdown({ page: 12, text: "It costs $5 per\nnode, see (2)." }, "Geometric Methods (2nd).pdf")).toBe(
+      "> It costs \\$5 per node, see (2).\n> — [p. 12](Geometric%20Methods%20%282nd%29.pdf#page=12)",
+    );
+  });
+
+  it("has no excerpt id, so it isn't read as one", () => {
+    const link = /\]\((.*)\)$/.exec(quoteToMarkdown({ page: 3, text: "x" }, "a.pdf"))?.[1] ?? "";
+    expect(parseExcerptHref(link)).toBeNull();
   });
 });

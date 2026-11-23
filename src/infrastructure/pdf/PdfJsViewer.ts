@@ -43,12 +43,14 @@ import type {
   PdfSource,
   PdfTool,
   PdfViewerHandle,
+  SelectedPassage,
 } from "../../presentation/pdf/PdfViewer";
 import { samplePages, typicalWidth } from "./pageWidth";
 import { readOutline, type OutlineSource } from "./pdfOutline";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
 import { attachTouchSelection } from "./touchSelection";
+import { attachSelectionWatch } from "./selectionWatch";
 import { attachRetile } from "../../presentation/webkit/retile";
 import { viewportArea, type PageArea } from "./revealArea";
 
@@ -398,7 +400,8 @@ export async function mountPdfJs(
     // selection always offers a Highlight button. Off entirely when not allowed.
     annotationEditorMode: highlighting.allowed ? AnnotationEditorType.NONE : AnnotationEditorType.DISABLE,
     annotationEditorHighlightColors: highlightColorList(options.highlightColor),
-    enableHighlightFloatingButton: true,
+    // The app's selection popover offers Highlight instead, where it's shown (the Mac).
+    enableHighlightFloatingButton: !options.selectionActions,
     maxCanvasPixels: navigator.maxTouchPoints > 0 ? TOUCH_MAX_CANVAS_PIXELS : undefined,
   };
   const viewer = new PDFViewer(viewerOptions);
@@ -480,6 +483,7 @@ export async function mountPdfJs(
       return;
     }
     editorMode = event.mode;
+    selectionWatch?.refresh();
     const tool: PdfTool = event.mode === AnnotationEditorType.HIGHLIGHT ? "highlight" : "select";
     applyTouchHighlighting(tool === "highlight");
     options.onToolChange(tool);
@@ -557,6 +561,18 @@ export async function mountPdfJs(
       container.classList.remove("pdf-drag-committing");
     },
   });
+
+  // A finished selection, for the app's selection popover (not in highlight mode, where
+  // pdf.js highlights a selection straight away).
+  const onSelectionChange = options.onSelectionChange;
+  const selectionWatch =
+    options.selectionActions && onSelectionChange
+      ? attachSelectionWatch(container, {
+          read: () => selectedPassage(container),
+          isActive: () => editorMode !== AnnotationEditorType.HIGHLIGHT,
+          onChange: onSelectionChange,
+        })
+      : null;
 
   // Touch selection lands where the finger is (iPadOS's own doesn't, over pdf.js's text
   // layer): long-press picks the word under the finger, handles move where dragged.
@@ -937,18 +953,7 @@ export async function mountPdfJs(
       highlightColor = color;
       applyHighlightColor();
     },
-    selectedPassage() {
-      const selection = document.getSelection();
-      if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
-      const range = selection.getRangeAt(0);
-      if (!container.contains(range.commonAncestorContainer)) return null;
-      const start = range.startContainer;
-      const element = start instanceof Element ? start : start.parentElement;
-      const page = Number(element?.closest<HTMLElement>(".page[data-page-number]")?.dataset.pageNumber);
-      const text = selection.toString();
-      if (!Number.isInteger(page) || page < 1 || text.trim() === "") return null;
-      return { page, text };
-    },
+    selectedPassage: () => selectedPassage(container),
     highlightSelection() {
       if (!highlighting.allowed || !uiManager) return Promise.resolve(null);
       const selection = document.getSelection();
@@ -1045,6 +1050,7 @@ export async function mountPdfJs(
       eventBus.off("annotationeditoruimanager", onUiManager);
       container.removeEventListener("pointerdown", onButtonPress, true);
       detachTouchSelection();
+      selectionWatch?.detach();
       detachDragHighlight();
       applyTouchHighlighting(false);
       container.removeEventListener("click", onButtonClick, true);
@@ -1078,4 +1084,21 @@ export async function mountPdfJs(
       container.replaceChildren();
     },
   });
+}
+
+/**
+ * The text selected in `container` now, with the page the selection starts on, or null if
+ * nothing is selected there.
+ */
+function selectedPassage(container: HTMLElement): SelectedPassage | null {
+  const selection = document.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!container.contains(range.commonAncestorContainer)) return null;
+  const start = range.startContainer;
+  const element = start instanceof Element ? start : start.parentElement;
+  const page = Number(element?.closest<HTMLElement>(".page[data-page-number]")?.dataset.pageNumber);
+  const text = selection.toString();
+  if (!Number.isInteger(page) || page < 1 || text.trim() === "") return null;
+  return { page, text };
 }
