@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useContainer } from "../../composition/ContainerContext";
 import type { Tab, TabId } from "../../domain/entities/Tab";
@@ -19,89 +17,90 @@ const PDF_SETTLE_MS = 250;
  * content, so there's nothing to reload.
  */
 export function useFileWatch(tabs: readonly Tab[]) {
-  const { documentService, pdfSaver, pdfViewer, tabManager } = useContainer();
+  const { documentService, fileWatcher, pdfSaver, pdfViewer, tabManager } = useContainer();
   const [conflicts, setConflicts] = useState<Record<TabId, string>>({});
-  const watchedRef = useRef<Set<string>>(new Set());
-
-  // Keep the native watch set in sync with the open tabs' paths.
+  const disposedRef = useRef(false);
   useEffect(() => {
-    const open = new Set(
-      tabs.map((t) => t.document.path).filter((p): p is string => p !== null),
-    );
-    const watched = watchedRef.current;
-    for (const path of open) {
-      if (!watched.has(path)) {
-        watched.add(path);
-        void invoke("watch_file", { path }).catch(() => {});
-      }
-    }
-    for (const path of [...watched]) {
-      if (!open.has(path)) {
-        watched.delete(path);
-        void invoke("unwatch_file", { path }).catch(() => {});
-      }
-    }
-  }, [tabs]);
+    disposedRef.current = false;
+    return () => {
+      disposedRef.current = true;
+    };
+  }, []);
 
+  // What to do when an open file changes on disk.
+  const onChangedRef = useRef<(path: string) => void>(() => {});
+  const pdfTimers = useRef(new Map<string, number>());
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-
+    const timers = pdfTimers.current;
     // A PDF that changed on disk is shown again, unless the change is our own save (its
     // highlights, written by PdfSaver). A write arrives as a burst of events, possibly
     // while the file is still being written, so check once things have settled.
-    const pdfTimers = new Map<string, number>();
-    const schedulePdfCheck = (path: string) => {
-      window.clearTimeout(pdfTimers.get(path));
-      pdfTimers.set(
-        path,
-        window.setTimeout(() => {
-          pdfTimers.delete(path);
-          void checkPdf(path);
-        }, PDF_SETTLE_MS),
-      );
-    };
     const checkPdf = async (path: string) => {
       const data = await documentService.loadPdfData(path);
-      if (disposed || !data.ok) return; // gone or mid-write: a later event follows
+      if (disposedRef.current || !data.ok) return; // gone or mid-write: a later event follows
       if (pdfSaver.isOwnWrite(path, data.value)) return;
       const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
       if (tab?.document.kind !== "pdf") return;
       pdfViewer.forget(path); // the kept parsed copy is out of date
       tabManager.reloadPdf(tab.id);
     };
-
-    void (async () => {
-      const un = await listen<string[]>("file-changed", async (event) => {
-        for (const path of event.payload) {
-          const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
-          if (!tab) continue;
-          if (tab.document.kind === "pdf") {
-            schedulePdfCheck(path);
-            continue;
-          }
-          const outcome = await documentService.load(path);
-          if (outcome.kind !== "opened" || outcome.document.kind !== "markdown") continue;
-          const disk = outcome.document.content;
-          if (disk === tab.document.content) continue; // no real change / our own save
-
-          if (tab.document.content === tab.savedContent) {
-            tabManager.reloadContent(tab.id, disk); // clean → reload silently
-          } else {
-            setConflicts((prev) => ({ ...prev, [tab.id]: disk })); // dirty → let the user choose
-          }
+    onChangedRef.current = (path) => {
+      void (async () => {
+        const tab = tabManager.getSnapshot().tabs.find((t) => t.document.path === path);
+        if (!tab) return;
+        if (tab.document.kind === "pdf") {
+          window.clearTimeout(timers.get(path));
+          timers.set(
+            path,
+            window.setTimeout(() => {
+              timers.delete(path);
+              void checkPdf(path);
+            }, PDF_SETTLE_MS),
+          );
+          return;
         }
-      });
-      if (disposed) un();
-      else unlisten = un;
-    })();
-
+        const outcome = await documentService.load(path);
+        if (disposedRef.current) return;
+        if (outcome.kind !== "opened" || outcome.document.kind !== "markdown") return;
+        const disk = outcome.document.content;
+        // Read again: the tab may have changed while the file was read.
+        const now = tabManager.getSnapshot().tabs.find((t) => t.id === tab.id);
+        if (!now || now.document.kind !== "markdown" || disk === now.document.content) return; // our own save
+        if (now.document.content === now.savedContent) {
+          tabManager.reloadContent(now.id, disk); // clean → reload silently
+        } else {
+          setConflicts((prev) => ({ ...prev, [now.id]: disk })); // dirty → let the user choose
+        }
+      })();
+    };
     return () => {
-      disposed = true;
-      for (const timer of pdfTimers.values()) window.clearTimeout(timer);
-      unlisten?.();
+      for (const timer of timers.values()) window.clearTimeout(timer);
+      timers.clear();
     };
   }, [documentService, pdfSaver, pdfViewer, tabManager]);
+
+  // Watch the open tabs' files: one watch per path, kept while a tab has it open.
+  const watchesRef = useRef(new Map<string, () => void>());
+  useEffect(() => {
+    const open = new Set(tabs.map((t) => t.document.path).filter((p): p is string => p !== null));
+    const watches = watchesRef.current;
+    for (const path of open) {
+      if (!watches.has(path)) watches.set(path, fileWatcher.watch(path, () => onChangedRef.current(path)));
+    }
+    for (const [path, end] of [...watches]) {
+      if (!open.has(path)) {
+        end();
+        watches.delete(path);
+      }
+    }
+  }, [tabs, fileWatcher]);
+  useEffect(() => {
+    const watches = watchesRef.current;
+    return () => {
+      for (const end of watches.values()) end();
+      watches.clear();
+    };
+  }, []);
 
   const reloadConflict = useCallback(
     (id: TabId) => {
