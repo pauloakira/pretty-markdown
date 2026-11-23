@@ -180,6 +180,18 @@ describe("The selection popover", () => {
     expect(notesFile()).toBe("");
   });
 
+  it("says so when the passage couldn't be copied", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: async () => Promise.reject(new Error("denied")) } });
+    const app = makeContainer();
+    await launch(app);
+    const viewer = await openPdf(app);
+    await act(async () => viewer.select(PASSAGE));
+
+    await act(async () => action("Copy as quote").click());
+    await settle();
+    expect(action("Couldn't copy")).toBeDefined();
+  });
+
   it("offers no colours on a PDF that can't be highlighted, but still adds to the notes", async () => {
     const app = makeContainer();
     app.pdfViewer.highlighting = { allowed: false, reason: "signed" };

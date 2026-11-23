@@ -4,7 +4,7 @@ import type { ScreenBox } from "../pdf/PdfViewer";
 
 /** Space between the selection and the popover, and from the stage's edges (px). */
 const GAP_PX = 8;
-/** How long "Copied" shows on Copy as quote. */
+/** How long "Copied" (or "Couldn't copy") shows on Copy as quote. */
 const COPIED_MS = 1500;
 /** How long after the comment field opens it takes the focus back (see below). */
 const FOCUS_CLAIM_MS = 500;
@@ -53,7 +53,8 @@ export function SelectionPopover({
 }: SelectionPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
-  const [copied, setCopied] = useState(false);
+  // What Copy as quote did, said on its button for a moment.
+  const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
   const [comment, setComment] = useState("");
 
   // Above the selection, centred on it and kept inside the stage; below it when there's
@@ -77,8 +78,8 @@ export function SelectionPopover({
   }, [bounds, stageRef, commenting]);
 
   useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
+    if (copied === null) return;
+    const timer = window.setTimeout(() => setCopied(null), COPIED_MS);
     return () => window.clearTimeout(timer);
   }, [copied]);
 
@@ -211,10 +212,10 @@ export function SelectionPopover({
           <button
             type="button"
             className="selection-popover__btn"
-            onClick={() => void onCopy().then(setCopied)}
+            onClick={() => void onCopy().then((done) => setCopied(done ? "copied" : "failed"))}
             title="Copy as a Markdown quote, with a link to its page"
           >
-            {copied ? "Copied" : "Copy as quote"}
+            {copied === "copied" ? "Copied" : copied === "failed" ? "Couldn't copy" : "Copy as quote"}
           </button>
         </>
       )}
