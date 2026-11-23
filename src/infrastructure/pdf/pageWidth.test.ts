@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { samplePages, typicalWidth } from "./pageWidth";
+import { fitWidthScale, samplePages, typicalWidth } from "./pageWidth";
 
 describe("samplePages", () => {
   it("takes the start, the open page, the middle and the end, once each", () => {
@@ -27,5 +27,18 @@ describe("typicalWidth", () => {
   it("has no answer without widths", () => {
     expect(typicalWidth([])).toBeNull();
     expect(typicalWidth([0])).toBeNull();
+  });
+});
+
+describe("fitWidthScale", () => {
+  it("fits the page in the width less pdf.js's padding, as its page-width does", () => {
+    // A4 (595 pt = 793.3 CSS px) in a 1024 px window: (1024 - 40) / 793.3.
+    expect(fitWidthScale(1024, 595)).toBeCloseTo(984 / (595 * (96 / 72)), 6);
+  });
+
+  it("has no answer without a page width or room", () => {
+    expect(fitWidthScale(1024, null)).toBeNull();
+    expect(fitWidthScale(1024, 0)).toBeNull();
+    expect(fitWidthScale(30, 595)).toBeNull();
   });
 });

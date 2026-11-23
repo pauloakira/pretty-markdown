@@ -35,7 +35,7 @@ import { classifyLink } from "../../domain/values/Link";
 import { err, ok, type Result } from "../../domain/values/Result";
 import type { OutlineItem } from "../../domain/values/Outline";
 import { sameArea, type HighlightPlace } from "../../domain/values/PdfRect";
-import { normalizePdfView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import { normalizePdfView, pinchedPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener } from "../../presentation/find/FindTarget";
 import type {
   HighlightAvailability,
@@ -45,7 +45,8 @@ import type {
   PdfViewerHandle,
   SelectedPassage,
 } from "../../presentation/pdf/PdfViewer";
-import { samplePages, typicalWidth } from "./pageWidth";
+import { fitWidthScale, samplePages, typicalWidth } from "./pageWidth";
+import { attachPinchZoom } from "./pinchZoom";
 import { readOutline, type OutlineSource } from "./pdfOutline";
 import { preRenderPages } from "./preRender";
 import { attachDragHighlight } from "./dragHighlight";
@@ -789,6 +790,38 @@ export async function mountPdfJs(
   });
   resizeObserver.observe(container);
 
+  // Pinch to zoom (pinchZoom.ts). pdf.js resizes the pages at once and redraws them sharp
+  // a moment after the last change; the pinch's zoom is a number until it ends, when it
+  // may snap back to "Fit width".
+  const PINCH_REDRAW_DELAY_MS = 400;
+  const detachPinch = attachPinchZoom(container, {
+    scale: () => viewer.currentScale,
+    zoomTo(scale, [x, y], pan) {
+      const factor = scale / viewer.currentScale;
+      // pdf.js measures the origin from the container's offsetTop/offsetLeft, not from
+      // the window: translate the client point into those terms.
+      const rect = container.getBoundingClientRect();
+      const origin = [x - rect.left + container.offsetLeft, y - rect.top + container.offsetTop];
+      zoom = scale;
+      if (Math.abs(factor - 1) < 0.005) {
+        // No zoom to speak of: just follow the fingers.
+        if (pan[0] || pan[1]) {
+          container.scrollLeft -= pan[0];
+          container.scrollTop -= pan[1];
+        }
+        return;
+      }
+      viewer.updateScale({ scaleFactor: factor, origin, pan: [...pan], drawingDelay: PINCH_REDRAW_DELAY_MS });
+    },
+    end() {
+      const snapped = pinchedPdfZoom(viewer.currentScale, fitWidthScale(container.clientWidth, pageWidth));
+      zoom = snapped;
+      if (snapped === "page-width") fitWidth();
+      reportView();
+    },
+    pans: () => !touchHighlighting,
+  });
+
   // iPad: keep WebKit drawing the scroller across its full width (retile.ts).
   const detachRetile = attachRetile(container, { onRetiling: (on) => (retiling = on) });
 
@@ -1091,6 +1124,7 @@ export async function mountPdfJs(
       eventBus.off("pagerendered", onPageRendered);
       eventBus.off("scalechanging", onScaleChanging);
       resizeObserver.disconnect();
+      detachPinch();
       detachRetile();
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("scroll", reportView);
