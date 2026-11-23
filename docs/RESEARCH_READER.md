@@ -124,6 +124,10 @@ Escape. It isn't shown in highlight mode, where a selection is highlighted at on
   name, which is right for notes beside it and readable anywhere else. Nothing is
   highlighted.
 
+A dragged selection takes whole words: when the pointer is released, an end that falls
+inside a word moves to the word's edge (`pdf/wordSnap.ts`), visibly, so a quote and its
+highlight never stop at "grid po". Ends between words and punctuation stay where they are.
+
 The iPad keeps pdf.js's Highlight button and the system's own menu for now; its Add to
 notes is a card of its own (bigger targets, no shortcuts, per the design).
 
