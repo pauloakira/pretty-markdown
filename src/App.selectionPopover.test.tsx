@@ -1,5 +1,5 @@
 import { act } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPdfDocument } from "./domain/entities/Document";
 import { readExcerpts } from "./domain/values/NotesFile";
 import {
@@ -44,8 +44,16 @@ const action = (label: string) => {
 };
 const notesFile = () => NOTES.get(NOTES_PATH) ?? "";
 
+// jsdom lays nothing out: give the PDF's stage a place on screen, as the window would.
+beforeEach(() => {
+  const real = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    return this.classList.contains("pdf-reader__stage") ? new DOMRect(0, 40, 1000, 700) : real.call(this);
+  });
+});
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("The selection popover", () => {
@@ -58,6 +66,9 @@ describe("The selection popover", () => {
 
     await act(async () => viewer.select(PASSAGE));
     expect(popover()).not.toBeNull();
+    // Above the selection (its top, 300, less the gap of 8 and the popover's height, 0 here,
+    // and the stage's own top, 40), centred on it.
+    expect([popover()?.style.left, popover()?.style.top]).toEqual(["250px", "252px"]);
     expect(action("Highlight yellow").getAttribute("aria-pressed")).toBe("true"); // the highlighter colour
 
     await act(async () => viewer.select(null));

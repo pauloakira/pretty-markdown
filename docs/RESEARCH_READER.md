@@ -80,6 +80,7 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 | Infrastructure | `TauriNotesStore` over the native `read_text_file_if_exists` (missing → null, unreadable → error) and `write_text_file`; `PdfJsViewer.selectedPassage()`, `highlightSelection()` (resolves to the new highlight's place), `removeHighlight(place)`, and `onHighlightRemoved`, seen at pdf.js's editor registry (`addEditor` / `removeEditor` on its UI manager, which has no events for these) |
 | Presentation | `useFileLinks` (links in a Markdown document to other files, via `FileLinkContext`), the PDF tab's **Back** pill and ⌘[, over `ViewState.back` |
 | Presentation | `NotesPanel` (the notes beside the page) and the toolbar's **Read · Notes**, over `ViewState.notes`; `NotesService.readNotes`; `PdfViewerHandle.markPassage` outlines a hovered quote's passage |
+| Presentation | `SelectionPopover` (the Mac): actions by a selection, over `PdfMountOptions.selectionActions` / `onSelectionChange` (the adapter's `pdf/selectionWatch.ts`); `quoteToMarkdown` for Copy as quote; `NotesService.addToNotes(…, comment)` |
 | Presentation | PDF toolbar **Add to notes** (⌘E): highlights the selection in the highlighter colour and adds it to the notes; a notice offers **Open notes** and **Remove**. Removing a quoted highlight offers **Remove the quote** / **Keep** |
 
 ### Add to notes (PDF)
@@ -100,9 +101,36 @@ deletion: pdf.js drops its editors for the file's own highlights then, and the a
 only counts a highlight of the file as removed once pdf.js has marked it deleted.
 
 Not yet: the iPad (writing beside a PDF opened from Files needs folder access; its own
-card) and the selection popover. `removeHighlight` reaches only
+card). `removeHighlight` reaches only
 highlights pdf.js has an editor for (made or opened for editing since the document
 opened); removing a quote from the Notes panel will need the file's other highlights too.
+
+### The selection popover (Mac)
+
+Selecting text in a PDF shows a small dark bar above the selection (below it when there's
+no room), in place of pdf.js's own Highlight button. It appears once the selection is made
+(the pointer released, or a keyboard change settled), follows the selection as the page
+scrolls, hides while the selection is out of view, and goes with the selection or on
+Escape. It isn't shown in highlight mode, where a selection is highlighted at once.
+
+- **The colours** highlight the passage in that colour, and it becomes the highlighter
+  colour (as picking it in the toolbar does). The tool stays as it was. The current colour
+  is ringed. Not shown on a PDF that can't be highlighted.
+- **Add to notes** (⌘E) does what the toolbar's does.
+- **Comment** highlights the passage at once (so the reader sees what they're commenting
+  on), then opens a field: Enter adds the quote to the notes with the comment in its own
+  paragraph below it (⇧Enter for a new line; the comment is the reader's own Markdown,
+  math included). Escape or Cancel takes the highlight off again and writes nothing. A
+  click elsewhere does the same while the field is empty, and leaves it open once
+  something is written, so a stray click doesn't lose it. The notice's **Remove** takes
+  the comment out with its quote, if it's still as written.
+- **Copy as quote** copies `> text` and `> — [p. 12](Paper.pdf#page=12)`: an ordinary quote
+  (no excerpt id, so pasted into notes it isn't taken for an excerpt), linked by the PDF's
+  name, which is right for notes beside it and readable anywhere else. Nothing is
+  highlighted.
+
+The iPad keeps pdf.js's Highlight button and the system's own menu for now; its Add to
+notes is a card of its own (bigger targets, no shortcuts, per the design).
 
 ### Excerpts in the notes
 
@@ -161,7 +189,7 @@ Board joins the switch in R4. The Notes · Outline switch of the design comes wi
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, following a quote's link (with Back), and the Notes panel (Mac) done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, following a quote's link (with Back), the Notes panel and the selection popover (Mac) done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |

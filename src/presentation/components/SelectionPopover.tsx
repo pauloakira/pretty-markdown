@@ -6,6 +6,8 @@ import type { ScreenBox } from "../pdf/PdfViewer";
 const GAP_PX = 8;
 /** How long "Copied" shows on Copy as quote. */
 const COPIED_MS = 1500;
+/** How long after the comment field opens it takes the focus back (see below). */
+const FOCUS_CLAIM_MS = 500;
 
 interface SelectionPopoverProps {
   /** Where the selection is on screen; the popover goes above it (below, if no room). */
@@ -92,6 +94,25 @@ export function SelectionPopover({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [commenting, onCancelComment, onDismiss]);
 
+  // The comment field takes the focus once the popover is placed (hidden, while it's
+  // measured, it can't). Should anything else take it in the next moments (pdf.js focuses
+  // the highlight it has just made), it comes back to the field.
+  const placed = place !== null;
+  useEffect(() => {
+    if (!commenting || !placed) return;
+    const field = () => ref.current?.querySelector("textarea") ?? null;
+    field()?.focus();
+    const onFocusIn = (event: FocusEvent) => {
+      if (!ref.current?.contains(event.target as Node)) field()?.focus();
+    };
+    document.addEventListener("focusin", onFocusIn);
+    const timer = window.setTimeout(() => document.removeEventListener("focusin", onFocusIn), FOCUS_CLAIM_MS);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("focusin", onFocusIn);
+    };
+  }, [commenting, placed]);
+
   // Clicking elsewhere while commenting: nothing written yet means never mind; something
   // written is kept, so it isn't lost to a stray click.
   const commentRef = useRef(comment);
@@ -131,7 +152,6 @@ export function SelectionPopover({
             aria-label="Comment"
             placeholder="Your comment, in Markdown…"
             rows={3}
-            autoFocus
             value={comment}
             onChange={(event) => setComment(event.target.value)}
             onKeyDown={(event) => {
@@ -142,7 +162,7 @@ export function SelectionPopover({
             }}
           />
           <div className="selection-popover__row">
-            <span className="selection-popover__hint">↩ add · ⇧↩ new line · esc cancel</span>
+            <span className="selection-popover__hint">↩ add · ⇧↩ new line</span>
             <button type="button" className="selection-popover__btn" onClick={onCancelComment}>
               Cancel
             </button>
