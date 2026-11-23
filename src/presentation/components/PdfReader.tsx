@@ -4,7 +4,7 @@ import { fileName } from "../../domain/entities/Document";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import type { HighlightPlace } from "../../domain/values/PdfRect";
 import { currentItemId, type OutlineItem } from "../../domain/values/Outline";
-import { stepPdfZoom, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
+import { stepPdfZoom, type NotesPanelView, type PdfView, type PdfZoom } from "../../domain/values/ViewState";
 import type { FindListener, FindTarget } from "../find/FindTarget";
 import type {
   EditHistory,
@@ -15,6 +15,7 @@ import type {
   PdfViewerHandle,
 } from "../pdf/PdfViewer";
 import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
+import { NotesPanel } from "./NotesPanel";
 import { PdfToolbar } from "./PdfToolbar";
 
 /** Quiet period after the last scroll/zoom before the position is recorded (as Reader). */
@@ -84,6 +85,11 @@ interface PdfReaderProps {
   onPushBack: (from: PdfView) => void;
   /** Back: take the last place off this tab's list and return it. */
   onPopBack: () => PdfView | null;
+  /** This tab's Notes panel: open or not, and its width. */
+  notes: NotesPanelView;
+  onNotesChange: (notes: NotesPanelView) => void;
+  /** Follow a link in the notes to another file, relative to the notes file at `fromPath`. */
+  onFileLink: (href: string, fromPath: string) => void;
 }
 
 type Status =
@@ -118,6 +124,9 @@ export function PdfReader({
   back,
   onPushBack,
   onPopBack,
+  notes,
+  onNotesChange,
+  onFileLink,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener, notesService } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -133,6 +142,10 @@ export function PdfReader({
   const [outline, setOutline] = useState<readonly OutlineItem[] | null>(null);
   const [position, setPosition] = useState(initialView.page - 1 + initialView.pageOffset);
   const [notesNotice, setNotesNotice] = useState<NotesNotice | null>(null);
+  // The Notes panel reads the notes again after each change made here.
+  const [notesRevision, setNotesRevision] = useState(0);
+  const [newExcerptId, setNewExcerptId] = useState<string | null>(null);
+  const notesChanged = useCallback(() => setNotesRevision((n) => n + 1), []);
 
   // Latest props for the mount effect, which only re-runs when the file changes. The view
   // is read when the viewer mounts, after the file has loaded: a remount (the file changed
@@ -335,6 +348,10 @@ export function PdfReader({
       color: colorRef.current,
       ...(place ? { rect: place.rect } : {}),
     });
+    if (added.ok) {
+      notesChanged();
+      setNewExcerptId(added.value.excerpt.id);
+    }
     setNotesNotice(
       added.ok
         ? {
@@ -346,7 +363,7 @@ export function PdfReader({
           }
         : { kind: "error", message: added.error },
     );
-  }, [notesService, path]);
+  }, [notesService, path, notesChanged]);
 
   // A highlight the reader removed may be quoted in the notes: offer to remove the quote
   // too (it's kept unless they say so).
@@ -374,8 +391,9 @@ export function PdfReader({
     setNotesNotice(null);
     if (notesNotice.place) handleRef.current?.removeHighlight(notesNotice.place);
     const removed = await notesService.removeFromNotes(notesNotice.notesPath, notesNotice.excerptId);
+    notesChanged();
     if (!removed.ok) setNotesNotice({ kind: "error", message: removed.error });
-  }, [notesNotice, notesService]);
+  }, [notesNotice, notesService, notesChanged]);
 
   // The reader removed a quoted highlight and wants the quote gone as well.
   const removeQuotes = useCallback(async () => {
@@ -383,12 +401,45 @@ export function PdfReader({
     setNotesNotice(null);
     for (const id of notesNotice.excerptIds) {
       const removed = await notesService.removeFromNotes(notesNotice.notesPath, id);
+      notesChanged();
       if (!removed.ok) {
         setNotesNotice({ kind: "error", message: removed.error });
         return;
       }
     }
-  }, [notesNotice, notesService]);
+  }, [notesNotice, notesService, notesChanged]);
+
+  // The Notes panel: open or close it (⇧⌘N), follow a quote to its passage, outline one.
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const notesChangeRef = useRef(onNotesChange);
+  notesChangeRef.current = onNotesChange;
+  const showNotes = useCallback((open: boolean) => {
+    // A quote just added is shown once (the next time the panel opens, if it's closed).
+    if (!open) setNewExcerptId(null);
+    notesChangeRef.current({ ...notesRef.current, open });
+  }, []);
+  const resizeNotes = useCallback((widthPx: number) => {
+    notesChangeRef.current({ ...notesRef.current, widthPx });
+  }, []);
+  const followPassage = useCallback(
+    (target: PassageTarget) =>
+      jump((handle) => {
+        try {
+          handle.revealPassage(target);
+        } catch {
+          handle.goToPage(target.page);
+        }
+      }),
+    [jump],
+  );
+  const markPassage = useCallback((target: PassageTarget | null) => {
+    try {
+      handleRef.current?.markPassage(target);
+    } catch {
+      // An outline is a nicety; never let it take the reader down.
+    }
+  }, []);
 
   const setZoom = useCallback((zoom: PdfZoom) => handleRef.current?.setZoom(zoom), []);
   const zoomBy = useCallback((direction: 1 | -1) => {
@@ -422,6 +473,11 @@ export function PdfReader({
         void addToNotes();
         return;
       }
+      if (e.shiftKey && !e.altKey && e.code === "KeyN") {
+        e.preventDefault();
+        showNotes(!notesRef.current.open);
+        return;
+      }
       if (e.shiftKey && e.code === "KeyH") {
         e.preventDefault();
         setTool(tool === "highlight" ? "select" : "highlight");
@@ -440,7 +496,7 @@ export function PdfReader({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setZoom, zoomBy, setTool, tool, addToNotes, goBack]);
+  }, [setZoom, zoomBy, setTool, tool, addToNotes, goBack, showNotes]);
 
   return (
     <div className="pdf-reader">
@@ -466,6 +522,8 @@ export function PdfReader({
         contentsOpen={contents.open}
         onToggleContents={() => contents.setOpen(!contents.open)}
         onAddToNotes={() => void addToNotes()}
+        notesOpen={notes.open}
+        onShowNotes={showNotes}
       />
       {notesNotice?.kind === "added" && (
         <div className="banner banner--warn notes-notice" role="status">
@@ -474,9 +532,11 @@ export function PdfReader({
             <strong>{fileName(notesNotice.notesPath)}</strong>
           </span>
           <span className="banner__actions">
-            <button className="banner__btn" onClick={() => onOpenFile(notesNotice.notesPath)}>
-              Open notes
-            </button>
+            {!notes.open && (
+              <button className="banner__btn" onClick={() => showNotes(true)} title="Show the notes beside the page (⇧⌘N)">
+                Show notes
+              </button>
+            )}
             <button
               className="banner__btn"
               onClick={() => void undoAddToNotes()}
@@ -552,6 +612,19 @@ export function PdfReader({
           </div>
         )}
       </div>
+      {notes.open && (
+        <NotesPanel
+          documentPath={path}
+          widthPx={notes.widthPx}
+          onResize={resizeNotes}
+          revision={notesRevision}
+          newExcerptId={newExcerptId}
+          onFollow={followPassage}
+          onMark={markPassage}
+          onFileLink={onFileLink}
+          onOpenFile={onOpenFile}
+        />
+      )}
       </div>
     </div>
   );

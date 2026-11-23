@@ -1,5 +1,12 @@
 import type { Session, SessionGroup } from "../values/Session";
-import { BACK_LIMIT, normalizePdfView, type EditorMode, type PdfView } from "../values/ViewState";
+import {
+  BACK_LIMIT,
+  normalizeNotesPanel,
+  normalizePdfView,
+  type EditorMode,
+  type NotesPanelView,
+  type PdfView,
+} from "../values/ViewState";
 import type { Tab, TabId } from "./Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId, type TabGroup } from "./TabGroup";
 
@@ -305,6 +312,19 @@ export function popBack(ws: Workspace, id: TabId): Workspace {
   };
 }
 
+/** Open, close or resize a PDF tab's Notes panel. No-op if unchanged, or for a markdown tab. */
+export function setNotesPanel(ws: Workspace, id: TabId, panel: NotesPanelView): Workspace {
+  const tab = ws.tabs.find((t) => t.id === id);
+  if (!tab || tab.document.kind !== "pdf") return ws;
+  const next = normalizeNotesPanel(panel);
+  const prev = tab.viewState.notes;
+  if (prev && prev.open === next.open && prev.widthPx === next.widthPx) return ws;
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, viewState: { ...t.viewState, notes: next } } : t)),
+  };
+}
+
 /** Update a markdown tab's content (an edit). No-op if unchanged, or for a PDF. */
 export function updateContent(ws: Workspace, id: TabId, content: string): Workspace {
   const tab = ws.tabs.find((t) => t.id === id);
@@ -539,12 +559,14 @@ export function toSession(ws: Workspace): Session {
 
   const tabs = saved.map((t) => {
     const pdf = t.document.kind === "pdf" ? t.viewState.pdf : undefined;
+    const notes = t.document.kind === "pdf" ? t.viewState.notes : undefined;
     return {
       path: t.document.path as string,
       mode: t.viewState.mode,
       scrollTop: t.viewState.scrollTop,
       group: t.groupId === null ? null : (slot.get(t.groupId) ?? null),
       ...(pdf ? { pdf } : {}),
+      ...(notes ? { notes } : {}),
     };
   });
   const activeIndex = Math.max(

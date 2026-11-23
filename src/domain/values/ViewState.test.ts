@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { initialPdfView, normalizePdfView, parsePdfView, stepPdfZoom, type PdfView } from "./ViewState";
+import {
+  initialNotesPanel,
+  initialPdfView,
+  normalizeNotesPanel,
+  parseNotesPanel,
+  normalizePdfView,
+  parsePdfView,
+  stepPdfZoom,
+  type PdfView,
+} from "./ViewState";
 
 describe("PdfView", () => {
   it("leaves a valid view untouched (same reference)", () => {
@@ -59,5 +68,23 @@ describe("stepPdfZoom", () => {
     expect(stepPdfZoom(4, 1)).toBe(4);
     expect(stepPdfZoom(0.25, -1)).toBe(0.25);
     expect(stepPdfZoom(9, -1)).toBe(4);
+  });
+});
+
+describe("NotesPanelView", () => {
+  it("starts closed at the default width, and clamps a width into range", () => {
+    expect(initialNotesPanel).toEqual({ open: false, widthPx: 460 });
+    expect(normalizeNotesPanel(initialNotesPanel)).toBe(initialNotesPanel);
+    expect(normalizeNotesPanel({ open: true, widthPx: 10 })).toEqual({ open: true, widthPx: 300 });
+    expect(normalizeNotesPanel({ open: true, widthPx: 512.6 })).toEqual({ open: true, widthPx: 513 });
+    expect(normalizeNotesPanel({ open: false, widthPx: Number.NaN })).toEqual({ open: false, widthPx: 460 });
+  });
+
+  it("parses what the session saved, and rejects anything else", () => {
+    expect(parseNotesPanel({ open: true, widthPx: 500 })).toEqual({ open: true, widthPx: 500 });
+    expect(parseNotesPanel({ open: false })).toEqual({ open: false, widthPx: 460 });
+    expect(parseNotesPanel({ widthPx: 500 })).toBeNull();
+    expect(parseNotesPanel("open")).toBeNull();
+    expect(parseNotesPanel(null)).toBeNull();
   });
 });

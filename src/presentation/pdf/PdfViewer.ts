@@ -97,6 +97,11 @@ export interface PdfViewerHandle {
    * a quote's link. Without an area, goes to the top of its page.
    */
   revealPassage(target: PassageTarget): void;
+  /**
+   * Outline a passage where it is, without scrolling (a quote in the Notes panel is
+   * hovered), or clear the outline with null. Nothing shows for a passage with no area.
+   */
+  markPassage(target: PassageTarget | null): void;
   setTool(tool: PdfTool): void;
   /** The colour for new highlights. (pdf.js's toolbar on a highlight recolours that one.) */
   setHighlightColor(color: HighlightColor): void;

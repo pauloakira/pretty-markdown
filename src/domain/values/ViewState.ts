@@ -36,6 +36,38 @@ export interface ViewState {
    * page), most recent last, for "Back". Kept while the app runs, not in the session.
    */
   readonly back?: readonly PdfView[];
+  /** PDF tabs: the Notes panel beside the page (docs/RESEARCH_READER.md). Closed if absent. */
+  readonly notes?: NotesPanelView;
+}
+
+/** The Notes panel of a PDF tab: whether it's open, and how wide (px, dragged). */
+export interface NotesPanelView {
+  readonly open: boolean;
+  readonly widthPx: number;
+}
+
+/** The Notes panel's width range, in px. The page keeps the rest of the window. */
+export const NOTES_PANEL_WIDTH = { min: 300, max: 900, default: 460 } as const;
+
+export const initialNotesPanel: NotesPanelView = { open: false, widthPx: NOTES_PANEL_WIDTH.default };
+
+/** Clamp a Notes panel's width into range (whole px). */
+export function normalizeNotesPanel(panel: NotesPanelView): NotesPanelView {
+  const widthPx = Number.isFinite(panel.widthPx)
+    ? Math.min(NOTES_PANEL_WIDTH.max, Math.max(NOTES_PANEL_WIDTH.min, Math.round(panel.widthPx)))
+    : NOTES_PANEL_WIDTH.default;
+  return widthPx === panel.widthPx ? panel : { open: panel.open, widthPx };
+}
+
+/** Parse an untrusted value (e.g. from the session file) into a Notes panel, or null. */
+export function parseNotesPanel(raw: unknown): NotesPanelView | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const v = raw as Record<string, unknown>;
+  if (typeof v.open !== "boolean") return null;
+  return normalizeNotesPanel({
+    open: v.open,
+    widthPx: typeof v.widthPx === "number" ? v.widthPx : NOTES_PANEL_WIDTH.default,
+  });
 }
 
 /** How many places "Back" remembers per tab. */

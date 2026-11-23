@@ -1716,3 +1716,156 @@ body {
     break-after: avoid;
   }
 }
+
+/* ---- Notes panel (docs/RESEARCH_READER.md) ------------------------------------ */
+.doctoolbar__views {
+  flex: none;
+}
+.doc-body > .notes-panel {
+  flex: none;
+}
+.notes-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: calc(100% - 360px);
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  font-family: var(--font-sans);
+}
+.notes-panel__resize {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.notes-panel__resize:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.notes-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 46px;
+  padding: 0 0.75rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.notes-panel__icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: var(--fg-muted);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+}
+.notes-panel__title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.notes-panel__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notes-panel__where {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+}
+.notes-panel__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.notes-panel__notes.reader {
+  max-width: none;
+  padding: 1.4rem 2rem 3rem;
+  font-size: calc(0.95rem * var(--reader-font-scale));
+  line-height: 1.6;
+}
+.notes-panel__notes.reader h1 {
+  font-size: 1.45em;
+}
+.notes-panel__notes.reader h2 {
+  font-size: 1.2em;
+}
+/* A quote of this PDF: hovering it outlines its passage on the page. */
+.notes-panel__notes blockquote.excerpt {
+  border-radius: 6px;
+  transition: background-color 120ms ease-out;
+}
+.notes-panel__notes blockquote.excerpt:hover {
+  background: color-mix(in srgb, var(--excerpt-bar) 12%, transparent);
+}
+.notes-panel__notes blockquote.excerpt--new {
+  animation: notes-new 2.4s ease-out;
+}
+@keyframes notes-new {
+  0%, 50% {
+    background: color-mix(in srgb, var(--excerpt-bar) 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--excerpt-bar) 70%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-panel__notes blockquote.excerpt--new {
+    animation: none;
+  }
+}
+.notes-panel__empty {
+  margin: 3rem 2rem;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.notes-panel__empty-title {
+  color: var(--fg);
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+.notes-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  height: 30px;
+  padding: 0 0.9rem;
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+.notes-panel__open {
+  font: inherit;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+}
+.notes-panel__open:hover {
+  text-decoration: underline;
+}
+/* The passage of a hovered quote, outlined on the page (no animation: it follows the pointer). */
+.pdf-mark {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}

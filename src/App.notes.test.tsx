@@ -146,7 +146,7 @@ describe("Add to notes", () => {
     expect(notice()).toBeNull();
   });
 
-  it("Open notes opens the notes file in a tab", async () => {
+  it("Show notes opens the Notes panel beside the page, at the new quote", async () => {
     const app = makeContainer();
     await launch(app);
     const viewer = await openPdf(app);
@@ -154,14 +154,17 @@ describe("Add to notes", () => {
     await act(async () => button("Add to notes").click());
     await settle();
 
-    await act(async () => button("Open notes").click());
+    await act(async () => button("Show notes").click());
     await settle();
 
     const { tabs, activeTabId } = app.tabManager.getSnapshot();
-    const active = tabs.find((t) => t.id === activeTabId);
-    expect(active?.document.path).toBe(NOTES_PATH);
-    const quote = document.querySelector("blockquote.excerpt");
+    expect(tabs).toHaveLength(1);
+    expect(tabs.find((t) => t.id === activeTabId)?.document.path).toBe(PDF);
+    const quote = document.querySelector(".notes-panel blockquote.excerpt");
     expect(quote?.querySelector("p")?.textContent).toBe("Read me later.");
     expect(quote?.querySelector(".excerpt__source")?.textContent).toBe("↗ p. 2 · paper");
+    expect(quote?.classList.contains("excerpt--new")).toBe(true);
+    // The panel is open now: the notice doesn't offer it again.
+    expect(document.querySelector(".notes-notice")?.textContent).not.toContain("Show notes");
   });
 });

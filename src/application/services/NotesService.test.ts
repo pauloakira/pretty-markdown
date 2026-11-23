@@ -34,6 +34,21 @@ const PDF = "/papers/Geometric Methods.pdf";
 const NOTES = "/papers/Geometric Methods.notes.md";
 
 describe("NotesService", () => {
+  it("reads a document's notes for the Notes panel: none yet, then the text and its excerpts", async () => {
+    const store = new FakeNotesStore();
+    const notes = new NotesService(store, sequence());
+    expect(await notes.readNotes(PDF)).toEqual(ok({ notesPath: NOTES, text: null, excerptCount: 0 }));
+
+    await notes.addToNotes(PDF, { page: 1, text: "One.", color: "yellow" });
+    await notes.addToNotes(PDF, { page: 2, text: "Two.", color: "green" });
+    const read = await notes.readNotes(PDF);
+    expect(read.ok && read.value.excerptCount).toBe(2);
+    expect(read.ok && read.value.text).toBe(store.files.get(NOTES));
+
+    store.failRead = true;
+    expect((await notes.readNotes(PDF)).ok).toBe(false);
+  });
+
   it("creates the notes file beside the PDF on the first addition", async () => {
     const store = new FakeNotesStore();
     const notes = new NotesService(store, sequence());

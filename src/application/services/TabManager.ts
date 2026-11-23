@@ -6,8 +6,10 @@ import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
 import {
   initialPdfView,
+  normalizeNotesPanel,
   normalizePdfView,
   type EditorMode,
+  type NotesPanelView,
   type PdfView,
 } from "../../domain/values/ViewState";
 
@@ -127,6 +129,11 @@ export class TabManager {
     return last;
   }
 
+  /** Open, close or resize a PDF tab's Notes panel. Notifies only if it changed. */
+  setNotesPanel(id: TabId, panel: NotesPanelView): void {
+    this.commit(W.setNotesPanel(this.workspace, id, panel));
+  }
+
   /** Persist a tab's scroll position. Notifies only if it changed. */
   persistScroll(id: TabId, scrollTop: number): void {
     this.commit(W.setScrollTop(this.workspace, id, scrollTop));
@@ -169,6 +176,7 @@ export class TabManager {
       scrollTop: number;
       group: number | null;
       pdf?: PdfView;
+      notes?: NotesPanelView;
     }>,
     groups: ReadonlyArray<{ name: string; color: GroupColor; collapsed: boolean }>,
     activeIndex: number,
@@ -181,7 +189,11 @@ export class TabManager {
       const base = createTab(this.nextId(), entry.document);
       const viewState =
         entry.document.kind === "pdf"
-          ? { ...base.viewState, pdf: normalizePdfView(entry.pdf ?? initialPdfView) }
+          ? {
+              ...base.viewState,
+              pdf: normalizePdfView(entry.pdf ?? initialPdfView),
+              ...(entry.notes ? { notes: normalizeNotesPanel(entry.notes) } : {}),
+            }
           : { ...base.viewState, mode: entry.mode, scrollTop: entry.scrollTop };
       return {
         ...base,

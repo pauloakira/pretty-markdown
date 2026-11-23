@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useContainer } from "./composition/ContainerContext";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
-import { initialPdfView } from "./domain/values/ViewState";
+import { initialNotesPanel, initialPdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
 import { isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
@@ -101,6 +101,9 @@ export default function App() {
     active?.id ?? null,
     openRecent,
   );
+
+  const { openFileLink } = fileLinks;
+  const openDocumentLink = useCallback((href: string) => openFileLink(href), [openFileLink]);
 
   // Parsed PDFs are kept for quick tab switches; release those whose tabs have closed.
   const { pdfViewer, tabManager } = useContainer();
@@ -248,7 +251,7 @@ export default function App() {
           onToggleContents={() => contents.setOpen(!contents.open)}
         />
       )}
-      <FileLinkContext.Provider value={fileLinks.openFileLink}>
+      <FileLinkContext.Provider value={openDocumentLink}>
       <main className="app__content">
         {error && <div className="banner banner--error">{error}</div>}
         {active && fileWatch.conflicts[active.id] !== undefined && (
@@ -293,6 +296,9 @@ export default function App() {
             back={active.viewState.back?.at(-1) ?? null}
             onPushBack={(from) => tabManager.pushBack(active.id, from)}
             onPopBack={() => tabManager.popBack(active.id)}
+            notes={active.viewState.notes ?? initialNotesPanel}
+            onNotesChange={(notes) => tabManager.setNotesPanel(active.id, notes)}
+            onFileLink={fileLinks.openFileLink}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (

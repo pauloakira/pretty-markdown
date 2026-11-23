@@ -31,9 +31,15 @@ interface PdfToolbarProps {
   onToggleContents: () => void;
   /** Add the selected text to this PDF's notes file. */
   onAddToNotes: () => void;
+  /** Whether the Notes panel is beside the page ("Notes" in the view switch). */
+  notesOpen: boolean;
+  onShowNotes: (open: boolean) => void;
 }
 
-/** Toolbar for a PDF tab: the highlighter, page indicator with go-to-page, and zoom. */
+/**
+ * Toolbar for a PDF tab: the contents and name, Read · Notes (the Notes panel beside the
+ * page), then Add to notes, the highlighter, page indicator with go-to-page, and zoom.
+ */
 export function PdfToolbar({
   name,
   title,
@@ -56,6 +62,8 @@ export function PdfToolbar({
   contentsOpen,
   onToggleContents,
   onAddToNotes,
+  notesOpen,
+  onShowNotes,
 }: PdfToolbarProps) {
   const ready = pageCount !== null;
   // The field shows the current page until the user types; Enter jumps, Escape/blur reverts.
@@ -75,6 +83,24 @@ export function PdfToolbar({
         <span className="doctoolbar__name" title={title ?? undefined}>
           {name}
         </span>
+      </div>
+      <div className="segmented doctoolbar__views" role="group" aria-label="View">
+        <button
+          className={`segmented__btn${notesOpen ? "" : " segmented__btn--active"}`}
+          onClick={() => onShowNotes(false)}
+          aria-pressed={!notesOpen}
+          title="Just the page"
+        >
+          Read
+        </button>
+        <button
+          className={`segmented__btn${notesOpen ? " segmented__btn--active" : ""}`}
+          onClick={() => onShowNotes(true)}
+          aria-pressed={notesOpen}
+          title="The notes beside the page (⇧⌘N)"
+        >
+          Notes
+        </button>
       </div>
       <div className="doctoolbar__actions">
         <button

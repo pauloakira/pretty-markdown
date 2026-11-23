@@ -12,8 +12,11 @@ interface PendingReveal {
 }
 
 export interface FileLinks {
-  /** Follow a link to another file from the document at `fromPath` (see `FileLinkContext`). */
-  readonly openFileLink: (href: string) => void;
+  /**
+   * Follow a link to another file (see `FileLinkContext`), relative to the Markdown
+   * document on screen, or to `base` (a notes file shown in a PDF's Notes panel).
+   */
+  readonly openFileLink: (href: string, base?: string) => void;
   /** The passage the tab `tabId` should show once ready, or null. */
   readonly revealFor: (tabId: TabId) => PassageTarget | null;
   /** The passage has been shown. */
@@ -37,10 +40,11 @@ export function useFileLinks(
   const [pending, setPending] = useState<PendingReveal | null>(null);
 
   const openFileLink = useCallback(
-    (href: string) => {
-      if (fromPath === null) return;
-      const link = resolveFileLink(href, fromPath);
-      if (link === null || link.path === fromPath) return;
+    (href: string, base?: string) => {
+      const relativeTo = base ?? fromPath;
+      if (relativeTo === null) return;
+      const link = resolveFileLink(href, relativeTo);
+      if (link === null || link.path === relativeTo) return;
       const before = findTabByPath(tabManager.getSnapshot(), link.path);
       const from = before?.viewState.pdf ?? null;
       void (async () => {

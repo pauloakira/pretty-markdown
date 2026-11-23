@@ -205,6 +205,11 @@ export class FakePdfHandle implements PdfViewerHandle {
     this.revealed.push(target);
     this.moveTo({ ...this.current, page: target.page, pageOffset: 0.25 });
   }
+  /** The passage outlined now (a quote in the Notes panel is hovered), or null. */
+  marked: PassageTarget | null = null;
+  markPassage(target: PassageTarget | null) {
+    this.marked = target;
+  }
   /** Simulate the reader scrolling or zooming. */
   moveTo(view: PdfView) {
     this.current = view;
@@ -392,9 +397,9 @@ export function button(label: string): HTMLButtonElement {
   return found;
 }
 
-/** Press a ⌘-shortcut. */
-export function shortcut(code: string) {
-  window.dispatchEvent(new KeyboardEvent("keydown", { code, metaKey: true, bubbles: true }));
+/** Press a ⌘-shortcut (⇧⌘ with `shift`). */
+export function shortcut(code: string, { shift = false }: { shift?: boolean } = {}) {
+  window.dispatchEvent(new KeyboardEvent("keydown", { code, metaKey: true, shiftKey: shift, bubbles: true }));
 }
 
 // Browser APIs the webview has but jsdom lacks (used by the tab strip).
