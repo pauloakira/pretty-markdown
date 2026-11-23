@@ -7,6 +7,11 @@ import {
   notesPathFor,
   readExcerpts,
   removeExcerpt,
+  restoreExcerpt,
+  segmentNotes,
+  setExcerptColor,
+  setNote,
+  takeExcerpt,
 } from "./NotesFile";
 
 const first: Excerpt = {
@@ -121,33 +126,48 @@ describe("removeExcerpt", () => {
   });
 });
 
-describe("a comment with an excerpt", () => {
-  it("goes in its own paragraph below the quote, trimmed, without blank lines inside", () => {
-    const notes = addExcerpt(newNotesFile("Geometric Methods.pdf"), first, "Geometric Methods.pdf", "  So every rotation\n\n has a log: $X$.  \n");
-    expect(notes.endsWith(
-      "> — [p. 133](Geometric%20Methods.pdf#page=133&ex=aaaa01&color=yellow)\n" +
-        "\n" +
-        "So every rotation\n" +
-        " has a log: $X$.\n",
-    )).toBe(true);
-    expect(readExcerpts(notes).map((f) => f.excerpt.id)).toEqual(["aaaa01"]);
+describe("excerpt cards and their notes", () => {
+  const start = addExcerpt(addExcerpt(null, first, "Geometric Methods.pdf"), second, "Geometric Methods.pdf");
+  const withNotes = setNote(setNote(start, first.id, "So every rotation\n\nhas a log: $X$."), second.id, "Cheap.");
+
+  it("cuts the notes into the text around them and cards, each quote with its note", () => {
+    const segments = segmentNotes(withNotes);
+    expect(segments.map((s) => s.kind)).toEqual(["text", "excerpt", "excerpt"]);
+    expect(segments[0]).toEqual({ kind: "text", markdown: "# Notes on Geometric Methods\n\n## Unsorted" });
+    expect(segments[1]).toMatchObject({ kind: "excerpt", note: "So every rotation\n\nhas a log: $X$." });
+    expect(segments[2]).toMatchObject({ kind: "excerpt", note: "Cheap." });
   });
 
-  it("is removed with its excerpt while it's as written, and kept once the reader edits it", () => {
-    const start = addExcerpt(newNotesFile("Geometric Methods.pdf"), first, "Geometric Methods.pdf");
-    const withComment = addExcerpt(start, second, "Geometric Methods.pdf", "Cheap.");
-    expect(removeExcerpt(withComment, second.id, "Cheap.")).toBe(start);
+  it("takes text written under a quote in any editor as its note, up to the next heading", () => {
+    const notes = `${start.trimEnd()}\nMy thought.\n\n## Later\n\nMore.\n`;
+    const segments = segmentNotes(notes);
+    expect(segments[2]).toMatchObject({ kind: "excerpt", note: "My thought." });
+    expect(segments[3]).toEqual({ kind: "text", markdown: "## Later\n\nMore." });
+  });
 
-    const edited = withComment.replace("Cheap.", "Cheap, really.");
-    expect(removeExcerpt(edited, second.id, "Cheap.")).toBe(`${start}\nCheap, really.\n`);
-    // Without the comment, only the quote goes (as before).
-    expect(removeExcerpt(withComment, second.id)).toBe(`${start}\nCheap.\n`);
+  it("writes, replaces and removes a note without touching anything else", () => {
+    expect(withNotes).toContain("is surjective.\n> — [p. 133](Geometric%20Methods.pdf#page=133&ex=aaaa01&color=yellow)\n\nSo every rotation\n\nhas a log: $X$.\n\n> It costs");
+    expect(setNote(setNote(withNotes, first.id, ""), second.id, "")).toBe(start);
+    expect(setNote(withNotes, "ffffff", "x")).toBe(withNotes);
+  });
+
+  it("deletes a card, quote and note, and Undo puts it back where it was", () => {
+    const taken = takeExcerpt(withNotes, first.id);
+    expect(taken?.notes).toBe(setNote(removeExcerpt(start, first.id), second.id, "Cheap."));
+    expect(readExcerpts(taken?.notes ?? "").map((f) => f.excerpt.id)).toEqual([second.id]);
+    expect(restoreExcerpt(taken?.notes ?? "", taken ?? { block: [], at: 0 })).toBe(withNotes);
+  });
+
+  it("recolours a quote's link", () => {
+    const pink = setExcerptColor(withNotes, first.id, "pink");
+    expect(readExcerpts(pink).map((f) => f.excerpt.color)).toEqual(["pink", "pink"]);
+    expect(segmentNotes(pink)[1]).toMatchObject({ note: "So every rotation\n\nhas a log: $X$." });
   });
 
   it("keeps the file's CRLF line endings", () => {
-    const crlf = newNotesFile("Geometric Methods.pdf").replace(/\n/g, "\r\n");
-    const notes = addExcerpt(crlf, first, "Geometric Methods.pdf", "One\nTwo");
-    expect(notes.endsWith("\r\n\r\nOne\r\nTwo\r\n")).toBe(true);
+    const crlf = start.replace(/\n/g, "\r\n");
+    const notes = setNote(crlf, first.id, "One\nTwo");
+    expect(notes).toContain("\r\n\r\nOne\r\nTwo\r\n\r\n> It costs");
     expect(notes.replace(/\r\n/g, "").includes("\n")).toBe(false);
   });
 });

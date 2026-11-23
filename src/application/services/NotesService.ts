@@ -6,7 +6,15 @@ import {
   type Excerpt,
 } from "../../domain/values/Excerpt";
 import type { HighlightColor } from "../../domain/values/Highlight";
-import { addExcerpt, notesPathFor, readExcerpts, removeExcerpt } from "../../domain/values/NotesFile";
+import {
+  addExcerpt,
+  notesPathFor,
+  readExcerpts,
+  restoreExcerpt,
+  setExcerptColor,
+  setNote,
+  takeExcerpt,
+} from "../../domain/values/NotesFile";
 import { roundRect, sameArea, type HighlightPlace, type PdfRect } from "../../domain/values/PdfRect";
 import { err, ok, type Result } from "../../domain/values/Result";
 
@@ -27,6 +35,16 @@ export interface AddedExcerpt {
   readonly excerpt: Excerpt;
   /** Whether this created the notes file. */
   readonly created: boolean;
+}
+
+/** An excerpt taken out of the notes, to put back (Undo). */
+export interface RemovedExcerpt {
+  readonly notesPath: string;
+  readonly block: readonly string[];
+  readonly at: number;
+  /** The notes before and right after the removal, to tell whether they've changed since. */
+  readonly before: string;
+  readonly after: string;
 }
 
 /** A document's notes file, as read for the Notes panel. */
@@ -69,11 +87,8 @@ export class NotesService {
     return ok({ notesPath, text, excerptCount: text === null ? 0 : readExcerpts(text).length });
   }
 
-  /**
-   * Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted",
-   * with the reader's `comment` below it if there is one.
-   */
-  addToNotes(documentPath: string, passage: TakenPassage, comment?: string): Promise<Result<AddedExcerpt>> {
+  /** Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted". */
+  addToNotes(documentPath: string, passage: TakenPassage): Promise<Result<AddedExcerpt>> {
     const text = normalizeExcerptText(passage.text);
     if (text === "") return Promise.resolve(err("Select some text to add to your notes."));
     const notesPath = notesPathFor(documentPath);
@@ -90,7 +105,7 @@ export class NotesService {
     return this.queued(notesPath, async () => {
       const current = await this.store.read(notesPath);
       if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
-      const written = await this.store.write(notesPath, addExcerpt(current.value, excerpt, documentName, comment));
+      const written = await this.store.write(notesPath, addExcerpt(current.value, excerpt, documentName));
       if (!written.ok) return err(`Couldn't save your notes: ${written.error}`);
       return ok({ notesPath, excerpt, created: current.value === null });
     });
@@ -121,18 +136,62 @@ export class NotesService {
   }
 
   /**
-   * Take an excerpt out of a notes file again (Remove), with the `comment` it was added
-   * with. Nothing to do if it's gone already.
+   * Take an excerpt and its note out of a notes file (Remove, Delete). Resolves to what was
+   * taken, for Undo, or null if it was gone already.
    */
-  removeFromNotes(notesPath: string, id: string, comment?: string): Promise<Result<void>> {
+  removeFromNotes(notesPath: string, id: string): Promise<Result<RemovedExcerpt | null>> {
+    return this.edit(notesPath, (text) => {
+      const taken = takeExcerpt(text, id);
+      return taken === null ? null : { text: taken.notes, value: { notesPath, block: taken.block, at: taken.at, before: text, after: taken.notes } };
+    });
+  }
+
+  /**
+   * Undo a removal: put the excerpt back where it was. If the notes haven't changed since,
+   * they're exactly as before; otherwise it goes back at the line it was taken from.
+   */
+  restoreToNotes(removed: RemovedExcerpt): Promise<Result<void>> {
+    return this.edit(removed.notesPath, (text) => ({
+      text: text === removed.after ? removed.before : restoreExcerpt(text, removed),
+      value: undefined,
+    })).then((result) => (result.ok ? ok(undefined) : result));
+  }
+
+  /** Write the reader's note on excerpt `id` (an empty note removes it). */
+  setNote(notesPath: string, id: string, note: string): Promise<Result<void>> {
+    return this.edit(notesPath, (text) => ({ text: setNote(text, id, note), value: undefined })).then((result) =>
+      result.ok ? ok(undefined) : result,
+    );
+  }
+
+  /** Recolour excerpt `id` (its link's colour; the highlight is the viewer's). */
+  setColor(notesPath: string, id: string, color: HighlightColor): Promise<Result<void>> {
+    return this.edit(notesPath, (text) => ({ text: setExcerptColor(text, id, color), value: undefined })).then(
+      (result) => (result.ok ? ok(undefined) : result),
+    );
+  }
+
+  /**
+   * Read the notes file, change its text with `change`, and write it back if it changed,
+   * queued behind other changes to the same file. `change` returns the new text and a
+   * value to resolve to, or null for nothing to do (resolves to null). A missing file
+   * has nothing to change.
+   */
+  private edit<T>(
+    notesPath: string,
+    change: (text: string) => { readonly text: string; readonly value: T } | null,
+  ): Promise<Result<T | null>> {
     return this.queued(notesPath, async () => {
       const current = await this.store.read(notesPath);
       if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
-      if (current.value === null) return ok(undefined);
-      const updated = removeExcerpt(current.value, id, comment);
-      if (updated === current.value) return ok(undefined);
-      const written = await this.store.write(notesPath, updated);
-      return written.ok ? ok(undefined) : err(`Couldn't save your notes: ${written.error}`);
+      if (current.value === null) return ok(null);
+      const changed = change(current.value);
+      if (changed === null) return ok(null);
+      if (changed.text !== current.value) {
+        const written = await this.store.write(notesPath, changed.text);
+        if (!written.ok) return err(`Couldn't save your notes: ${written.error}`);
+      }
+      return ok(changed.value);
     });
   }
 

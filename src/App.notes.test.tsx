@@ -59,7 +59,7 @@ describe("Add to notes", () => {
       },
     ]);
     expect(viewer.highlighted).toEqual(["yellow"]);
-    expect(notice()).toContain("Started your notes: paper.notes.md");
+    expect(notice()).toBeNull(); // the quote shows in the Notes panel instead
   });
 
   it("adds with ⌘E too, without switching the PDF to edit mode", async () => {
@@ -85,24 +85,6 @@ describe("Add to notes", () => {
 
     expect(NOTES.has(NOTES_PATH)).toBe(false);
     expect(notice()).toContain("Select some text in the PDF first");
-  });
-
-  it("Remove takes the passage out of the notes again, and its highlight", async () => {
-    const app = makeContainer();
-    await launch(app);
-    NOTES.set(NOTES_PATH, "# Mine\n\n## Unsorted\n");
-    const viewer = await openPdf(app);
-    viewer.selection = { page: 2, text: "Soon gone." };
-
-    await act(async () => button("Add to notes").click());
-    await settle();
-    expect(notice()).toContain("Added to paper.notes.md");
-    await act(async () => button("Remove from notes").click());
-    await settle();
-
-    expect(NOTES.get(NOTES_PATH)).toBe("# Mine\n\n## Unsorted\n");
-    expect(viewer.places).toEqual([]);
-    expect(notice()).toBeNull();
   });
 
   it("deleting a quoted highlight offers to remove its quote too", async () => {
@@ -146,7 +128,7 @@ describe("Add to notes", () => {
     expect(notice()).toBeNull();
   });
 
-  it("Show notes opens the Notes panel beside the page, at the new quote", async () => {
+  it("opens the Notes panel beside the page, with the new quote's note ready to write", async () => {
     const app = makeContainer();
     await launch(app);
     const viewer = await openPdf(app);
@@ -154,17 +136,13 @@ describe("Add to notes", () => {
     await act(async () => button("Add to notes").click());
     await settle();
 
-    await act(async () => button("Show notes").click());
-    await settle();
-
     const { tabs, activeTabId } = app.tabManager.getSnapshot();
     expect(tabs).toHaveLength(1);
     expect(tabs.find((t) => t.id === activeTabId)?.document.path).toBe(PDF);
-    const quote = document.querySelector(".notes-panel blockquote.excerpt");
-    expect(quote?.querySelector("p")?.textContent).toBe("Read me later.");
-    expect(quote?.querySelector(".excerpt__source")?.textContent).toBe("↗ p. 2 · paper");
-    expect(quote?.classList.contains("excerpt--new")).toBe(true);
-    // The panel is open now: the notice doesn't offer it again.
-    expect(document.querySelector(".notes-notice")?.textContent).not.toContain("Show notes");
+    const card = document.querySelector(".notes-panel .excerpt-card");
+    expect(card?.querySelector("blockquote.excerpt p")?.textContent).toBe("Read me later.");
+    expect(card?.querySelector(".excerpt__source")?.textContent).toBe("↗ p. 2 · paper");
+    expect(card?.classList.contains("excerpt-card--new")).toBe(true);
+    expect(document.activeElement).toBe(card?.querySelector("textarea"));
   });
 });
