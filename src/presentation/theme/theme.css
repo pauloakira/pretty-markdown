@@ -376,13 +376,31 @@ body {
   width: min(30rem, 90vw);
   text-align: left;
 }
+.welcome__recent-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  padding: 0 0.2rem;
+}
 .welcome__recent-title {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-muted);
-  margin-bottom: 0.4rem;
-  padding-left: 0.2rem;
+}
+.welcome__recent-clear {
+  position: relative;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.welcome__recent-clear:hover {
+  color: var(--accent);
 }
 .welcome__recent-list {
   list-style: none;
@@ -420,7 +438,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl; /* keep the filename end visible when truncating */
+  direction: rtl; /* cut a long location at its start, keeping the nearest folder */
   text-align: left;
 }
 
@@ -2483,6 +2501,15 @@ body {
   }
   .welcome__cta {
     min-height: 44px;
+  }
+  .welcome__recent-item {
+    min-height: 52px;
+    justify-content: center;
+  }
+  .welcome__recent-clear::after {
+    content: "";
+    position: absolute;
+    inset: -14px -12px;
   }
 
   /* Menus (tab and group menus, the highlight colours). */

@@ -221,6 +221,22 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   - Not verified: Escape (no tool here sends it; the page side is unit-tested), and a real
     iPad. In the simulator the first ⌘ press after the test runner brings the app forward
     was sometimes dropped (likely the simulator connecting its keyboard) — check on a device.
+- ✅ **A tidy Recent list** (2026-11-24). It showed full container paths (some as
+  `file://` URLs, the leading slash drawn at the end by the right-to-left truncation),
+  the same file twice, and a temporary "Open in" copy that failed with a raw "No such
+  file" error.
+  - Each entry shows where the file is, as Files names it: "iCloud Drive › Papers",
+    "On My iPad › Papers", "Temporary copy" for copies handed over by another app, and
+    "~/Documents/…" on the Mac (`recentLocation` in `domain/values/RecentFile.ts`).
+  - One entry per file: a `file://` URL and its path, or `/private/var/…` and `/var/…`,
+    are the same file. Stored URLs become paths, so they open as the same tab and name.
+  - A file that isn't there any more says so plainly ("'Old copy.pdf' isn't there any
+    more. It may have been moved, renamed or deleted.") and leaves Recent. Other errors
+    (no permission, say) leave the entry alone. A Clear button empties the list.
+  - Tested in the simulator with an old-style list planted by a probe: the four entries
+    showed as three with readable locations; the deleted copy gave the message and left
+    the list; the entry saved as a `file://` URL opened as "VEM paper.pdf"; a session tab
+    saved as a URL restored under its name; Clear emptied the list.
 - ✅ **Export PDF and Save As** (2026-11-23). Both did nothing on the iPad.
   - **Export PDF** opens the system print sheet: WKWebView on iOS ignores
     `window.print()`, so the page asks the plugin (`printPage`, with the web view's print

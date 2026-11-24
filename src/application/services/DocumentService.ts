@@ -4,6 +4,7 @@ import {
   documentKindForPath,
   fileName,
   hasPdfSignature,
+  plainPath,
   PDF_HEADER_WINDOW,
   type Document,
 } from "../../domain/entities/Document";
@@ -12,13 +13,25 @@ import type {
   FileReader,
   FileWriter,
 } from "../../domain/ports/FileSystem";
+import { isMissingFile } from "../../domain/values/MissingFile";
 import { err, type Result } from "../../domain/values/Result";
 
 /** Result of an open request, modeled as a value so the UI can react to each case. */
 export type OpenOutcome =
   | { readonly kind: "opened"; readonly document: Document }
   | { readonly kind: "cancelled" }
-  | { readonly kind: "error"; readonly message: string };
+  | {
+      readonly kind: "error";
+      readonly message: string;
+      /** The file isn't there any more (moved, renamed or deleted). */
+      readonly missing: boolean;
+    };
+
+const readFailed = (message: string): OpenOutcome => ({
+  kind: "error",
+  message,
+  missing: isMissingFile(message),
+});
 
 /** Result of a save request. */
 export type SaveOutcome =
@@ -49,17 +62,22 @@ export class DocumentService {
    * decides the kind: markdown is read in full; a PDF is only checked — its header is read
    * to confirm it exists and really is a PDF — and the viewer loads the bytes later.
    */
-  async load(path: string): Promise<OpenOutcome> {
+  async load(given: string): Promise<OpenOutcome> {
+    const path = plainPath(given); // the document's identity is its path, never a URL
     if (documentKindForPath(path) === "pdf") {
       const head = await this.reader.readBytes(path, PDF_HEADER_WINDOW);
-      if (!head.ok) return { kind: "error", message: head.error };
+      if (!head.ok) return readFailed(head.error);
       if (!hasPdfSignature(head.value)) {
-        return { kind: "error", message: `'${fileName(path)}' isn't a valid PDF file.` };
+        return {
+          kind: "error",
+          message: `'${fileName(path)}' isn't a valid PDF file.`,
+          missing: false,
+        };
       }
       return { kind: "opened", document: createPdfDocument(path) };
     }
     const result = await this.reader.readTextFile(path);
-    if (!result.ok) return { kind: "error", message: result.error };
+    if (!result.ok) return readFailed(result.error);
     return { kind: "opened", document: createMarkdownDocument(path, result.value) };
   }
 

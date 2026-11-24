@@ -222,7 +222,7 @@ describe("PDF tabs", () => {
     await act(async () => app.tabManager.openDocument(createPdfDocument("/papers/deleted.pdf")));
     await settle();
 
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain("No such file");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("isn't there any more");
     expect(app.pdfViewer.mounts).toHaveLength(0);
     expect(toolbar()).toMatchObject({ of: "/ –", zoom: "–" });
   });

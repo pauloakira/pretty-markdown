@@ -69,7 +69,12 @@ export default function App() {
     }),
     [settings.contentsOpen, settings.contentsWidthPx, updateSettings],
   );
-  const { recents, remember: rememberRecent } = useRecentFiles();
+  const {
+    recents,
+    remember: rememberRecent,
+    forget: forgetRecent,
+    clear: clearRecents,
+  } = useRecentFiles();
   const { persist: persistSession, clear: clearSession, quit } = useSession();
 
   // Open via dialog / by path, recording the result in the recent-files list.
@@ -79,10 +84,14 @@ export default function App() {
   }, [open, rememberRecent]);
   const openRecent = useCallback(
     async (path: string) => {
-      const doc = await openPath(path);
-      if (doc?.path) rememberRecent({ path: doc.path, name: doc.name });
+      const outcome = await openPath(path);
+      if (outcome.kind === "opened" && outcome.document.path) {
+        rememberRecent({ path: outcome.document.path, name: outcome.document.name });
+      }
+      // Gone (moved, deleted, or a temporary copy that was cleared): don't offer it again.
+      if (outcome.kind === "error" && outcome.missing) forgetRecent(path);
     },
-    [openPath, rememberRecent],
+    [openPath, rememberRecent, forgetRecent],
   );
   const openIntoGroup = useCallback(
     async (groupId: GroupId) => {
@@ -255,7 +264,11 @@ export default function App() {
       )}
       <FileLinkContext.Provider value={openDocumentLink}>
       <main className="app__content">
-        {error && <div className="banner banner--error">{error}</div>}
+        {error && (
+          <div className="banner banner--error" role="alert">
+            {error}
+          </div>
+        )}
         {active && fileWatch.conflicts[active.id] !== undefined && (
           <div className="banner banner--warn">
             <span>This file changed on disk while you had unsaved edits.</span>
@@ -325,6 +338,7 @@ export default function App() {
             recents={recents}
             onOpen={openViaDialog}
             onOpenRecent={openRecent}
+            onClearRecents={clearRecents}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
