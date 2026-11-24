@@ -1124,6 +1124,73 @@ body {
     gap: 0.4rem;
   }
 }
+/* The same steps on a touch screen, where the controls are larger (Touch targets, below). */
+@media (pointer: coarse) {
+  /* Slide Over: the page field goes too (the contents and scrolling still get there). */
+  @container doctoolbar (max-width: 400px) {
+    .doctoolbar--pdf .pdftoolbar__page {
+      display: none;
+    }
+  }
+  @container doctoolbar (max-width: 980px) {
+    .doctoolbar--pdf .doctoolbar__name {
+      display: none;
+    }
+    .doctoolbar--pdf .doctoolbar__lead {
+      flex: none;
+    }
+  }
+  @container doctoolbar (max-width: 880px) {
+    .doctoolbar--pdf .doctoolbar__actions {
+      gap: 0.4rem;
+    }
+    .doctoolbar--pdf .doctoolbar__label {
+      display: none;
+    }
+    .doctoolbar--pdf .doctoolbar__compact-icon {
+      display: block;
+    }
+    .doctoolbar--pdf .doctoolbar__btn:has(.doctoolbar__compact-icon) {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.3rem 0.5rem;
+    }
+  }
+  @container doctoolbar (max-width: 700px) {
+    .doctoolbar--pdf .pdftoolbar__zoom-group {
+      display: none;
+    }
+  }
+  @container doctoolbar (max-width: 600px) {
+    .doctoolbar--pdf .pdftoolbar__page-count {
+      display: none;
+    }
+  }
+  @container doctoolbar (max-width: 530px) {
+    .doctoolbar--pdf .pdftoolbar__history {
+      display: none;
+    }
+    .doctoolbar--pdf .doctoolbar__actions {
+      gap: 0.3rem;
+    }
+    .doctoolbar--pdf .segmented__btn {
+      padding-inline: 0.5rem;
+    }
+  }
+  @container doctoolbar (max-width: 450px) {
+    .doctoolbar--pdf .doctoolbar__btn.pdftoolbar__fit {
+      display: none;
+    }
+  }
+  @container doctoolbar (max-width: 440px) {
+    .doctoolbar:not(.doctoolbar--pdf) .doctoolbar__name {
+      display: none;
+    }
+    .doctoolbar:not(.doctoolbar--pdf) .doctoolbar__actions {
+      gap: 0.4rem;
+    }
+  }
+}
 .doctoolbar__name {
   display: flex;
   align-items: center;
@@ -2041,6 +2108,44 @@ body {
 .excerpt-card:focus-within .excerpt-card__menu {
   opacity: 1;
 }
+.excerpt-card__more {
+  display: none;
+}
+@media (hover: none) {
+  .excerpt-card .excerpt-card__menu {
+    opacity: 1;
+    border-color: transparent;
+    background: transparent;
+  }
+  .excerpt-card__menu--open,
+  .excerpt-card .excerpt-card__menu:has(.excerpt-card__colours) {
+    border-color: var(--border);
+    background: var(--bg);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  }
+  .excerpt-card__menu:not(.excerpt-card__menu--open) > :not(.excerpt-card__more) {
+    display: none;
+  }
+  .excerpt-card__more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--fg-muted);
+  }
+  .excerpt-card__quote blockquote.excerpt {
+    padding-right: 56px;
+  }
+  .excerpt-card__menu {
+    top: 2px;
+    right: 2px;
+  }
+}
 .excerpt-card__action {
   display: inline-flex;
   align-items: center;
@@ -2285,4 +2390,137 @@ body {
   border: 2px solid var(--accent);
   border-radius: 4px;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/*
+ * Touch targets (iPad; ipad/PLAN.md Phase D). Every control a finger taps gets at least
+ * 44×44 pt to hit (Apple's minimum), mostly without growing what's drawn: a control's
+ * ::after reaches past its edges. Kept last so these win over the mouse-sized rules.
+ */
+@media (pointer: coarse) {
+  /* Tab bar: taller, with a close button a finger can hit. */
+  .tabbar {
+    height: 45px; /* 44 inside its bottom border */
+  }
+  .tabbar__new,
+  .tabbar__settings {
+    width: 44px;
+  }
+  .tab__close {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    font-size: 1.15rem;
+  }
+  .tab__close::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+
+  /* Document toolbar: 36 px controls in a 48 px bar, each hit across 46 px. */
+  .doctoolbar {
+    height: 48px;
+  }
+  .doctoolbar__btn,
+  .doctoolbar .segmented__btn,
+  .doctoolbar__icon-btn {
+    position: relative;
+    min-width: 44px;
+    min-height: 36px;
+    font-size: 0.85rem;
+  }
+  .doctoolbar__btn::after,
+  .doctoolbar .segmented__btn::after,
+  .doctoolbar__icon-btn::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .pdftoolbar__page-input {
+    min-height: 36px;
+    width: 3.2rem;
+  }
+  /* The field's label (it focuses the field) reaches the full bar height. */
+  .pdftoolbar__page {
+    padding: 6px 0;
+  }
+  /* Segments are hit beyond their group's border, so it can't clip them: round the ends
+     instead. */
+  .doctoolbar .segmented {
+    overflow: visible;
+  }
+  .doctoolbar .segmented > :first-child {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+  }
+  .doctoolbar .segmented > :last-child {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+  }
+
+  .doctoolbar__lead:has(> .doctoolbar__icon-btn) {
+    min-width: 44px;
+  }
+  /* Slide Over (the window is the viewport): a tighter bar, so the rest stays whole. */
+  @media (max-width: 400px) {
+    .doctoolbar {
+      gap: 0.5rem;
+      padding: 0 0.5rem;
+    }
+    .doctoolbar .segmented__btn,
+    .doctoolbar__btn {
+      padding-inline: 0.5rem;
+    }
+  }
+
+  /* Welcome screen. */
+  .welcome__settings {
+    width: 44px;
+    height: 44px;
+  }
+  .welcome__cta {
+    min-height: 44px;
+  }
+
+  /* Menus (tab and group menus, the highlight colours). */
+  .popmenu__item {
+    min-height: 44px;
+  }
+
+  /* The selection's actions. */
+  .selection-popover__btn {
+    min-height: 40px;
+    padding: 6px 12px;
+  }
+
+  /* Notes panel: its header link, the quotes' links, and the cards' menus. */
+  .notes-panel__footer {
+    height: 45px; /* 44 inside its top border */
+  }
+  .notes-panel__open {
+    align-self: stretch;
+    padding: 0 6px;
+    margin-right: -6px;
+  }
+  .excerpt-card__note {
+    min-height: 44px;
+  }
+  .excerpt-card__action {
+    width: 44px;
+    height: 44px;
+  }
+  .excerpt-card__colour {
+    width: 28px;
+    height: 28px;
+  }
+  .excerpt-card__colours {
+    gap: 10px;
+    height: 44px;
+    padding: 0 8px;
+  }
+  .settings-panel__close {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
