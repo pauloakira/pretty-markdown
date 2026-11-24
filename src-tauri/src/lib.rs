@@ -381,6 +381,27 @@ async fn print_page(app: tauri::AppHandle, title: String) -> Result<(), String> 
     }
 }
 
+/// iPadOS: register the page's keyboard shortcuts as hardware key commands, so they work
+/// with a Magic Keyboard whatever has focus and show in the ⌘ overlay. Each is
+/// `{ id, input, modifiers, title, priority }`; a press comes back as a `native-key-command` event.
+/// Desktop gets the keys in the page already.
+#[tauri::command]
+async fn set_key_commands(
+    app: tauri::AppHandle,
+    commands: serde_json::Value,
+) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files().set_key_commands(&commands)
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, commands);
+        Err("Keyboard shortcuts reach the page directly on this platform.".into())
+    }
+}
+
 /// Save As on iPadOS: write `contents` as a new file the user places with the Files "Save
 /// to" sheet (an app can't write to a path it hasn't been given). Returns its path, already
 /// remembered like an opened document, or None if they cancelled. Desktop picks a path
@@ -432,6 +453,7 @@ pub fn run() {
             remember_document,
             print_page,
             save_file_as,
+            set_key_commands,
             read_session,
             write_session,
             clear_session,

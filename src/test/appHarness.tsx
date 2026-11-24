@@ -363,6 +363,7 @@ export function makeContainer(): TestContainer {
     ),
     linkOpener: new FakeLinkOpener(),
     fileWatcher: new TauriFileWatcher(),
+    keyCommands: null,
     picks,
   };
 }

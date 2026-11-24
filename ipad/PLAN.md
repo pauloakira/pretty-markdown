@@ -199,8 +199,28 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   under iPadOS's own menu. Tried in the simulator: long-press → Add to notes; drag a
   handle → Add to notes (two words); long-press → green. Details in
   docs/RESEARCH_READER.md, "The selection popover".
-- Hardware keyboard shortcuts (Magic Keyboard) already work through the same handlers.
-  Verify them.
+- ✅ **Hardware keyboard (Magic Keyboard)** (2026-11-23). Verifying found they didn't work:
+  - Reading a page (no text field focused), *no* key reached the page: iPadOS sends
+    hardware keys to UIKit's key commands, and no view was first responder. With a field
+    focused, plain keys arrived but iPadOS kept several ⌘ combinations (⌘F, ⌘E, ⌘=, ⌘2,
+    ⌘⇧L…). Arrows, Space and Page Down didn't scroll: WebKit scrolls the outer page with
+    them, and documents scroll inside their own scroller.
+  - Now the page hands its shortcut list (`presentation/keyboard/shortcuts.ts`, the
+    shortcuts for what's showing) to the plugin, which registers each as a `UIKeyCommand`
+    on the web view's controller with priority over the system (KeyCommands.swift). A
+    press comes back and is played to the page as its keydown, so the handlers are the
+    Mac's. Titles show in the overlay iPadOS shows while ⌘ is held.
+  - Reading keys (↑ ↓, Space, ⇧Space, Page Up/Down, Home/End, ⌘↑/⌘↓) scroll the document;
+    they and ⌘Z are left to a text field while one is being edited.
+  - ⌘Z / ⌘⇧Z undo and redo highlights outside highlight mode too (the Mac as well).
+  - Tested with real hardware-key events in the simulator (a throwaway XCUITest runner,
+    `typeKey`) and a probe logging each key and the app's state: every ⌘ shortcut in the
+    list reached its handler and did its job, reliably (15/15 for the zoom and undo keys,
+    10/10 straight after a tap on the page); typing in the find field (letters, Space)
+    stays the field's; ↓ ↓, Page Down and Home scrolled (simulator `press_key`).
+  - Not verified: Escape (no tool here sends it; the page side is unit-tested), and a real
+    iPad. In the simulator the first ⌘ press after the test runner brings the app forward
+    was sometimes dropped (likely the simulator connecting its keyboard) — check on a device.
 - ✅ **Export PDF and Save As** (2026-11-23). Both did nothing on the iPad.
   - **Export PDF** opens the system print sheet: WKWebView on iOS ignores
     `window.print()`, so the page asks the plugin (`printPage`, with the web view's print

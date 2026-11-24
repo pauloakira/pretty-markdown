@@ -27,6 +27,8 @@ import { LazyPdfViewerFactory } from "../infrastructure/pdf/LazyPdfViewerFactory
 import { TauriAppWindow } from "../infrastructure/shell/TauriAppWindow";
 import { TauriLinkOpener } from "../infrastructure/shell/TauriLinkOpener";
 import type { PdfViewerFactory } from "../presentation/pdf/PdfViewer";
+import type { HardwareKeyCommands } from "../presentation/keyboard/HardwareKeyCommands";
+import { TauriKeyCommands } from "../infrastructure/keyboard/TauriKeyCommands";
 
 /**
  * Default math preamble — custom macros available in every document, fed to both
@@ -57,6 +59,11 @@ export interface Container {
   readonly linkOpener: LinkOpener;
   /** Tells about files changed on disk (open documents, notes files). */
   readonly fileWatcher: FileWatcher;
+  /**
+   * The shortcuts as system key commands, where the system keeps hardware keys from the
+   * page (iPadOS); null where the page gets them.
+   */
+  readonly keyCommands: HardwareKeyCommands | null;
 }
 
 export function createContainer(): Container {
@@ -100,5 +107,6 @@ export function createContainer(): Container {
     notesService,
     linkOpener,
     fileWatcher,
+    keyCommands: import.meta.env.TAURI_ENV_PLATFORM === "ios" ? new TauriKeyCommands() : null,
   };
 }

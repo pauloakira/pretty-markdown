@@ -497,7 +497,8 @@ export function PdfReader({
     return () => window.removeEventListener("pencil-double-tap", onDoubleTap);
   }, [setTool, tool]);
 
-  // ⌘+ / ⌘− / ⌘0 and ⌘⇧H / Esc while this tab is showing (only the active tab is mounted).
+  // ⌘+ / ⌘− / ⌘0, ⌘Z / ⌘⇧Z and ⌘⇧H / Esc while this tab is showing (only the active tab is
+  // mounted).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!handleRef.current) return;
@@ -506,6 +507,16 @@ export function PdfReader({
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
+      // ⌘Z / ⌘⇧Z undo and redo highlights. In highlight mode pdf.js does it itself; in a
+      // text field (a note) it's the field's own undo.
+      if (!e.altKey && e.code === "KeyZ" && tool !== "highlight") {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && (active.isContentEditable || active.matches("input, textarea"))) return;
+        e.preventDefault();
+        if (e.shiftKey) handleRef.current.redo();
+        else handleRef.current.undo();
+        return;
+      }
       if (!e.shiftKey && !e.altKey && e.code === "BracketLeft") {
         e.preventDefault();
         goBack();
