@@ -124,3 +124,28 @@ export function stepPdfZoom(currentScale: number, direction: 1 | -1): number {
   const below = currentScale * (1 - ZOOM_STEP_TOLERANCE);
   return [...PDF_ZOOM_STEPS].reverse().find((s) => s < below) ?? PDF_ZOOM_MIN;
 }
+
+/** A numeric PDF scale clamped into the allowed range. */
+export function clampPdfScale(scale: number): number {
+  return Math.min(PDF_ZOOM_MAX, Math.max(PDF_ZOOM_MIN, scale));
+}
+
+/**
+ * How close (relative) a pinch must end to the fit-width scale to snap to "Fit width".
+ * Wide enough to land on without trying (a finger's wobble is a few percent), narrow
+ * enough that a deliberate small zoom in or out stays.
+ */
+export const PINCH_FIT_SNAP = 0.06;
+
+/**
+ * The zoom a pinch ends on: its scale, clamped; or "page-width" when that's within
+ * `PINCH_FIT_SNAP` of the fit-width scale, so the page fits the window again (and keeps
+ * fitting as the window resizes) rather than sitting a few points too wide or narrow.
+ */
+export function pinchedPdfZoom(scale: number, fitScale: number | null): PdfZoom {
+  const clamped = clampPdfScale(scale);
+  if (fitScale !== null && fitScale > 0 && Math.abs(clamped / fitScale - 1) <= PINCH_FIT_SNAP) {
+    return "page-width";
+  }
+  return clamped;
+}

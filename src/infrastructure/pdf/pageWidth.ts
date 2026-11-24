@@ -19,3 +19,17 @@ export function typicalWidth(widths: readonly number[]): number | null {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
+
+/** CSS pixels per PDF point (pdf.js's PixelsPerInch.PDF_TO_CSS_UNITS). */
+const PDF_TO_CSS_UNITS = 96 / 72;
+/** The room pdf.js leaves beside a page fitted to the width (its SCROLLBAR_PADDING). */
+const FIT_PADDING = 40;
+
+/**
+ * The scale at which a page `pageWidth` points wide fits a container `containerWidth` CSS
+ * pixels wide, as pdf.js's "page-width" computes it. Null without a width.
+ */
+export function fitWidthScale(containerWidth: number, pageWidth: number | null): number | null {
+  if (!pageWidth || pageWidth <= 0 || containerWidth <= FIT_PADDING) return null;
+  return (containerWidth - FIT_PADDING) / (pageWidth * PDF_TO_CSS_UNITS);
+}

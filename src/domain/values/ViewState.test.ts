@@ -6,6 +6,7 @@ import {
   parseNotesPanel,
   normalizePdfView,
   parsePdfView,
+  pinchedPdfZoom,
   stepPdfZoom,
   type PdfView,
 } from "./ViewState";
@@ -86,5 +87,29 @@ describe("NotesPanelView", () => {
     expect(parseNotesPanel({ widthPx: 500 })).toBeNull();
     expect(parseNotesPanel("open")).toBeNull();
     expect(parseNotesPanel(null)).toBeNull();
+  });
+});
+
+describe("pinchedPdfZoom", () => {
+  it("keeps the scale a pinch ends on", () => {
+    expect(pinchedPdfZoom(1.8, 1.24)).toBe(1.8);
+    expect(pinchedPdfZoom(0.7, 1.24)).toBe(0.7);
+  });
+
+  it("snaps to Fit width when it ends close to it", () => {
+    expect(pinchedPdfZoom(1.24, 1.24)).toBe("page-width");
+    expect(pinchedPdfZoom(1.3, 1.24)).toBe("page-width"); // +4.8%
+    expect(pinchedPdfZoom(1.18, 1.24)).toBe("page-width"); // -4.8%
+  });
+
+  it("doesn't snap a deliberate zoom away from Fit width", () => {
+    expect(pinchedPdfZoom(1.35, 1.24)).toBe(1.35); // +8.9%
+    expect(pinchedPdfZoom(1.1, 1.24)).toBe(1.1);
+  });
+
+  it("stays in range, and doesn't snap without a fit-width scale", () => {
+    expect(pinchedPdfZoom(9, 1.24)).toBe(4);
+    expect(pinchedPdfZoom(0.1, 1.24)).toBe(0.25);
+    expect(pinchedPdfZoom(1.24, null)).toBe(1.24);
   });
 });

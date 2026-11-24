@@ -1296,6 +1296,10 @@ body {
  * selection (and its callout) is off too, except for the instant a stroke becomes a
  * highlight.
  */
+/* The app zooms the pages itself (pinchZoom.ts): WebKit's pinch would zoom the whole app. */
+.pdf-reader__scroll {
+  touch-action: pan-x pan-y;
+}
 .pdf-reader__scroll.pdf-touch-highlighting {
   touch-action: none;
 }
