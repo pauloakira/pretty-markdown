@@ -13,6 +13,11 @@ import type { ScreenBox } from "../pdf/PdfViewer";
 
 /** Space between the selection and the popover, and from the stage's edges (px). */
 const GAP_PX = 8;
+/**
+ * Space below a selection on a touch screen: clear of the end handle iPadOS draws there
+ * (a knob reaching ~14 px below the line), so it can still be dragged.
+ */
+const TOUCH_GAP_PX = 22;
 /** How long "Copied" (or "Couldn't copy") shows on Copy as quote. */
 const COPIED_MS = 1500;
 
@@ -32,12 +37,17 @@ interface SelectionPopoverProps {
   onCopy: () => Promise<boolean>;
   /** Escape: hide the popover (the selection stays). */
   onDismiss: () => void;
+  /**
+   * Below the selection rather than above (a touch screen: iPadOS shows its own menu,
+   * Copy · Look Up · …, above a selection).
+   */
+  below?: boolean;
 }
 
 /**
  * Actions by a selection in a PDF (docs/RESEARCH_READER.md): highlight it in a colour, Add
  * to notes (⌘E), Copy as quote. Notes on a quote are written in the Notes panel.
- * Shown on the Mac; the iPad keeps pdf.js's Highlight button and the system's menu.
+ * On the iPad it goes below the selection, under the system's own menu.
  */
 export function SelectionPopover({
   bounds,
@@ -48,8 +58,13 @@ export function SelectionPopover({
   onAddToNotes,
   onCopy,
   onDismiss,
+  below: preferBelow = false,
 }: SelectionPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // The selection when the popover was pressed. iPadOS clears the text selection as it
+  // turns a tap into a click, before the button's handler runs, which would leave nothing
+  // to highlight or quote: it's put back first (as for pdf.js's Highlight button).
+  const pressedRange = useRef<Range | null>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(
     null,
   );
@@ -74,13 +89,18 @@ export function SelectionPopover({
       Math.min(centre - width / 2, stage.width - width - GAP_PX),
     );
     const above = bounds.top - stage.top - height - GAP_PX;
-    const below = bounds.bottom - stage.top + GAP_PX;
-    const top =
-      above >= GAP_PX || below + height > stage.height - GAP_PX
+    const below = bounds.bottom - stage.top + (preferBelow ? TOUCH_GAP_PX : GAP_PX);
+    const fitsAbove = above >= GAP_PX;
+    const fitsBelow = below + height <= stage.height - GAP_PX;
+    const top = preferBelow
+      ? fitsBelow || !fitsAbove
+        ? Math.min(below, stage.height - height - GAP_PX)
+        : above
+      : fitsAbove || !fitsBelow
         ? Math.max(GAP_PX, above)
         : below;
     setPlace({ left, top });
-  }, [bounds, stageRef]);
+  }, [bounds, stageRef, preferBelow]);
 
   useEffect(() => {
     if (copied === null) return;
@@ -110,6 +130,22 @@ export function SelectionPopover({
       aria-label="Selection"
       // Keep the text selection: a press on the popover would otherwise clear it.
       onMouseDown={(event) => event.preventDefault()}
+      onPointerDownCapture={() => {
+        const selection = document.getSelection();
+        pressedRange.current =
+          selection && !selection.isCollapsed && selection.rangeCount > 0
+            ? selection.getRangeAt(0).cloneRange()
+            : null;
+      }}
+      onClickCapture={() => {
+        const range = pressedRange.current;
+        pressedRange.current = null;
+        const selection = document.getSelection();
+        if (range && selection && selection.isCollapsed) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }}
     >
       {canHighlight && (
         <>

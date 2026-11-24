@@ -33,10 +33,10 @@ const VIEW_SETTLE_MS = 400;
 const CURRENT_LOOKAHEAD_PAGES = 0.2;
 
 /**
- * Whether selections get the app's popover (the Mac). On a touch screen pdf.js's own
- * Highlight button and the system's menu stay, until the iPad's own Add to notes.
+ * A touch screen (iPad): the selection popover goes below a selection, as iPadOS puts its
+ * own menu above it.
  */
-const SELECTION_POPOVER = !(typeof navigator !== "undefined" && navigator.maxTouchPoints > 0);
+const TOUCH_SCREEN = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
 
 /** How long a notes notice stays (errors stay until dismissed). */
 const NOTICE_MS = 8000;
@@ -227,7 +227,7 @@ export function PdfReader({
         onHighlightRemoved: (place) => {
           if (!cancelled) onHighlightRemovedRef.current(place);
         },
-        selectionActions: SELECTION_POPOVER,
+        selectionActions: true,
         onSelectionChange: (next) => {
           if (!cancelled) setSelection(next);
         },
@@ -638,6 +638,7 @@ export function PdfReader({
             onAddToNotes={() => void addToNotes()}
             onCopy={copyAsQuote}
             onDismiss={dismissSelection}
+            below={TOUCH_SCREEN}
           />
         )}
         {status.kind === "loading" && <div className="pdf-reader__status">Opening {name}…</div>}

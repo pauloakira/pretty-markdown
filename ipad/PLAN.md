@@ -194,6 +194,11 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     the status bar or the home indicator).
   - Still to do: the Notes panel beside the page is too narrow in Split View; it should
     become a sheet there (the R3 bottom-sheet card).
+- ✅ **Add to notes by the selection** (2026-11-23): the selection popover (colours, Add to
+  notes, Copy as quote) now shows on the iPad too, below the selection and its end handle,
+  under iPadOS's own menu. Tried in the simulator: long-press → Add to notes; drag a
+  handle → Add to notes (two words); long-press → green. Details in
+  docs/RESEARCH_READER.md, "The selection popover".
 - Hardware keyboard shortcuts (Magic Keyboard) already work through the same handlers.
   Verify them.
 - ✅ **Export PDF and Save As** (2026-11-23). Both did nothing on the iPad.
