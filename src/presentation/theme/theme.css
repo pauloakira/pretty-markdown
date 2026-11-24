@@ -1276,6 +1276,9 @@ body {
 }
 .pdf-reader__scroll {
   overflow: auto;
+  /* Its own stacking context: pdf.js's layers (links reach z-index 10+) stay under the
+     overlays beside the page, such as the selection popover. */
+  isolation: isolate;
 }
 /*
  * pdf.js lays pages out for the default content-box model. Our global `* { border-box }`
@@ -2487,10 +2490,24 @@ body {
     min-height: 44px;
   }
 
-  /* The selection's actions. */
+  /* The selection's actions: full-size buttons and colours, no keyboard hint. */
+  .selection-popover {
+    height: 52px;
+  }
   .selection-popover__btn {
-    min-height: 40px;
-    padding: 6px 12px;
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+  .selection-popover__colours {
+    gap: 12px;
+    padding: 0 6px;
+  }
+  .selection-popover__colour {
+    width: 30px;
+    height: 30px;
+  }
+  .selection-popover__key {
+    display: none;
   }
 
   /* Notes panel: its header link, the quotes' links, and the cards' menus. */

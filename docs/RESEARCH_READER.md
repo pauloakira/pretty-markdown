@@ -107,7 +107,7 @@ card). `removeHighlight` reaches only
 highlights pdf.js has an editor for (made or opened for editing since the document
 opened); removing a quote from the Notes panel will need the file's other highlights too.
 
-### The selection popover (Mac)
+### The selection popover
 
 Selecting text in a PDF shows a small dark bar above the selection (below it when there's
 no room), in place of pdf.js's own Highlight button. It appears once the selection is made
@@ -129,8 +129,17 @@ A dragged selection takes whole words: when the pointer is released, an end that
 inside a word moves to the word's edge (`pdf/wordSnap.ts`), visibly, so a quote and its
 highlight never stop at "grid po". Ends between words and punctuation stay where they are.
 
-The iPad keeps pdf.js's Highlight button and the system's own menu for now; its Add to
-notes is a card of its own (bigger targets, no shortcuts, per the design).
+**On the iPad** (2026-11-23) the same popover shows, below the selection: iPadOS puts its
+own menu (Copy · Look Up · Translate · …) above it, and the popover sits clear of the end
+handle so the selection can still be stretched. Its colours and buttons are full-size
+(44 pt) and it shows no shortcut. A long-press on a word, then Add to notes, quotes it;
+dragging a handle first quotes more. iPadOS clears the text selection as it turns a tap
+into a click, so the popover remembers the selection when pressed and puts it back before
+acting (as the viewer does for pdf.js's own button). The PDF's scroller is its own stacking
+context, so the page's link layer can't come up through the popover.
+
+Adding a highlight that's already on the page to the notes (hold it and drag it to the
+panel, or an action on it) is a card of its own.
 
 ### Excerpts in the notes
 
@@ -220,7 +229,7 @@ Board joins the switch in R4. The Notes · Outline switch of the design comes wi
 
 | | What | Status |
 |-|------|--------|
-| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, following a quote's link (with Back), the Notes panel and the selection popover (Mac) done |
+| R1 | Linked notes: Add to notes, the Notes panel, quote ↔ page links (Mac, then iPad) | In progress — model, notes file, Add to notes (Mac), quote ↔ highlight removal, excerpt blocks in the notes, following a quote's link (with Back), the Notes panel and the selection popover (Mac and iPad) done |
 | R2 | Peek and pin references | Planned |
 | R3 | Outline view of the notes file, "Add to…" | Planned |
 | R4 | Board view | Planned, last |
