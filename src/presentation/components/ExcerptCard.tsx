@@ -54,9 +54,12 @@ export function ExcerptCard({
 }: ExcerptCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(isNew);
   const [draft, setDraft] = useState(note);
   const [picking, setPicking] = useState(false);
+  // On a touch screen the actions sit behind a More button (there's no hover to show them).
+  const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
   // The note as changed elsewhere while the reader was writing (another tab or app), until
   // they choose which to keep.
@@ -205,6 +208,18 @@ export function ExcerptCard({
     };
   }, [isNew]);
 
+  // An open menu closes when the reader touches anywhere else.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenuOpen(false);
+      setPicking(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [menuOpen]);
+
   useEffect(() => {
     if (copied === null) return;
     const done = window.setTimeout(() => setCopied(null), COPIED_MS);
@@ -219,7 +234,12 @@ export function ExcerptCard({
       aria-label={`Quote from p. ${excerpt.page}`}
     >
       <Html className="excerpt-card__quote" html={quoteHtml} />
-      <div className="excerpt-card__menu" role="toolbar" aria-label="Quote">
+      <div
+        ref={menuRef}
+        className={`excerpt-card__menu${menuOpen ? " excerpt-card__menu--open" : ""}`}
+        role="toolbar"
+        aria-label="Quote"
+      >
         {picking ? (
           <div className="excerpt-card__colours" role="group" aria-label="Colour">
             {HIGHLIGHT_COLORS.map((c) => (
@@ -232,6 +252,7 @@ export function ExcerptCard({
                 aria-pressed={c.name === excerpt.color}
                 onClick={() => {
                   setPicking(false);
+                  setMenuOpen(false);
                   if (c.name !== excerpt.color) onColor(c.name);
                 }}
               />
@@ -262,6 +283,19 @@ export function ExcerptCard({
             </button>
           </>
         )}
+        <button
+          type="button"
+          className="excerpt-card__more"
+          aria-label={menuOpen ? "Close" : "More"}
+          title={menuOpen ? "Close" : "Colour, copy or delete"}
+          aria-expanded={menuOpen}
+          onClick={() => {
+            setMenuOpen((open) => !open);
+            setPicking(false);
+          }}
+        >
+          {menuOpen ? <CloseIcon /> : <MoreIcon />}
+        </button>
       </div>
       {editing ? (
         <div className="excerpt-card__note excerpt-card__note--editing">
@@ -374,6 +408,22 @@ function CheckIcon() {
   return (
     <svg {...iconProps}>
       <path d="M3 8.5l3 3 7-7" />
+    </svg>
+  );
+}
+function MoreIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="3.5" cy="8" r="0.9" fill="currentColor" />
+      <circle cx="8" cy="8" r="0.9" fill="currentColor" />
+      <circle cx="12.5" cy="8" r="0.9" fill="currentColor" />
+    </svg>
+  );
+}
+function CloseIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M4 4l8 8M12 4l-8 8" />
     </svg>
   );
 }

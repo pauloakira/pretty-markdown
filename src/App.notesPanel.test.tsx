@@ -236,6 +236,38 @@ describe("The Notes panel", () => {
     expect(viewer.recoloured).toEqual([{ place: { page: 4, rect: [72, 600, 300, 612] }, color: "green" }]);
   });
 
+  it("on a touch screen, More opens the quote's actions and a touch elsewhere closes them", async () => {
+    NOTES.set(NOTES_PATH, SEEDED);
+    const app = makeContainer();
+    await launch(app);
+    const viewer = await openPdf(app);
+    viewer.places.push({ page: 4, rect: [72, 600, 300, 612] });
+    await act(async () => button("Notes").click());
+    await settle();
+    const menu = () => cards()[0].querySelector(".excerpt-card__menu");
+
+    // (The CSS shows only More on a touch screen until it's open; hover shows all on a Mac.)
+    const more = within(cards()[0], "More");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => more.click());
+    expect(menu()?.classList.contains("excerpt-card__menu--open")).toBe(true);
+    expect(within(cards()[0], "Close").getAttribute("aria-expanded")).toBe("true");
+
+    // A touch elsewhere (another card, the page) closes it.
+    await act(async () => {
+      cards()[1].dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })); // jsdom has no PointerEvent
+    });
+    expect(menu()?.classList.contains("excerpt-card__menu--open")).toBe(false);
+
+    // Picking a colour from it closes it too.
+    await act(async () => within(cards()[0], "More").click());
+    await act(async () => within(cards()[0], "Colour").click());
+    await act(async () => within(cards()[0], "Green").click());
+    await settle();
+    expect(menu()?.classList.contains("excerpt-card__menu--open")).toBe(false);
+    expect(NOTES.get(NOTES_PATH)).toContain("ex=abc123&color=green&rect=");
+  });
+
   it("Copy copies the quote as Markdown", async () => {
     const writeText = vi.fn(async (_text: string) => {});
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
