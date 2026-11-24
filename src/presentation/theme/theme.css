@@ -2117,8 +2117,7 @@ body {
     border-color: transparent;
     background: transparent;
   }
-  .excerpt-card__menu--open,
-  .excerpt-card .excerpt-card__menu:has(.excerpt-card__colours) {
+  .excerpt-card .excerpt-card__menu--open {
     border-color: var(--border);
     background: var(--bg);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);

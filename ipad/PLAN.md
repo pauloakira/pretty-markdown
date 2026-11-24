@@ -160,7 +160,21 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   - Tested: unit tests, and in the simulator with real two-finger touches — 121% → 241%
     anchored at the fingers, back to Fit width by the snap, out to 60% without one, in
     highlight mode, and one-finger scrolling unchanged.
-- Bigger touch targets in the tab bar and toolbars; hover-only details made reachable.
+- ✅ **Touch targets** (2026-11-23): every control a finger taps is hit across at least
+  44×44 pt (Apple's minimum), on touch screens only (`@media (pointer: coarse)`, the
+  "Touch targets" block at the end of theme.css); the Mac is unchanged, size for size.
+  - Tab bar 44 pt tall, with a 28 pt close button hit across 44; + and the gear 44 wide.
+  - Document toolbar 48 pt with 36 pt controls, each hit across 46 pt by a `::after`
+    reaching past it (segmented groups no longer clip their segments to allow it). The
+    narrow-window steps start wider to match, and in Slide Over (≤ 400 pt) the page field
+    goes and the bar tightens; checked at 320–1366 pt with nothing past the edge.
+  - Menus, the selection's actions, the Notes panel's footer and "Add a note" rows.
+  - **Quote cards' actions** (Colour, Copy, Delete) only showed on hover. On a touch
+    screen each card has a ⋯ button that opens them as 44 pt buttons; choosing a colour
+    or touching elsewhere closes it.
+  - Measured with an audit that probes what a touch at each point would hit
+    (`elementFromPoint`), not just the drawn size; tried in the simulator (toolbar, ⋯ →
+    Colour → green saved, touch elsewhere closes).
 - ✅ **Settings gear, landscape and Split View** (2026-11-23).
   - The gear was the "⚙" character, drawn on iPadOS as an emoji wider than its 38 px
     button, so it was cut off at the tab bar's edge. It's now a drawn icon
