@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useContainer } from "../../composition/ContainerContext";
 import type { Document, MarkdownDocument } from "../../domain/entities/Document";
+import type { OpenOutcome } from "../../application/services/DocumentService";
 import type { TabId } from "../../domain/entities/Tab";
 import type { GroupId } from "../../domain/entities/TabGroup";
 import { activeTab, findTabByPath } from "../../domain/entities/Workspace";
@@ -50,16 +51,16 @@ export function useWorkspace() {
     }
   }, [container, tabManager]);
 
+  /** Open a known path; the outcome says whether it opened, or why not. */
   const openPath = useCallback(
-    async (path: string): Promise<Document | null> => {
+    async (path: string): Promise<OpenOutcome> => {
       const outcome = await container.documentService.load(path);
       if (outcome.kind === "opened") {
         tabManager.openDocument(outcome.document);
         setError(null);
-        return outcome.document;
       }
       if (outcome.kind === "error") setError(outcome.message);
-      return null;
+      return outcome;
     },
     [container, tabManager],
   );

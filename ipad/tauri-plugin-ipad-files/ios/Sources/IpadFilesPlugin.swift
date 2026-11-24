@@ -187,11 +187,34 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
       readable = actual
     }
     if let error = coordinationError {
-      invoke.reject("Couldn't open '\(url.lastPathComponent)': \(error.localizedDescription)")
+      if isMissingFile(error) {
+        invoke.reject("'\(url.lastPathComponent)' \(missingFile)")
+      } else {
+        invoke.reject("Couldn't open '\(url.lastPathComponent)': \(error.localizedDescription)")
+      }
       return
     }
     invoke.resolve(["path": readable.path])
   }
+}
+
+/// The end of the message for a document that isn't there any more; the page recognises it
+/// to drop the file from Recent. Keep in step with `MISSING_FILE` in src-tauri/src/lib.rs.
+let missingFile = "isn't there any more. It may have been moved, renamed or deleted."
+
+/// Whether a file error means there's no file at that path (deleted, or a temporary copy
+/// the system has cleared away).
+func isMissingFile(_ error: NSError) -> Bool {
+  if error.domain == NSCocoaErrorDomain,
+    error.code == NSFileNoSuchFileError || error.code == NSFileReadNoSuchFileError
+  {
+    return true
+  }
+  if error.domain == NSPOSIXErrorDomain, error.code == Int(ENOENT) { return true }
+  if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+    return isMissingFile(underlying)
+  }
+  return false
 }
 
 // MARK: - Printing and Save As

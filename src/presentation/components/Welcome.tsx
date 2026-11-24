@@ -1,14 +1,21 @@
 import { SettingsIcon } from "./SettingsIcon";
-import type { RecentFile } from "../../domain/values/RecentFile";
+import { recentLocation, type RecentFile } from "../../domain/values/RecentFile";
 
 interface WelcomeProps {
   recents: readonly RecentFile[];
   onOpen: () => void;
   onOpenRecent: (path: string) => void;
+  onClearRecents: () => void;
   onOpenSettings: () => void;
 }
 
-export function Welcome({ recents, onOpen, onOpenRecent, onOpenSettings }: WelcomeProps) {
+export function Welcome({
+  recents,
+  onOpen,
+  onOpenRecent,
+  onClearRecents,
+  onOpenSettings,
+}: WelcomeProps) {
   return (
     <div className="welcome">
       <button
@@ -29,7 +36,12 @@ export function Welcome({ recents, onOpen, onOpenRecent, onOpenSettings }: Welco
 
       {recents.length > 0 && (
         <div className="welcome__recent">
-          <div className="welcome__recent-title">Recent</div>
+          <div className="welcome__recent-header">
+            <div className="welcome__recent-title">Recent</div>
+            <button className="welcome__recent-clear" onClick={onClearRecents}>
+              Clear
+            </button>
+          </div>
           <ul className="welcome__recent-list">
             {recents.map((file) => (
               <li key={file.path}>
@@ -39,7 +51,13 @@ export function Welcome({ recents, onOpen, onOpenRecent, onOpenSettings }: Welco
                   onClick={() => onOpenRecent(file.path)}
                 >
                   <span className="welcome__recent-name">{file.name}</span>
-                  <span className="welcome__recent-path">{file.path}</span>
+                  {/* The marks keep the line left to right: the location is cut at its
+                      start (to keep the nearest folder), which needs right-to-left. */}
+                  <span className="welcome__recent-path">
+                    {"\u200E"}
+                    {recentLocation(file.path)}
+                    {"\u200E"}
+                  </span>
                 </button>
               </li>
             ))}

@@ -169,8 +169,27 @@ fn read_text_file(path: String) -> Result<String, String> {
 }
 
 fn read_text(local: &Path, path: &str) -> Result<String, String> {
-    std::fs::read_to_string(local).map_err(|e| format!("Failed to read '{path}': {e}"))
+    std::fs::read_to_string(local).map_err(|e| read_error(path, &e))
 }
+
+/// Why a document couldn't be read, for the reader. A file that isn't there gets one plain
+/// message (it ends in `MISSING_FILE`, which the frontend recognises to drop the file from
+/// Recent); anything else keeps the system's explanation.
+fn read_error(path: &str, error: &std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        let name = Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.to_owned());
+        return format!("'{name}' {MISSING_FILE}");
+    }
+    format!("Failed to read '{path}': {error}")
+}
+
+/// The end of the message for a document that isn't there any more (moved, renamed or
+/// deleted). Keep in step with `MISSING_FILE` in src/domain/values/MissingFile.ts and the
+/// iPad plugin's `missingFile`.
+const MISSING_FILE: &str = "isn't there any more. It may have been moved, renamed or deleted.";
 
 /// Read a text file that may not exist yet: `None` when there's no file at `path`, an error
 /// when there is one but it can't be read. A document's notes file is the case: "no notes
@@ -219,8 +238,7 @@ fn read_bytes(
     path: &str,
     max_bytes: Option<u64>,
 ) -> Result<tauri::ipc::Response, String> {
-    let mut file =
-        std::fs::File::open(local).map_err(|e| format!("Failed to read '{path}': {e}"))?;
+    let mut file = std::fs::File::open(local).map_err(|e| read_error(path, &e))?;
     let mut bytes = Vec::new();
     match max_bytes {
         Some(limit) => file.take(limit).read_to_end(&mut bytes),
@@ -563,6 +581,28 @@ mod tests {
             },
         )
         .map(|_| ())
+    }
+
+    #[test]
+    fn a_missing_document_gets_a_plain_message() {
+        let dir = temp_dir("read-missing");
+        let missing = dir.join("VEM paper.pdf");
+        let path = missing.to_string_lossy().into_owned();
+        assert_eq!(
+            read_text(&missing, &path).unwrap_err(),
+            format!("'VEM paper.pdf' {MISSING_FILE}")
+        );
+        assert_eq!(
+            read_bytes(&missing, &path, Some(5)).err().unwrap(),
+            format!("'VEM paper.pdf' {MISSING_FILE}")
+        );
+        // Other failures keep the system's explanation.
+        let folder = dir.join("folder.md");
+        std::fs::create_dir(&folder).unwrap();
+        assert!(read_text(&folder, "folder.md")
+            .unwrap_err()
+            .starts_with("Failed to read 'folder.md'"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

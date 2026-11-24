@@ -35,6 +35,20 @@ export function fileName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/**
+ * A `file://` URL as the plain path the app uses as a document's identity (older iPad
+ * builds kept the picker's URL in Recent and in the session); anything else is returned
+ * unchanged.
+ */
+export function plainPath(path: string): string {
+  if (!path.startsWith("file://")) return path;
+  try {
+    return decodeURIComponent(new URL(path).pathname);
+  } catch {
+    return path;
+  }
+}
+
 /** The kind a file is opened as, by extension: `.pdf` is a PDF, anything else markdown. */
 export function documentKindForPath(path: string): DocumentKind {
   return /\.pdf$/i.test(path) ? "pdf" : "markdown";

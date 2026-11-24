@@ -5,6 +5,7 @@ import type {
   FileWriter,
 } from "../../domain/ports/FileSystem";
 import { err, ok, type Result } from "../../domain/values/Result";
+import { MISSING_FILE } from "../../domain/values/MissingFile";
 import { DocumentService } from "./DocumentService";
 
 class FakePicker implements FilePicker {
@@ -148,16 +149,39 @@ describe("DocumentService — PDFs", () => {
     const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
 
     const outcome = await service.load("/downloads/paper.pdf");
-    expect(outcome).toEqual({ kind: "error", message: "'paper.pdf' isn't a valid PDF file." });
+    expect(outcome).toEqual({
+      kind: "error",
+      message: "'paper.pdf' isn't a valid PDF file.",
+      missing: false,
+    });
   });
 
   it("reports a missing PDF as an error (so restore drops it)", async () => {
-    const fake = new FakeReader(ok(""), err("Failed to read '/gone.pdf': No such file"));
+    const message = `'gone.pdf' ${MISSING_FILE}`;
+    const fake = new FakeReader(ok(""), err(message));
     const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
 
-    expect(await service.load("/gone.pdf")).toEqual({
-      kind: "error",
-      message: "Failed to read '/gone.pdf': No such file",
+    expect(await service.load("/gone.pdf")).toEqual({ kind: "error", message, missing: true });
+  });
+
+  it("tells a file that's gone from one that can't be read", async () => {
+    const gone = new FakeReader(err(`'a.md' ${MISSING_FILE}`), err("unused"));
+    const locked = new FakeReader(err("Failed to read '/a.md': Permission denied"), err("unused"));
+    const load = (reader: FakeReader) =>
+      new DocumentService(new FakePicker(null), reader, new FakeWriter()).load("/a.md");
+
+    expect(await load(gone)).toMatchObject({ kind: "error", missing: true });
+    expect(await load(locked)).toMatchObject({ kind: "error", missing: false });
+  });
+
+  it("opens a file:// URL under its plain path", async () => {
+    const fake = new FakeReader(ok("# A"), err("unused"));
+    const service = new DocumentService(new FakePicker(null), fake, new FakeWriter());
+
+    const outcome = await service.load("file:///Papers/My%20notes.md");
+    expect(outcome.kind === "opened" && outcome.document).toMatchObject({
+      path: "/Papers/My notes.md",
+      name: "My notes.md",
     });
   });
 

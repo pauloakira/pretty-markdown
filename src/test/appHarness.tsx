@@ -36,6 +36,7 @@ import type {
   PassageTarget,
 } from "../presentation/pdf/PdfViewer";
 import { disk, listeners } from "./tauriMock";
+import { MISSING_FILE } from "../domain/values/MissingFile";
 
 /*
  * Shared harness for App-level tests: the real App and services wired to in-memory fakes
@@ -303,19 +304,22 @@ export type TestContainer = Container & {
   picks: (string | null)[];
 };
 
+/** What the native side says for a file that isn't there (src-tauri/src/lib.rs `read_error`). */
+const gone = (path: string) => `'${path.split("/").pop()}' ${MISSING_FILE}`;
+
 export function makeContainer(): TestContainer {
   const picks: (string | null)[] = [];
   const reader: FileReader = {
     async readTextFile(path) {
       const notes = NOTES.get(path);
       if (notes !== undefined) return ok(notes);
-      return path in FILES ? ok(FILES[path]) : err("missing");
+      return path in FILES ? ok(FILES[path]) : err(gone(path));
     },
     async readBytes(path, maxBytes) {
       const written = WRITTEN.get(path);
       if (written) return ok(maxBytes === undefined ? written : written.slice(0, maxBytes));
       const text = PDFS[path] ?? FILES[path];
-      if (text === undefined) return err(`Failed to read '${path}': No such file`);
+      if (text === undefined) return err(gone(path));
       const bytes = new TextEncoder().encode(text);
       return ok(maxBytes === undefined ? bytes : bytes.slice(0, maxBytes));
     },
