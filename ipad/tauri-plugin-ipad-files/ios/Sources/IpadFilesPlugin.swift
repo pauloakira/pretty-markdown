@@ -201,6 +201,15 @@ extension IpadFilesPlugin {
   /// sends the PDF. WKWebView on iOS ignores `window.print()`, so the page asks for this.
   /// The page's print stylesheet applies, as it does on the Mac, so only the document it
   /// put in `#print-root` is printed. Resolves when the sheet closes.
+  /// The page's keyboard shortcuts, as hardware key commands (KeyCommands.swift).
+  @objc public func setKeyCommands(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(KeyCommandsArgs.self)
+    DispatchQueue.main.async {
+      if let webView = self.webView { KeyCommands.set(args.commands, on: webView) }
+      invoke.resolve()
+    }
+  }
+
   @objc public func printPage(_ invoke: Invoke) throws {
     let args = try invoke.parseArgs(PrintArgs.self)
     DispatchQueue.main.async {

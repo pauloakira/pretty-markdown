@@ -36,6 +36,11 @@ struct ExportArgs<'a> {
     contents: &'a str,
 }
 
+#[derive(Serialize)]
+struct KeyCommandsArgs<'a, T: Serialize> {
+    commands: &'a T,
+}
+
 #[derive(Deserialize)]
 struct MaybePathResponse {
     path: Option<String>,
@@ -78,6 +83,21 @@ impl<R: Runtime> IpadFiles<R> {
         self.0
             .run_mobile_plugin::<MaybePathResponse>("exportFile", ExportArgs { name, contents })
             .map(|r| r.path)
+            .map_err(|e| e.to_string())
+    }
+}
+
+impl<R: Runtime> IpadFiles<R> {
+    /// Register the page's keyboard shortcuts as hardware key commands (KeyCommands.swift):
+    /// a list of `{ id, input, modifiers, title, priority }`. A press comes back to the page as a
+    /// `native-key-command` event carrying the id.
+    pub fn set_key_commands<T: Serialize>(&self, commands: &T) -> Result<(), String> {
+        self.0
+            .run_mobile_plugin::<serde::de::IgnoredAny>(
+                "setKeyCommands",
+                KeyCommandsArgs { commands },
+            )
+            .map(|_| ())
             .map_err(|e| e.to_string())
     }
 }

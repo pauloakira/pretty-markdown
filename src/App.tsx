@@ -27,6 +27,7 @@ import { useRecentFiles } from "./presentation/hooks/useRecentFiles";
 import { useSession } from "./presentation/hooks/useSession";
 import { useSettings } from "./presentation/hooks/useSettings";
 import { useTabKeyboard } from "./presentation/hooks/useTabKeyboard";
+import { useHardwareKeyCommands } from "./presentation/hooks/useHardwareKeyCommands";
 import { useWorkspace } from "./presentation/hooks/useWorkspace";
 
 export default function App() {
@@ -106,7 +107,7 @@ export default function App() {
   const openDocumentLink = useCallback((href: string) => openFileLink(href), [openFileLink]);
 
   // Parsed PDFs are kept for quick tab switches; release those whose tabs have closed.
-  const { pdfViewer, tabManager } = useContainer();
+  const { pdfViewer, tabManager, keyCommands } = useContainer();
   const openPdfPaths = workspace.tabs
     .flatMap((t) => (t.document.kind === "pdf" ? [t.document.path] : []))
     .join("\n");
@@ -209,6 +210,7 @@ export default function App() {
     [openViaDialog, closeActive, focusSibling, activateIndex, activeKind, activeMarkdown, mode, openFind, saveActive, saveActiveAs, toggleActiveMode, exportActive, contents],
   );
   useTabKeyboard(shortcuts);
+  useHardwareKeyCommands(keyCommands, activeKind);
 
   // On window close: prompt to reopen tabs next time (or just quit if nothing is open).
   const onCloseRequest = useCallback(() => {
