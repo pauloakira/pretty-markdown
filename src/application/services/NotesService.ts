@@ -1,5 +1,7 @@
 import { fileName } from "../../domain/entities/Document";
+import type { FolderAccess } from "../../domain/ports/FolderAccess";
 import type { NotesStore } from "../../domain/ports/NotesStore";
+import { folderHolds, isNoAccess } from "../../domain/values/FileAccess";
 import {
   newExcerptId,
   normalizeExcerptText,
@@ -59,6 +61,12 @@ export type NoteSaved =
   | { readonly kind: "changed"; readonly note: string }
   | { readonly kind: "gone" };
 
+/**
+ * What asking for the notes' folder came to: allowed; the reader cancelled; or they allowed
+ * a folder that doesn't hold the document, so its notes still can't be reached.
+ */
+export type FolderAllowed = "allowed" | "cancelled" | "elsewhere";
+
 /** A document's notes file, as read for the Notes panel. */
 export interface DocumentNotes {
   readonly notesPath: string;
@@ -80,7 +88,26 @@ export class NotesService {
     private readonly store: NotesStore,
     /** Values in [0, 1), for excerpt ids. */
     private readonly random: () => number = Math.random,
+    /** Where folders must be allowed before files can be made in them (iPadOS); else null. */
+    private readonly folderAccess: FolderAccess | null = null,
   ) {}
+
+  /**
+   * Whether `error` (from reading or changing notes) means the notes' folder must be
+   * allowed first, and that can be asked for here.
+   */
+  needsFolder(error: string): boolean {
+    return this.folderAccess !== null && isNoAccess(error);
+  }
+
+  /** Ask the reader to allow the folder of the document at `documentPath`, for its notes. */
+  async allowNotesFolder(documentPath: string): Promise<Result<FolderAllowed>> {
+    if (this.folderAccess === null) return ok("allowed");
+    const picked = await this.folderAccess.allowFolderOf(documentPath);
+    if (!picked.ok) return err(`Couldn't allow the folder: ${picked.error}`);
+    if (picked.value === null) return ok("cancelled");
+    return ok(folderHolds(picked.value, notesPathFor(documentPath)) ? "allowed" : "elsewhere");
+  }
 
   /** The notes file of the document at `documentPath`. */
   notesPathFor(documentPath: string): string {

@@ -183,8 +183,26 @@ fn read_error(path: &str, error: &std::io::Error) -> String {
             .unwrap_or_else(|| path.to_owned());
         return format!("'{name}' {MISSING_FILE}");
     }
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return no_access(path);
+    }
     format!("Failed to read '{path}': {error}")
 }
+
+/// A file the app may not use: on iPadOS, one in a folder the reader hasn't allowed (a
+/// notes file beside a PDF picked on its own). Ends in `NO_ACCESS`, which the frontend
+/// recognises to offer the folder picker.
+fn no_access(path: &str) -> String {
+    let name = Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_owned());
+    format!("'{name}' {NO_ACCESS}")
+}
+
+/// The end of the message for a file the app has no permission to use. Keep in step with
+/// `NO_ACCESS` in src/domain/values/FileAccess.ts.
+const NO_ACCESS: &str = "can't be used: pretty-markdown hasn't been allowed into its folder.";
 
 /// The end of the message for a document that isn't there any more (moved, renamed or
 /// deleted). Keep in step with `MISSING_FILE` in src/domain/values/MissingFile.ts and the
@@ -204,6 +222,7 @@ fn read_text_if_exists(local: &Path, path: &str) -> Result<Option<String>, Strin
     match std::fs::read_to_string(local) {
         Ok(text) => Ok(Some(text)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => Err(no_access(path)),
         Err(e) => Err(format!("Failed to read '{path}': {e}")),
     }
 }
@@ -256,7 +275,10 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 }
 
 fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> {
-    std::fs::write(local, contents).map_err(|e| format!("Failed to write '{path}': {e}"))
+    std::fs::write(local, contents).map_err(|e| match e.kind() {
+        std::io::ErrorKind::PermissionDenied => no_access(path),
+        _ => format!("Failed to write '{path}': {e}"),
+    })
 }
 
 /// Write raw bytes to a file (overwriting), e.g. a PDF with new highlights. Native side of
@@ -442,6 +464,25 @@ async fn save_file_as(
     }
 }
 
+/// iPadOS: let the reader allow the folder of the document at `path` (the Files folder
+/// picker, opened at that folder), so files beside it, like its notes, can be made and
+/// read. Returns the folder chosen, already remembered, or None if they cancelled. Desktop
+/// apps may use any folder: nothing to ask.
+#[tauri::command]
+async fn allow_folder(app: tauri::AppHandle, path: String) -> Result<Option<String>, String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri_plugin_ipad_files::IpadFilesExt;
+        app.ipad_files()
+            .allow_folder(&file_path(&path).to_string_lossy())
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, path);
+        Err("Folders don't need allowing on this platform.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -471,6 +512,7 @@ pub fn run() {
             remember_document,
             print_page,
             save_file_as,
+            allow_folder,
             set_key_commands,
             read_session,
             write_session,
@@ -581,6 +623,27 @@ mod tests {
             },
         )
         .map(|_| ())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_in_a_folder_without_access_says_so() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir("no-access");
+        let locked = dir.join("locked");
+        std::fs::create_dir_all(&locked).unwrap();
+        let notes = locked.join("Paper.notes.md");
+        std::fs::write(&notes, "notes").unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let path = notes.to_string_lossy().into_owned();
+        let read = read_text_if_exists(&notes, &path);
+        let written = write_text(&notes, &path, "new".into());
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(read.unwrap_err(), format!("'Paper.notes.md' {NO_ACCESS}"));
+        assert_eq!(
+            written.unwrap_err(),
+            format!("'Paper.notes.md' {NO_ACCESS}")
+        );
     }
 
     #[test]

@@ -149,6 +149,9 @@ export function PdfReader({
   const [outline, setOutline] = useState<readonly OutlineItem[] | null>(null);
   const [position, setPosition] = useState(initialView.page - 1 + initialView.pageOffset);
   const [notesNotice, setNotesNotice] = useState<NotesNotice | null>(null);
+  // A passage taken while the notes' folder wasn't allowed yet (iPadOS), added once it is.
+  const waitingRef = useRef<{ passage: SelectedPassage; place: HighlightPlace | null } | null>(null);
+  const [waiting, setWaiting] = useState(false);
   // The Notes panel reads the notes again after each change made here.
   const [notesRevision, setNotesRevision] = useState(0);
   const [newExcerptId, setNewExcerptId] = useState<string | null>(null);
@@ -358,6 +361,14 @@ export function PdfReader({
           ...(place ? { rect: place.rect } : {}),
         },
       );
+      if (!added.ok && notesService.needsFolder(added.error)) {
+        // iPadOS: the notes' folder must be allowed first. The Notes panel asks for it, and
+        // the passage goes in once it's allowed.
+        waitingRef.current = { passage, place };
+        setWaiting(true);
+        openNotesRef.current();
+        return;
+      }
       if (!added.ok) {
         setNotesNotice({ kind: "error", message: added.error });
         return;
@@ -369,6 +380,14 @@ export function PdfReader({
     },
     [notesService, path, notesChanged],
   );
+
+  // A passage waiting for the notes' folder to be allowed: added once it is.
+  const folderAllowed = useCallback(() => {
+    const waiting = waitingRef.current;
+    waitingRef.current = null;
+    setWaiting(false);
+    if (waiting) void saveToNotes(waiting.passage, waiting.place);
+  }, [saveToNotes]);
 
   // Add the selected text to the notes, highlighting it in the PDF too when the PDF can be
   // highlighted.
@@ -672,6 +691,8 @@ export function PdfReader({
           onOpenFile={onOpenFile}
           onRemoveHighlight={removeHighlight}
           onRecolorHighlight={recolorHighlight}
+          waitingPassage={waiting}
+          onFolderAllowed={folderAllowed}
         />
       )}
       </div>

@@ -9,12 +9,17 @@
 // bookmark per path and, before every read/write, turns the path back into an accessible
 // file: resolve the bookmark, start security-scoped access, and download the file if it
 // only exists in iCloud.
+//
+// A file the reader never picked (a PDF's notes file, beside it) has no bookmark of its own.
+// It's reachable once the reader has allowed a folder holding it (`allowFolder`): those
+// folders have bookmarks too, and a file is reached through the closest one.
 
 import Foundation
 import ObjectiveC
 import SwiftRs
 import Tauri
 import UIKit
+import UniformTypeIdentifiers
 import WebKit
 
 class PathArgs: Decodable {
@@ -43,6 +48,37 @@ enum Bookmarks {
     var bookmarks = all()
     bookmarks[path] = data
     UserDefaults.standard.set(bookmarks, forKey: key)
+  }
+}
+
+/// Folders the reader allowed, by path, so files in them can be made and read (in
+/// UserDefaults).
+enum FolderBookmarks {
+  private static let key = "pretty-markdown.folder-bookmarks"
+
+  static func all() -> [String: Data] {
+    UserDefaults.standard.dictionary(forKey: key) as? [String: Data] ?? [:]
+  }
+
+  static func store(_ data: Data, for path: String) {
+    var bookmarks = all()
+    bookmarks[path] = data
+    UserDefaults.standard.set(bookmarks, forKey: key)
+  }
+
+  /// The allowed folder closest to `path` that holds it, with its bookmark.
+  static func holding(_ path: String) -> (path: String, data: Data)? {
+    let file = comparable(path)
+    return all()
+      .filter { file.hasPrefix(comparable($0.key) + "/") }
+      .max { $0.key.count < $1.key.count }
+      .map { (path: $0.key, data: $0.value) }
+  }
+
+  /// The same folder can be `/private/var/…` or `/var/…` (one is a symlink to the other).
+  static func comparable(_ path: String) -> String {
+    let trimmed = path.hasSuffix("/") ? String(path.dropLast()) : path
+    return trimmed.hasPrefix("/private/var/") ? String(trimmed.dropFirst("/private".count)) : trimmed
   }
 }
 
@@ -161,7 +197,25 @@ class IpadFilesPlugin: Plugin, UIPencilInteractionDelegate {
   private func makeAccessible(_ path: String, _ invoke: Invoke) {
     var url = URL(fileURLWithPath: path)
 
-    if let data = Bookmarks.all()[path] {
+    if Bookmarks.all()[path] == nil, let folder = FolderBookmarks.holding(path) {
+      // A file the reader didn't pick, in a folder they allowed: reach it through the folder.
+      var stale = false
+      if let resolved = try? URL(
+        resolvingBookmarkData: folder.data, options: [], relativeTo: nil,
+        bookmarkDataIsStale: &stale)
+      {
+        startAccess(resolved)
+        if stale,
+          let fresh = try? resolved.bookmarkData(
+            options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        {
+          FolderBookmarks.store(fresh, for: folder.path)
+        }
+        let inside = String(
+          FolderBookmarks.comparable(path).dropFirst(FolderBookmarks.comparable(folder.path).count + 1))
+        url = resolved.appendingPathComponent(inside)
+      }
+    } else if let data = Bookmarks.all()[path] {
       var stale = false
       if let resolved = try? URL(
         resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
@@ -299,6 +353,45 @@ extension IpadFilesPlugin {
     }
   }
 
+  /// Let the reader allow the folder of the document at `path`: the Files folder picker,
+  /// opened at that folder, so allowing it is one tap on Open (or they go up a level to
+  /// allow more at once). The folder is remembered, so files in it can be made and read
+  /// from now on, after relaunches too. Resolves with its path, or no path if they
+  /// cancelled.
+  @objc public func allowFolder(_ invoke: Invoke) throws {
+    let args = try invoke.parseArgs(PathArgs.self)
+    DispatchQueue.main.async {
+      guard let presenter = self.topViewController() else {
+        invoke.reject("Couldn't show the folders.")
+        return
+      }
+      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+      picker.directoryURL = URL(fileURLWithPath: args.path).deletingLastPathComponent()
+      picker.allowsMultipleSelection = false
+      let delegate = ExportDelegate { url in
+        guard let url = url else {
+          invoke.resolve(["path": NSNull()])
+          return
+        }
+        self.work.async {
+          self.startAccess(url)
+          do {
+            let data = try url.bookmarkData(
+              options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            FolderBookmarks.store(data, for: url.path)
+            invoke.resolve(["path": url.path])
+          } catch {
+            invoke.reject(
+              "Couldn't keep access to '\(url.lastPathComponent)': \(error.localizedDescription)")
+          }
+        }
+      }
+      picker.delegate = delegate
+      objc_setAssociatedObject(picker, &ExportDelegate.key, delegate, .OBJC_ASSOCIATION_RETAIN)
+      presenter.present(picker, animated: true)
+    }
+  }
+
   private func topViewController() -> UIViewController? {
     var top = webView?.window?.rootViewController
     while let presented = top?.presentedViewController { top = presented }
@@ -306,7 +399,7 @@ extension IpadFilesPlugin {
   }
 }
 
-/// Reports where the Files sheet saved the file, or nil if it was cancelled.
+/// Reports what the Files sheet saved or picked, or nil if it was cancelled.
 private final class ExportDelegate: NSObject, UIDocumentPickerDelegate {
   static var key = 0
   private var done: ((URL?) -> Void)?

@@ -2378,6 +2378,38 @@ body {
   font-weight: 600;
   margin-bottom: 0.4rem;
 }
+/* iPadOS: the notes' folder isn't allowed yet. */
+.notes-panel__access p + p {
+  margin-top: 0.6rem;
+}
+.notes-panel__allow {
+  display: block;
+  max-width: 100%;
+  margin: 1rem 0 0.7rem;
+  padding: 0.5rem 0.95rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: 600 0.85rem/1.3 var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.notes-panel__allow:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.notes-panel__hint {
+  font-size: 0.78rem;
+}
+@media (pointer: coarse) {
+  .notes-panel__allow {
+    min-height: 44px;
+    padding: 0.6rem 1.1rem;
+  }
+}
 .notes-panel__footer {
   display: flex;
   align-items: center;

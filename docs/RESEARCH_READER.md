@@ -102,8 +102,10 @@ the reader says so (the notice goes after a few seconds). Leaving highlight mode
 deletion: pdf.js drops its editors for the file's own highlights then, and the adapter
 only counts a highlight of the file as removed once pdf.js has marked it deleted.
 
-Not yet: the iPad (writing beside a PDF opened from Files needs folder access; its own
-card). `removeHighlight` reaches only
+On the iPad, a PDF picked in Files comes without its folder, so the notes file can't be
+made or read until the reader allows the folder: the Notes panel explains and opens the
+Files folder picker at the PDF's folder, and a passage added before that goes into the
+notes once it's allowed (ipad/PLAN.md). `removeHighlight` reaches only
 highlights pdf.js has an editor for (made or opened for editing since the document
 opened); removing a quote from the Notes panel will need the file's other highlights too.
 
