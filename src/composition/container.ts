@@ -14,6 +14,7 @@ import type { RecentFilesRepository } from "../domain/ports/RecentFilesRepositor
 import type { SettingsRepository } from "../domain/ports/SettingsRepository";
 import { IosFileSystem } from "../infrastructure/fs/IosFileSystem";
 import { TauriFileSystem } from "../infrastructure/fs/TauriFileSystem";
+import { TauriFolderAccess } from "../infrastructure/fs/TauriFolderAccess";
 import { TauriNotesStore } from "../infrastructure/fs/TauriNotesStore";
 import { PrintDocumentExporter } from "../infrastructure/export/PrintDocumentExporter";
 import { CompositeMathRenderer } from "../infrastructure/math/CompositeMathRenderer";
@@ -89,7 +90,12 @@ export function createContainer(): Container {
       : new PrintDocumentExporter();
   const pdfViewer = new LazyPdfViewerFactory();
   const pdfSaver = new PdfSaver(fileSystem, fileSystem);
-  const notesService = new NotesService(new TauriNotesStore());
+  // iPadOS: notes beside a PDF need its folder allowed first (the PDF alone was given).
+  const notesService = new NotesService(
+    new TauriNotesStore(),
+    Math.random,
+    import.meta.env.TAURI_ENV_PLATFORM === "ios" ? new TauriFolderAccess() : null,
+  );
   const linkOpener = new TauriLinkOpener();
   const fileWatcher = new TauriFileWatcher();
 

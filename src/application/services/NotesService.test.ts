@@ -1,3 +1,4 @@
+import { NO_ACCESS } from "../../domain/values/FileAccess";
 import { describe, expect, it } from "vitest";
 import type { NotesStore } from "../../domain/ports/NotesStore";
 import { readExcerpts } from "../../domain/values/NotesFile";
@@ -159,5 +160,28 @@ describe("NotesService", () => {
     expect(store.files.get(NOTES)).toContain("Forced.");
     // The quote is gone: nothing to write it under.
     expect(await notes.setNote(NOTES, "ffffff", "x", "")).toEqual(ok({ kind: "gone" }));
+  });
+});
+
+describe("NotesService: the notes' folder (iPadOS)", () => {
+  const denied = `'paper.notes.md' ${NO_ACCESS}`;
+  const store = { read: async () => ok(null), write: async () => ok(undefined) };
+
+  it("needs the folder only where folders can be allowed, and only for want of access", () => {
+    const ipad = new NotesService(store, () => 0.5, { allowFolderOf: async () => ok(null) });
+    const mac = new NotesService(store, () => 0.5);
+    expect(ipad.needsFolder(`Couldn't read your notes: ${denied}`)).toBe(true);
+    expect(ipad.needsFolder("Couldn't read your notes: disk full")).toBe(false);
+    expect(mac.needsFolder(`Couldn't read your notes: ${denied}`)).toBe(false);
+  });
+
+  it("reports whether the folder chosen holds the notes", async () => {
+    const picks: (string | null)[] = ["/var/papers", "/papers/quad", "/elsewhere", null];
+    const service = new NotesService(store, () => 0.5, {
+      allowFolderOf: async () => ok(picks.shift() ?? null),
+    });
+    const outcomes = [];
+    for (let i = 0; i < 4; i += 1) outcomes.push(await service.allowNotesFolder("/private/var/papers/quad/paper.pdf"));
+    expect(outcomes).toEqual([ok("allowed"), ok("elsewhere"), ok("elsewhere"), ok("cancelled")]);
   });
 });

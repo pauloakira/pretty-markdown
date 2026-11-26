@@ -3,7 +3,7 @@
 //!
 //! The app depends on this crate only when building for iOS, so the desktop build never
 //! compiles it. Nothing here is callable from the webview: the app's own file commands
-//! call [`IpadFiles::remember`], [`IpadFiles::access`], [`IpadFiles::print`] and
+//! call [`IpadFiles::remember`], [`IpadFiles::access`], [`IpadFiles::allow_folder`], [`IpadFiles::print`] and
 //! [`IpadFiles::export`].
 
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,16 @@ impl<R: Runtime> IpadFiles<R> {
         self.0
             .run_mobile_plugin::<serde::de::IgnoredAny>("printPage", PrintArgs { title })
             .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Let the reader allow the folder of the document at `path` (the Files folder picker,
+    /// opened there), so files beside it can be made and read. Returns the folder chosen,
+    /// already remembered, or None if they cancelled.
+    pub fn allow_folder(&self, path: &str) -> Result<Option<String>, String> {
+        self.0
+            .run_mobile_plugin::<MaybePathResponse>("allowFolder", PathArgs { path })
+            .map(|r| r.path)
             .map_err(|e| e.to_string())
     }
 

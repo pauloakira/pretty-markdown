@@ -11,6 +11,7 @@ import {
 import type { NoteSaved, RemovedExcerpt } from "../../application/services/NotesService";
 import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
+import { folderNameOf } from "../../domain/values/FileAccess";
 import { quoteToMarkdown, type Excerpt } from "../../domain/values/Excerpt";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { resolveFileLink } from "../../domain/values/Link";
@@ -34,6 +35,8 @@ type Loaded =
   | { readonly kind: "loading" }
   | { readonly kind: "none"; readonly notesPath: string }
   | { readonly kind: "notes"; readonly notesPath: string; readonly text: string }
+  /** The notes' folder must be allowed first (iPadOS: only the PDF itself was given). */
+  | { readonly kind: "no-folder"; readonly notesPath: string }
   | { readonly kind: "error"; readonly message: string };
 
 /** The notes as shown: text around the quotes, and the quotes with their notes, rendered. */
@@ -74,6 +77,10 @@ interface NotesPanelProps {
   onRemoveHighlight: (place: HighlightPlace) => void;
   /** A quote was recoloured: recolour its highlight. */
   onRecolorHighlight: (place: HighlightPlace, color: HighlightColor) => void;
+  /** A passage is waiting to go into the notes until their folder is allowed. */
+  waitingPassage: boolean;
+  /** The notes' folder was allowed (add any passage that was waiting). */
+  onFolderAllowed: () => void;
 }
 
 /**
@@ -94,6 +101,8 @@ export function NotesPanel({
   onOpenFile,
   onRemoveHighlight,
   onRecolorHighlight,
+  waitingPassage,
+  onFolderAllowed,
 }: NotesPanelProps) {
   const { fileWatcher, notesService, pipeline } = useContainer();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
@@ -111,7 +120,9 @@ export function NotesPanel({
     let cancelled = false;
     void notesService.readNotes(documentPath).then((read) => {
       if (cancelled) return;
-      if (!read.ok) setLoaded({ kind: "error", message: read.error });
+      if (!read.ok && notesService.needsFolder(read.error)) {
+        setLoaded({ kind: "no-folder", notesPath: notesService.notesPathFor(documentPath) });
+      } else if (!read.ok) setLoaded({ kind: "error", message: read.error });
       else if (read.value.text === null) setLoaded({ kind: "none", notesPath: read.value.notesPath });
       else setLoaded({ kind: "notes", notesPath: read.value.notesPath, text: read.value.text });
     });
@@ -125,6 +136,21 @@ export function NotesPanel({
   }, [reload]);
 
   const notesPath = loaded.kind === "notes" || loaded.kind === "none" ? loaded.notesPath : null;
+
+  // Allow the notes' folder: the Files folder picker, opened at the PDF's folder.
+  const [asking, setAsking] = useState(false);
+  const [elsewhere, setElsewhere] = useState(false);
+  const allowFolder = async () => {
+    setAsking(true);
+    const allowed = await notesService.allowNotesFolder(documentPath);
+    setAsking(false);
+    if (!report(allowed)) return;
+    setElsewhere(allowed.value === "elsewhere");
+    if (allowed.value === "allowed") {
+      reload();
+      onFolderAllowed();
+    }
+  };
   // Read them again whenever the file changes on disk: edited in a tab, in another app, or
   // synced from another device. (Saves made here come back too; they read as no change.)
   const watchedPath = loaded.kind === "notes" ? loaded.notesPath : null;
@@ -310,7 +336,7 @@ export function NotesPanel({
           </svg>
           <div className="notes-panel__title">
             <span className="notes-panel__name" title={notesPath ?? undefined}>
-              {notesPath ? fileName(notesPath) : "Notes"}
+              {notesPath ? fileName(notesPath) : loaded.kind === "no-folder" ? fileName(loaded.notesPath) : "Notes"}
             </span>
             <span className="notes-panel__where">
               {loaded.kind === "none" ? "Made beside the PDF at your first Add to notes" : "Beside the PDF"}
@@ -318,6 +344,16 @@ export function NotesPanel({
           </div>
         </header>
         <NotesBody loaded={loaded} scrollRef={scrollRef}>
+          {loaded.kind === "no-folder" && (
+            <FolderPrompt
+              documentPath={documentPath}
+              notesPath={loaded.notesPath}
+              asking={asking}
+              elsewhere={elsewhere}
+              waitingPassage={waitingPassage}
+              onAllow={() => void allowFolder()}
+            />
+          )}
           <article ref={articleRef} className="reader markdown-body notes-panel__notes" hidden={loaded.kind !== "notes"}>
             {parts.map((part, index) =>
               part.kind === "text" ? (
@@ -366,6 +402,53 @@ export function NotesPanel({
         </footer>
       </aside>
     </FileLinkContext.Provider>
+  );
+}
+
+/**
+ * Why the notes can't be shown yet, and the way through: iPadOS gave the app the PDF, not
+ * its folder, so the folder is asked for once (or a folder above it, for many papers).
+ */
+function FolderPrompt({
+  documentPath,
+  notesPath,
+  asking,
+  elsewhere,
+  waitingPassage,
+  onAllow,
+}: {
+  documentPath: string;
+  notesPath: string;
+  asking: boolean;
+  elsewhere: boolean;
+  waitingPassage: boolean;
+  onAllow: () => void;
+}) {
+  const folder = folderNameOf(documentPath) || "its folder";
+  return (
+    <div className="notes-panel__empty notes-panel__access">
+      <p className="notes-panel__empty-title">Allow the folder for your notes</p>
+      <p>
+        Your notes are kept in <strong>{fileName(notesPath)}</strong>, beside the PDF in “{folder}”. iPadOS
+        asks you to allow that folder once.
+      </p>
+      {waitingPassage && (
+        <p>Your highlight is saved. The passage goes into your notes as soon as the folder is allowed.</p>
+      )}
+      <button type="button" className="notes-panel__allow" onClick={onAllow} disabled={asking}>
+        Allow “{folder}”…
+      </button>
+      {elsewhere ? (
+        <p className="notes-panel__hint" role="alert">
+          That folder doesn't hold this PDF. Choose “{folder}”, or a folder above it.
+        </p>
+      ) : (
+        <p className="notes-panel__hint">
+          Files opens at “{folder}”: tap <strong>Open</strong>. To allow all your papers at once, go up to
+          a folder that holds them first.
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -36,6 +36,7 @@ import type {
   PassageTarget,
 } from "../presentation/pdf/PdfViewer";
 import { disk, listeners } from "./tauriMock";
+import { folderHolds, NO_ACCESS } from "../domain/values/FileAccess";
 import { MISSING_FILE } from "../domain/values/MissingFile";
 
 /*
@@ -62,6 +63,14 @@ export const PDFS: Record<string, string> = {
 export const WRITTEN = new Map<string, Uint8Array>();
 /** Notes files "on disk" (path → text), read and written through the notes store. */
 export const NOTES = new Map<string, string>();
+/** Folders the app hasn't been allowed into (iPadOS): notes in them can't be read or written. */
+export const LOCKED = new Set<string>();
+/** Folders the folder picker will return, in order (null = cancelled). */
+export const FOLDER_PICKS: (string | null)[] = [];
+
+/** What the native side says for a file in a folder the app wasn't allowed into. */
+const locked = (path: string) =>
+  [...LOCKED].some((folder) => folderHolds(folder, path)) ? `'${path.split("/").pop()}' ${NO_ACCESS}` : null;
 
 export class FakeAppWindow implements AppWindow {
   handler: (() => void) | null = null;
@@ -356,14 +365,29 @@ export function makeContainer(): TestContainer {
     notesService: new NotesService(
       {
         async read(path) {
-          return ok(NOTES.get(path) ?? null);
+          const denied = locked(path);
+          return denied ? err(denied) : ok(NOTES.get(path) ?? null);
         },
         async write(path, text) {
+          const denied = locked(path);
+          if (denied) return err(denied);
           NOTES.set(path, text);
           return ok(undefined);
         },
       },
       () => 0.5,
+      {
+        // Allowing a folder lets the app into it and every folder inside it.
+        async allowFolderOf() {
+          const folder = FOLDER_PICKS.shift() ?? null;
+          if (folder !== null) {
+            for (const shut of [...LOCKED]) {
+              if (folderHolds(folder, `${shut}/-`)) LOCKED.delete(shut);
+            }
+          }
+          return ok(folder);
+        },
+      },
     ),
     linkOpener: new FakeLinkOpener(),
     fileWatcher: new TauriFileWatcher(),
@@ -444,6 +468,8 @@ export function useAppHarness() {
     disk.session = null;
     WRITTEN.clear();
     NOTES.clear();
+    LOCKED.clear();
+    FOLDER_PICKS.length = 0;
     listeners.clear();
   });
   afterEach(async () => {
