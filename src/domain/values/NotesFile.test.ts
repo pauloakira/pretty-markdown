@@ -5,7 +5,9 @@ import {
   isNotesPath,
   newNotesFile,
   noteOf,
+  isBesideDocument,
   notesPathFor,
+  notesPathsFor,
   readExcerpts,
   removeExcerpt,
   restoreExcerpt,
@@ -26,10 +28,12 @@ const first: Excerpt = {
 const second: Excerpt = { ...first, id: "bbbb02", page: 141, text: "It costs $5.", color: "pink" };
 
 describe("notesPathFor", () => {
-  it("names the notes after the document, in the same folder", () => {
-    expect(notesPathFor("/papers/Geometric Methods.pdf")).toBe("/papers/Geometric Methods.notes.md");
-    expect(notesPathFor("/papers/v1.2/draft.final.pdf")).toBe("/papers/v1.2/draft.final.notes.md");
-    expect(notesPathFor("README")).toBe("README.notes.md");
+  it("names the notes after the document, in a Notes folder beside it", () => {
+    expect(notesPathFor("/papers/Geometric Methods.pdf")).toBe("/papers/Notes/Geometric Methods.notes.md");
+    expect(notesPathFor("/papers/v1.2/draft.final.pdf")).toBe("/papers/v1.2/Notes/draft.final.notes.md");
+    expect(notesPathsFor("/papers/a.pdf")).toEqual(["/papers/Notes/a.notes.md", "/papers/a.notes.md"]);
+    expect(isBesideDocument("/papers/a.notes.md", "/papers/a.pdf")).toBe(true);
+    expect(isBesideDocument("/papers/Notes/a.notes.md", "/papers/a.pdf")).toBe(false);
     expect(isNotesPath("/papers/Geometric Methods.notes.md")).toBe(true);
     expect(isNotesPath("/papers/notes.md")).toBe(false);
   });

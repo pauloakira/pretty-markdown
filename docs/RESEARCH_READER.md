@@ -2,7 +2,7 @@
 
 Turn reading into notes without leaving the app: every highlight can become an **excerpt**
 that remembers where it came from, and excerpts live in a plain Markdown **notes file**
-beside the document. Read, Notes and Board are three views of that one file.
+in a `Notes` folder beside the document. Read, Notes and Board are three views of that one file.
 
 - Design (Mac + iPad): Design Canvas document `dSN8YTRkWL8s`, page
   "Proposal — Research reader (full)"; the products it learns from are on
@@ -14,10 +14,18 @@ beside the document. Read, Notes and Board are three views of that one file.
 1. **One notes file per document, made automatically.** No setup and no "project" to
    choose: open a PDF and its notes are there. "Add to…" (⌥⌘E, R3) sends a quote to any
    other notes file; it keeps its link to its own PDF.
-2. **`<document name>.notes.md`, beside the document**, visible in Finder and Files, so it
-   moves, syncs and backs up with the PDF. Created at the first *Add to notes*, never by
-   reading. On iPad, if the folder can't be written, notes go to the app's own Notes
-   folder and a banner offers to move them later; highlighting is never blocked.
+2. **`Notes/<document name>.notes.md`, in a `Notes` folder beside the document** (changed
+   26 Nov 2026; it was right beside the document, which filled a folder of papers with
+   one `.md` per PDF). Visible in Finder and Files (not a dot-folder, which Files on the
+   iPad hides), so it moves, syncs and backs up with the PDFs. The folder and the file are
+   created at the first *Add to notes*, never by reading. Notes made before, right beside
+   the document, are still found there and used where they are: the app looks in
+   `Notes/` first, then beside the document, and never starts a second file. A quote's
+   link is relative to the notes file (`../Paper.pdf#page=…`), so it works in any
+   Markdown app; Copy as quote uses the PDF's bare name. On iPad the folder must be
+   allowed once (the Notes panel asks); highlighting is never blocked. Still to come
+   (KAN-73): an offer to move older notes into `Notes/`, and a setting for where notes
+   are kept (beside the PDF, `Notes/`, or one chosen folder).
 3. **Board (R4) stays, built last and kept small**: clusters are headings, cards are
    excerpts, drag and link; no free ink. Starts once the Outline is in daily use.
 
@@ -89,7 +97,8 @@ is not escaped, because `\[` opens display math in the LaTeX dialect the app als
 
 Select text, then **Add to notes** in the PDF toolbar or ⌘E. The passage is highlighted in
 the PDF (saved into it as before; the tool stays as it was) and added to the end of
-"Unsorted" in `<name>.notes.md`; the first time, the file is created. The Notes panel
+"Unsorted" in `Notes/<name>.notes.md`; the first time, the folder and the file are
+created. The Notes panel
 opens (if it isn't open) with the new quote's card marked and its note open, so the
 reader can write their thought on it straight away; the card's Delete takes it out again,
 with its highlight. On a PDF that

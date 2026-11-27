@@ -15,7 +15,7 @@ import {
 
 /*
  * Add to notes from a PDF tab (docs/RESEARCH_READER.md, R1): the selected passage goes to
- * "<name>.notes.md" beside the PDF and is highlighted. The fake viewer stands in for
+ * "Notes/<name>.notes.md" beside the PDF and is highlighted. The fake viewer stands in for
  * pdf.js; its `selection` is what the reader has selected.
  */
 
@@ -25,7 +25,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauriMock")).
 useAppHarness();
 
 const PDF = "/papers/quad/paper.pdf";
-const NOTES_PATH = "/papers/quad/paper.notes.md";
+const NOTES_PATH = "/papers/quad/Notes/paper.notes.md";
 
 async function openPdf(app: TestContainer) {
   await act(async () => app.tabManager.openDocument(createPdfDocument(PDF)));
@@ -50,7 +50,7 @@ describe("Add to notes", () => {
         heading: "Unsorted",
         excerpt: {
           id: "888888",
-          source: "paper.pdf",
+          source: "../paper.pdf",
           page: 4,
           text: "Gauss–Legendre nodes are the roots of P_n.",
           color: "yellow",

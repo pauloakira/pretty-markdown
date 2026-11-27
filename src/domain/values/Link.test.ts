@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyLink, fragmentIds, resolveFileLink, slugify } from "./Link";
+import { classifyLink, fragmentIds, relativePath, resolveFileLink, resolvePath, slugify } from "./Link";
 
 describe("classifyLink", () => {
   it("treats #… as a place in the same document, decoding %-escapes", () => {
@@ -82,5 +82,16 @@ describe("resolveFileLink", () => {
     ]) {
       expect(resolveFileLink(href, notes)).toBeNull();
     }
+  });
+});
+
+describe("relativePath and resolvePath", () => {
+  it("link a notes file to its PDF and back", () => {
+    expect(relativePath("/p/Notes/a.notes.md", "/p/a.pdf")).toBe("../a.pdf");
+    expect(relativePath("/p/a.notes.md", "/p/a.pdf")).toBe("a.pdf");
+    expect(relativePath("/n/x.notes.md", "/p/q/a.pdf")).toBe("../p/q/a.pdf");
+    expect(resolvePath("../a.pdf", "/p/Notes/a.notes.md")).toBe("/p/a.pdf");
+    expect(resolvePath("a.pdf", "/p/a.notes.md")).toBe("/p/a.pdf");
+    expect(resolvePath("../../../a.pdf", "/p/a.notes.md")).toBeNull();
   });
 });
