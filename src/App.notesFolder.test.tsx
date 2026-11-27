@@ -28,7 +28,7 @@ useAppHarness();
 
 const FOLDER = "/private/var/mobile/Library/Mobile Documents/com~apple~CloudDocs/Articles/ops";
 const PDF = `${FOLDER}/DeepONet.pdf`;
-const NOTES_PATH = `${FOLDER}/DeepONet.notes.md`;
+const NOTES_PATH = `${FOLDER}/Notes/DeepONet.notes.md`;
 PDFS[PDF] = "%PDF-1.7 DeepONet";
 
 async function openPdf(app: TestContainer) {

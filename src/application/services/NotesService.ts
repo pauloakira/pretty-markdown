@@ -12,6 +12,7 @@ import {
   addExcerpt,
   noteOf,
   notesPathFor,
+  notesPathsFor,
   readExcerpts,
   restoreExcerpt,
   sameNote,
@@ -19,6 +20,7 @@ import {
   setNote,
   takeExcerpt,
 } from "../../domain/values/NotesFile";
+import { relativePath, resolvePath } from "../../domain/values/Link";
 import { roundRect, sameArea, type HighlightPlace, type PdfRect } from "../../domain/values/PdfRect";
 import { err, ok, type Result } from "../../domain/values/Result";
 
@@ -67,6 +69,12 @@ export type NoteSaved =
  */
 export type FolderAllowed = "allowed" | "cancelled" | "elsewhere";
 
+/** The quotes of a highlight, and the notes file they're in. */
+export interface QuotedIn {
+  readonly notesPath: string;
+  readonly excerpts: readonly Excerpt[];
+}
+
 /** A document's notes file, as read for the Notes panel. */
 export interface DocumentNotes {
   readonly notesPath: string;
@@ -109,9 +117,23 @@ export class NotesService {
     return ok(folderHolds(picked.value, notesPathFor(documentPath)) ? "allowed" : "elsewhere");
   }
 
-  /** The notes file of the document at `documentPath`. */
+  /** Where a new notes file for the document at `documentPath` goes. */
   notesPathFor(documentPath: string): string {
     return notesPathFor(documentPath);
+  }
+
+  /**
+   * The notes file of the document at `documentPath` and its text: the first of its
+   * places that has one ("Notes", then beside the document), or the new file's place and
+   * null if there's none yet. A PDF never gets a second notes file.
+   */
+  private async locate(documentPath: string): Promise<Result<{ notesPath: string; text: string | null }>> {
+    for (const notesPath of notesPathsFor(documentPath)) {
+      const current = await this.store.read(notesPath);
+      if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
+      if (current.value !== null) return ok({ notesPath, text: current.value });
+    }
+    return ok({ notesPath: notesPathFor(documentPath), text: null });
   }
 
   /**
@@ -119,23 +141,26 @@ export class NotesService {
    * if there's none yet), and how many excerpts it holds.
    */
   async readNotes(documentPath: string): Promise<Result<DocumentNotes>> {
-    const notesPath = notesPathFor(documentPath);
-    const current = await this.store.read(notesPath);
-    if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
-    const text = current.value;
+    const found = await this.locate(documentPath);
+    if (!found.ok) return found;
+    const { notesPath, text } = found.value;
     return ok({ notesPath, text, excerptCount: text === null ? 0 : readExcerpts(text).length });
   }
 
   /** Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted". */
-  addToNotes(documentPath: string, passage: TakenPassage): Promise<Result<AddedExcerpt>> {
+  async addToNotes(documentPath: string, passage: TakenPassage): Promise<Result<AddedExcerpt>> {
     const text = normalizeExcerptText(passage.text);
-    if (text === "") return Promise.resolve(err("Select some text to add to your notes."));
-    const notesPath = notesPathFor(documentPath);
+    if (text === "") return err("Select some text to add to your notes.");
     const documentName = fileName(documentPath);
+    const id = newExcerptId(this.random);
+    const found = await this.locate(documentPath);
+    if (!found.ok) return found;
+    const { notesPath } = found.value;
     const excerpt: Excerpt = {
-      id: newExcerptId(this.random),
-      // The notes file sits beside the document, so the document is found by name alone.
-      source: documentName,
+      id,
+      // Linked relative to the notes file ("../Paper.pdf" from "Notes"), so the link works
+      // in any Markdown app and survives moving the whole folder.
+      source: relativePath(notesPath, documentPath),
       page: passage.page,
       text,
       color: passage.color,
@@ -155,23 +180,23 @@ export class NotesService {
    * at `place` (same page, same area): what to offer to remove when that highlight goes.
    * None if there are no notes yet.
    */
-  async excerptsOf(documentPath: string, place: HighlightPlace): Promise<Result<readonly Excerpt[]>> {
-    const notesPath = notesPathFor(documentPath);
-    const current = await this.store.read(notesPath);
-    if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
-    if (current.value === null) return ok([]);
-    const source = fileName(documentPath);
-    return ok(
-      readExcerpts(current.value)
+  async excerptsOf(documentPath: string, place: HighlightPlace): Promise<Result<QuotedIn>> {
+    const found = await this.locate(documentPath);
+    if (!found.ok) return found;
+    const { notesPath, text } = found.value;
+    if (text === null) return ok({ notesPath, excerpts: [] });
+    return ok({
+      notesPath,
+      excerpts: readExcerpts(text)
         .map((found) => found.excerpt)
         .filter(
           (excerpt) =>
-            excerpt.source === source &&
+            resolvePath(excerpt.source, notesPath) === documentPath &&
             excerpt.page === place.page &&
             excerpt.rect !== undefined &&
             sameArea(excerpt.rect, place.rect),
         ),
-    );
+    });
   }
 
   /**

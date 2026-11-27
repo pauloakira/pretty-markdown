@@ -275,6 +275,16 @@ fn write_text_file(path: String, contents: String) -> Result<(), String> {
 }
 
 fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> {
+    // A file's folder may not exist yet: the "Notes" folder beside a PDF is made with its
+    // first notes file.
+    if let Some(folder) = local.parent() {
+        if !folder.as_os_str().is_empty() && !folder.exists() {
+            std::fs::create_dir_all(folder).map_err(|e| match e.kind() {
+                std::io::ErrorKind::PermissionDenied => no_access(path),
+                _ => format!("Failed to write '{path}': {e}"),
+            })?;
+        }
+    }
     std::fs::write(local, contents).map_err(|e| match e.kind() {
         std::io::ErrorKind::PermissionDenied => no_access(path),
         _ => format!("Failed to write '{path}': {e}"),
@@ -623,6 +633,15 @@ mod tests {
             },
         )
         .map(|_| ())
+    }
+
+    #[test]
+    fn writing_a_file_makes_its_folder() {
+        let dir = temp_dir("make-folder");
+        let notes = dir.join("Notes").join("Paper.notes.md");
+        let path = notes.to_string_lossy().into_owned();
+        write_text(&notes, &path, "# Notes".into()).unwrap();
+        assert_eq!(std::fs::read_to_string(&notes).unwrap(), "# Notes");
     }
 
     #[cfg(unix)]

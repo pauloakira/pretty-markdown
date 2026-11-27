@@ -431,11 +431,11 @@ export function PdfReader({
   // too (it's kept unless they say so).
   onHighlightRemovedRef.current = (place) => {
     void notesService.excerptsOf(path, place).then((found) => {
-      if (!found.ok || found.value.length === 0) return;
+      if (!found.ok || found.value.excerpts.length === 0) return;
       setNotesNotice({
         kind: "quoted",
-        notesPath: notesService.notesPathFor(path),
-        excerptIds: found.value.map((excerpt) => excerpt.id),
+        notesPath: found.value.notesPath,
+        excerptIds: found.value.excerpts.map((excerpt) => excerpt.id),
       });
     });
   };

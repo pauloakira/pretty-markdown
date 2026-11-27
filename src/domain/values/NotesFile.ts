@@ -8,8 +8,9 @@ import {
 import type { HighlightColor } from "./Highlight";
 
 /**
- * A document's notes file: plain Markdown next to the document, named after it
- * ("Geometric Methods.pdf" → "Geometric Methods.notes.md"). It holds the reader's
+ * A document's notes file: plain Markdown in a "Notes" folder beside the document, named
+ * after it ("Papers/Geometric Methods.pdf" → "Papers/Notes/Geometric Methods.notes.md").
+ * Older notes sit right beside the document and are still found there. It holds the reader's
  * excerpts as quotes, under headings they choose, with their own writing in between.
  * New excerpts go under "## Unsorted" until the reader files them
  * (docs/RESEARCH_READER.md).
@@ -21,13 +22,35 @@ import type { HighlightColor } from "./Highlight";
 /** The heading new excerpts are added under. */
 export const UNSORTED_HEADING = "Unsorted";
 
-/** The notes file for the document at `documentPath`, in the same folder. */
-export function notesPathFor(documentPath: string): string {
+/** The folder, beside the documents, that new notes files go in. */
+export const NOTES_FOLDER = "Notes";
+
+function notesFileName(documentPath: string): { folder: string; file: string } {
   const name = fileName(documentPath);
   const folder = documentPath.slice(0, documentPath.length - name.length);
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
-  return `${folder}${stem}.notes.md`;
+  return { folder, file: `${stem}.notes.md` };
+}
+
+/** Where a new notes file for the document at `documentPath` goes: its folder's "Notes". */
+export function notesPathFor(documentPath: string): string {
+  const { folder, file } = notesFileName(documentPath);
+  return `${folder}${NOTES_FOLDER}/${file}`;
+}
+
+/**
+ * Where the notes of the document at `documentPath` may be, in the order to look: the
+ * "Notes" folder, then right beside the document (where notes were kept before).
+ */
+export function notesPathsFor(documentPath: string): readonly string[] {
+  const { folder, file } = notesFileName(documentPath);
+  return [`${folder}${NOTES_FOLDER}/${file}`, `${folder}${file}`];
+}
+
+/** Whether the notes file at `notesPath` sits right beside its document (not in "Notes"). */
+export function isBesideDocument(notesPath: string, documentPath: string): boolean {
+  return notesPath.slice(0, notesPath.lastIndexOf("/")) === documentPath.slice(0, documentPath.lastIndexOf("/"));
 }
 
 /** Whether `path` is a notes file (by name), e.g. to label its tab or skip it elsewhere. */

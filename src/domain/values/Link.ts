@@ -115,6 +115,27 @@ export function resolveFileLink(href: string, fromPath: string): FileLink | null
   return { path, page, ...(rect ? { rect } : {}) };
 }
 
+/**
+ * The file a relative path (as in a link, not percent-encoded) names, seen from the file at
+ * `fromPath`; null if it climbs above the root.
+ */
+export function resolvePath(target: string, fromPath: string): string | null {
+  const folder = fromPath.slice(0, fromPath.lastIndexOf("/") + 1);
+  return normalizePath(target.startsWith("/") ? target : folder + target);
+}
+
+/**
+ * The relative path from the file at `fromPath` to the file at `toPath` (both absolute):
+ * `/p/Notes/a.notes.md` → `/p/a.pdf` is `../a.pdf`.
+ */
+export function relativePath(fromPath: string, toPath: string): string {
+  const from = fromPath.split("/").filter(Boolean).slice(0, -1);
+  const to = toPath.split("/").filter(Boolean);
+  let shared = 0;
+  while (shared < from.length && shared < to.length - 1 && from[shared] === to[shared]) shared += 1;
+  return [...from.slice(shared).map(() => ".."), ...to.slice(shared)].join("/");
+}
+
 /** `/a/./b/../c` → `/a/c`. Null for a path that climbs above the root or isn't absolute. */
 function normalizePath(path: string): string | null {
   if (!path.startsWith("/")) return null;

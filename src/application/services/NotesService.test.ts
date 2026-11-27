@@ -32,7 +32,9 @@ function sequence(): () => number {
 }
 
 const PDF = "/papers/Geometric Methods.pdf";
-const NOTES = "/papers/Geometric Methods.notes.md";
+const NOTES = "/papers/Notes/Geometric Methods.notes.md";
+/** Where notes were kept before the "Notes" folder. */
+const BESIDE = "/papers/Geometric Methods.notes.md";
 
 describe("NotesService", () => {
   it("reads a document's notes for the Notes panel: none yet, then the text and its excerpts", async () => {
@@ -50,7 +52,7 @@ describe("NotesService", () => {
     expect((await notes.readNotes(PDF)).ok).toBe(false);
   });
 
-  it("creates the notes file beside the PDF on the first addition", async () => {
+  it("creates the notes file in the Notes folder on the first addition, linking up to the PDF", async () => {
     const store = new FakeNotesStore();
     const notes = new NotesService(store, sequence());
     const added = await notes.addToNotes(PDF, { page: 133, text: "The expo-\nnential map.", color: "blue" });
@@ -61,9 +63,33 @@ describe("NotesService", () => {
     expect(filed).toEqual([
       {
         heading: "Unsorted",
-        excerpt: { id: "012345", source: "Geometric Methods.pdf", page: 133, text: "The exponential map.", color: "blue" },
+        excerpt: { id: "012345", source: "../Geometric Methods.pdf", page: 133, text: "The exponential map.", color: "blue" },
       },
     ]);
+  });
+
+  it("keeps using notes found beside the PDF (made before the Notes folder), and starts no second file", async () => {
+    const store = new FakeNotesStore();
+    store.files.set(BESIDE, "# Older notes\n");
+    const notes = new NotesService(store, sequence());
+
+    const read = await notes.readNotes(PDF);
+    expect(read.ok && read.value.notesPath).toBe(BESIDE);
+    const added = await notes.addToNotes(PDF, { page: 3, text: "Still here.", color: "yellow", rect: [1, 2, 3, 4] });
+
+    expect(added.ok && added.value.notesPath).toBe(BESIDE);
+    expect(store.files.has(NOTES)).toBe(false);
+    expect(readExcerpts(store.files.get(BESIDE) ?? "")[0]?.excerpt.source).toBe("Geometric Methods.pdf");
+    const found = await notes.excerptsOf(PDF, { page: 3, rect: [1, 2, 3, 4] });
+    expect(found.ok && found.value).toEqual({ notesPath: BESIDE, excerpts: [expect.objectContaining({ text: "Still here." })] });
+  });
+
+  it("prefers the Notes folder when both places have notes", async () => {
+    const store = new FakeNotesStore();
+    store.files.set(BESIDE, "# Old\n");
+    store.files.set(NOTES, "# New\n");
+    const read = await new NotesService(store).readNotes(PDF);
+    expect(read.ok && read.value.notesPath).toBe(NOTES);
   });
 
   it("adds to an existing file without touching what the reader wrote", async () => {
@@ -125,20 +151,20 @@ describe("NotesService", () => {
     expect(added.value.excerpt.rect).toEqual([72, 540, 301, 553]);
 
     const found = await notes.excerptsOf(PDF, { page: 7, rect: [72, 540, 301, 553] });
-    expect(found.ok && found.value.map((e) => e.text)).toEqual(["Lemma 3."]);
+    expect(found.ok && found.value.excerpts.map((e) => e.text)).toEqual(["Lemma 3."]);
     const elsewhere = await notes.excerptsOf(PDF, { page: 8, rect: [72, 540, 301, 553] });
-    expect(elsewhere.ok && elsewhere.value).toEqual([]);
+    expect(elsewhere.ok && elsewhere.value.excerpts).toEqual([]);
   });
 
   it("finds no quotes for a highlight when there are no notes, or they're another PDF's", async () => {
     const store = new FakeNotesStore();
     const notes = new NotesService(store, sequence());
-    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual({ ok: true, value: [] });
+    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual(ok({ notesPath: NOTES, excerpts: [] }));
     store.files.set(
       NOTES,
       "## Unsorted\n\n> Elsewhere.\n> — [p. 1](Other.pdf#page=1&ex=abcdef&color=yellow&rect=0,0,10,10)\n",
     );
-    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual({ ok: true, value: [] });
+    expect(await notes.excerptsOf(PDF, { page: 1, rect: [0, 0, 10, 10] })).toEqual(ok({ notesPath: NOTES, excerpts: [] }));
   });
 
   it("saves a note only over the one the reader started from; another is handed back", async () => {

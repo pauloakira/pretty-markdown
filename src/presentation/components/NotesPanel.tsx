@@ -15,7 +15,7 @@ import { folderNameOf } from "../../domain/values/FileAccess";
 import { quoteToMarkdown, type Excerpt } from "../../domain/values/Excerpt";
 import type { HighlightColor } from "../../domain/values/Highlight";
 import { resolveFileLink } from "../../domain/values/Link";
-import { segmentNotes } from "../../domain/values/NotesFile";
+import { isBesideDocument, segmentNotes } from "../../domain/values/NotesFile";
 import type { HighlightPlace } from "../../domain/values/PdfRect";
 import type { Result } from "../../domain/values/Result";
 import { NOTES_PANEL_WIDTH } from "../../domain/values/ViewState";
@@ -293,7 +293,8 @@ export function NotesPanel({
     if (ok && place) onRecolorHighlight(place, color);
     reload();
   };
-  const copy = (excerpt: Excerpt) => copyText(quoteToMarkdown(excerpt, excerpt.source));
+  // By the PDF's name alone: the quote is pasted anywhere, not just beside the notes.
+  const copy = (excerpt: Excerpt) => copyText(quoteToMarkdown(excerpt, fileName(excerpt.source)));
 
   // Drag the left edge to resize; the page keeps room beside it.
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -339,7 +340,11 @@ export function NotesPanel({
               {notesPath ? fileName(notesPath) : loaded.kind === "no-folder" ? fileName(loaded.notesPath) : "Notes"}
             </span>
             <span className="notes-panel__where">
-              {loaded.kind === "none" ? "Made beside the PDF at your first Add to notes" : "Beside the PDF"}
+              {loaded.kind === "none"
+                ? "Made in the Notes folder at your first Add to notes"
+                : loaded.kind === "notes" && isBesideDocument(loaded.notesPath, documentPath)
+                  ? "Beside the PDF"
+                  : "In the Notes folder beside the PDF"}
             </span>
           </div>
         </header>

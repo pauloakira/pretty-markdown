@@ -24,7 +24,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauriMock")).
 useAppHarness();
 
 const PDF = "/papers/quad/paper.pdf";
-const NOTES_PATH = "/papers/quad/paper.notes.md";
+const NOTES_PATH = "/papers/quad/Notes/paper.notes.md";
 const PASSAGE = { page: 4, text: "Gauss–Legendre nodes are\nthe roots of P_n." };
 
 async function openPdf(app: TestContainer) {
