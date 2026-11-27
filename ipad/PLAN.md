@@ -221,7 +221,7 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
   - Not verified: Escape (no tool here sends it; the page side is unit-tested), and a real
     iPad. In the simulator the first ⌘ press after the test runner brings the app forward
     was sometimes dropped (likely the simulator connecting its keyboard) — check on a device.
-- 🟡 **Notes beside a PDF: allow its folder** (2026-11-26). Opening the Notes panel on a
+- ✅ **Notes beside a PDF: allow its folder** (2026-11-26). Opening the Notes panel on a
   PDF from iCloud Drive failed with "Operation not permitted (os error 1)": iPadOS gives
   the app the PDF the reader picked, not its folder, so `<name>.notes.md` beside it can't
   be made or read.
@@ -233,9 +233,9 @@ through a **security-scoped URL**, and to reopen it after a relaunch the app mus
     relaunches too.
   - Add to notes still highlights at once; the passage waits and goes into the notes as
     soon as the folder is allowed, with no error banner.
-  - Not yet: saving notes in the app's own folder if the reader declines (KAN-10's
-    fallback).
-  - To test on the iPad: a PDF in iCloud Drive and one On My iPad.
+  - Tried on the iPad with a PDF in iCloud Drive: allowing the folder showed the notes,
+    and Add to notes worked. Not tried yet: a PDF On My iPad.
+  - Not yet: saving notes in the app's own folder if the reader declines (its own card).
 - ✅ **A tidy Recent list** (2026-11-24). It showed full container paths (some as
   `file://` URLs, the leading slash drawn at the end by the right-to-left truncation),
   the same file twice, and a temporary "Open in" copy that failed with a raw "No such
