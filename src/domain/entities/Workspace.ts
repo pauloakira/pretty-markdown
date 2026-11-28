@@ -594,6 +594,27 @@ export function reloadContent(ws: Workspace, id: TabId, content: string): Worksp
   };
 }
 
+/**
+ * A markdown file the app moved (a notes file into "Notes"): its tab, if one is open, now
+ * shows the file at its new place, with the text written there. Bumps the revision so
+ * the editor remounts. No-op if no markdown tab has `fromPath` open.
+ */
+export function relocateFile(
+  ws: Workspace,
+  fromPath: string,
+  to: { path: string; name: string; content: string },
+): Workspace {
+  const tab = findTabByPath(ws, fromPath);
+  if (!tab || tab.document.kind !== "markdown") return ws;
+  const document = { ...tab.document, path: to.path, name: to.name, content: to.content };
+  return {
+    ...ws,
+    tabs: ws.tabs.map((t) =>
+      t.id === tab.id ? { ...t, document, savedContent: to.content, revision: t.revision + 1 } : t,
+    ),
+  };
+}
+
 /** Reload a PDF tab from disk (the file changed): bumps the revision so the viewer
  * remounts and reads the file again, keeping the tab's position. No-op for markdown. */
 export function reloadPdf(ws: Workspace, id: TabId): Workspace {

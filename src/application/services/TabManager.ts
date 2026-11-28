@@ -1,6 +1,6 @@
 import type { Document } from "../../domain/entities/Document";
 import type { Tab, TabId } from "../../domain/entities/Tab";
-import { createTab } from "../../domain/entities/Tab";
+import { createTab, isTabDirty } from "../../domain/entities/Tab";
 import { createGroup, nextGroupColor, type GroupColor, type GroupId } from "../../domain/entities/TabGroup";
 import * as W from "../../domain/entities/Workspace";
 import type { Workspace } from "../../domain/entities/Workspace";
@@ -158,6 +158,17 @@ export class TabManager {
 
   reloadContent(id: TabId, content: string): void {
     this.commit(W.reloadContent(this.workspace, id, content));
+  }
+
+  /** Whether a tab has the file at `path` open with edits not yet saved. */
+  hasUnsavedAt(path: string): boolean {
+    const tab = W.findTabByPath(this.workspace, path);
+    return tab !== null && isTabDirty(tab);
+  }
+
+  /** A markdown file was moved to `to.path` (with `to.content`): its tab follows it. */
+  relocate(fromPath: string, to: { path: string; name: string; content: string }): void {
+    this.commit(W.relocateFile(this.workspace, fromPath, to));
   }
 
   /** The PDF behind a tab changed on disk: show the new file. */

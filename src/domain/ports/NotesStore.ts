@@ -11,4 +11,6 @@ export interface NotesStore {
   read(path: string): Promise<Result<string | null>>;
   /** Create or overwrite the file at `path`. */
   write(path: string, text: string): Promise<Result<void>>;
+  /** Remove the file at `path` (a notes file moved elsewhere); one already gone is no error. */
+  remove(path: string): Promise<Result<void>>;
 }

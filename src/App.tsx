@@ -3,7 +3,7 @@ import { useContainer } from "./composition/ContainerContext";
 import { isTabDirty, type TabId } from "./domain/entities/Tab";
 import { initialNotesPanel, initialPdfView } from "./domain/values/ViewState";
 import type { GroupId } from "./domain/entities/TabGroup";
-import { isMarkdown } from "./domain/entities/Document";
+import { fileName, isMarkdown } from "./domain/entities/Document";
 import { CloseConfirm } from "./presentation/components/CloseConfirm";
 import type { ContentsPanel } from "./presentation/components/ContentsSidebar";
 import { DocumentToolbar } from "./presentation/components/DocumentToolbar";
@@ -314,6 +314,8 @@ export default function App() {
             notes={active.viewState.notes ?? initialNotesPanel}
             onNotesChange={(notes) => tabManager.setNotesPanel(active.id, notes)}
             onFileLink={fileLinks.openFileLink}
+            hasUnsavedAt={(path) => tabManager.hasUnsavedAt(path)}
+            onNotesMoved={(moved) => tabManager.relocate(moved.from, { path: moved.to, name: fileName(moved.to), content: moved.text })}
           />
         ) : active && activeMarkdown ? (
           mode === "edit" ? (

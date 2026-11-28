@@ -24,4 +24,13 @@ export class TauriNotesStore implements NotesStore {
       return err(error instanceof Error ? error.message : String(error));
     }
   }
+
+  async remove(path: string): Promise<Result<void>> {
+    try {
+      await invoke("remove_text_file", { path });
+      return ok(undefined);
+    } catch (error) {
+      return err(error instanceof Error ? error.message : String(error));
+    }
+  }
 }

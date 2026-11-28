@@ -374,6 +374,12 @@ export function makeContainer(): TestContainer {
           NOTES.set(path, text);
           return ok(undefined);
         },
+        async remove(path) {
+          const denied = locked(path);
+          if (denied) return err(denied);
+          NOTES.delete(path);
+          return ok(undefined);
+        },
       },
       () => 0.5,
       {

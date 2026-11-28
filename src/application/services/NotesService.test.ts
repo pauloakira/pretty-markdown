@@ -9,6 +9,7 @@ import { NotesService } from "./NotesService";
 class FakeNotesStore implements NotesStore {
   readonly files = new Map<string, string>();
   failRead = false;
+  failRemove = false;
   writes = 0;
 
   async read(path: string): Promise<Result<string | null>> {
@@ -21,6 +22,13 @@ class FakeNotesStore implements NotesStore {
     await Promise.resolve();
     this.writes += 1;
     this.files.set(path, text);
+    return ok(undefined);
+  }
+
+  async remove(path: string): Promise<Result<void>> {
+    await Promise.resolve();
+    if (this.failRemove) return err("Operation not permitted");
+    this.files.delete(path);
     return ok(undefined);
   }
 }
@@ -189,9 +197,63 @@ describe("NotesService", () => {
   });
 });
 
+describe("NotesService: moving older notes into the Notes folder", () => {
+  const older = "# Notes\n\n> Lemma.\n> — [p. 3](Geometric%20Methods.pdf#page=3&ex=abcdef&color=yellow)\n\n![fig](fig.png)\n";
+
+  it("offers to move notes beside the PDF until the reader keeps them there", () => {
+    const notes = new NotesService(new FakeNotesStore());
+    expect(notes.offersMove(BESIDE, PDF)).toBe(true);
+    expect(notes.offersMove(NOTES, PDF)).toBe(false);
+    notes.keepInPlace(BESIDE);
+    expect(notes.offersMove(BESIDE, PDF)).toBe(false);
+  });
+
+  it("moves them, links and all, and the quotes still belong to the PDF", async () => {
+    const store = new FakeNotesStore();
+    store.files.set(BESIDE, older);
+    const notes = new NotesService(store, sequence());
+    const moved = await notes.moveToNotesFolder(PDF);
+
+    expect(moved.ok && moved.value).toEqual({ from: BESIDE, to: NOTES, text: store.files.get(NOTES), leftBehind: null });
+    expect(store.files.has(BESIDE)).toBe(false);
+    expect(store.files.get(NOTES)).toBe(older.replace("](Geometric", "](../Geometric").replace("](fig.png", "](../fig.png"));
+    const read = await notes.readNotes(PDF);
+    expect(read.ok && read.value.notesPath).toBe(NOTES);
+    const found = await notes.excerptsOf(PDF, { page: 3, rect: [0, 0, 1, 1] });
+    expect(found.ok && found.value.notesPath).toBe(NOTES);
+    expect(readExcerpts(store.files.get(NOTES) ?? "")[0]?.excerpt.source).toBe("../Geometric Methods.pdf");
+  });
+
+  it("never writes over notes already in the Notes folder", async () => {
+    const store = new FakeNotesStore();
+    store.files.set(BESIDE, older);
+    store.files.set(NOTES, "# Newer\n");
+    const moved = await new NotesService(store).moveToNotesFolder(PDF);
+    expect(moved.ok).toBe(false);
+    expect(store.files.get(NOTES)).toBe("# Newer\n");
+    expect(store.files.get(BESIDE)).toBe(older);
+  });
+
+  it("keeps the old file if the new one can't be written, and says so if it can't be removed", async () => {
+    const store = new FakeNotesStore();
+    store.files.set(BESIDE, older);
+    const notes = new NotesService(store);
+    store.write = async () => err("disk full");
+    expect(await notes.moveToNotesFolder(PDF)).toEqual(err("Couldn't move your notes: disk full"));
+    expect(store.files.get(BESIDE)).toBe(older);
+
+    const other = new FakeNotesStore();
+    other.files.set(BESIDE, older);
+    other.failRemove = true;
+    const moved = await new NotesService(other).moveToNotesFolder(PDF);
+    expect(moved.ok && moved.value.leftBehind).toBe("Operation not permitted");
+    expect(other.files.has(NOTES)).toBe(true);
+  });
+});
+
 describe("NotesService: the notes' folder (iPadOS)", () => {
   const denied = `'paper.notes.md' ${NO_ACCESS}`;
-  const store = { read: async () => ok(null), write: async () => ok(undefined) };
+  const store = { read: async () => ok(null), write: async () => ok(undefined), remove: async () => ok(undefined) };
 
   it("needs the folder only where folders can be allowed, and only for want of access", () => {
     const ipad = new NotesService(store, () => 0.5, { allowFolderOf: async () => ok(null) });

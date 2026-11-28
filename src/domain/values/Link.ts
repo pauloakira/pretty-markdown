@@ -149,3 +149,78 @@ function normalizePath(path: string): string | null {
   }
   return "/" + parts.join("/");
 }
+
+/**
+ * The Markdown `markdown`, written for a file at `fromPath`, with its relative links and
+ * images pointing at the same files from `toPath` instead: what moving a notes file into
+ * "Notes" needs, so `Paper.pdf#page=3` becomes `../Paper.pdf#page=3` and `fig.png` becomes
+ * `../fig.png`. Inline links and images, reference definitions, and HTML `src`/`href` are
+ * rewritten; web links, `#fragments`, absolute paths and anything in code are left as
+ * they are, and so is every other character of the text.
+ */
+export function rebaseLinks(markdown: string, fromPath: string, toPath: string): string {
+  const rebase = (target: string) => rebaseTarget(target, fromPath, toPath);
+  let fence: string | null = null;
+  return markdown
+    .split(/(?<=\n)/)
+    .map((line) => {
+      const opener = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+      if (fence !== null) {
+        if (opener && opener[1]![0] === fence[0] && opener[1]!.length >= fence.length && line.trim() === opener[1]) fence = null;
+        return line;
+      }
+      if (opener) {
+        fence = opener[1]!;
+        return line;
+      }
+      const definition = /^( {0,3}\[[^\]\n]+\]:[ \t]*)(<[^>\n]*>|\S+)/.exec(line);
+      if (definition) {
+        return definition[1] + rebase(definition[2]!) + line.slice(definition[0].length);
+      }
+      // Code spans are kept as written; links are looked for between them.
+      return line
+        .split(/(`+[^`]*`+)/)
+        .map((part, index) =>
+          index % 2 === 1
+            ? part
+            : part
+                .replace(INLINE_LINK, (_whole, open: string, target: string) => open + rebase(target))
+                .replace(HTML_LINK, (_whole, attribute: string, quote: string, target: string) =>
+                  `${attribute}${quote}${rebase(target)}${quote}`,
+                ),
+        )
+        .join("");
+    })
+    .join("");
+}
+
+/** `](target`, the target bare (balanced parentheses allowed) or in `<…>`. */
+const INLINE_LINK = /(\]\([ \t]*)(<[^>\n]*>|(?:[^\s()<>]|\([^\s()]*\))+)/g;
+const HTML_LINK = /(\b(?:src|href)=)(["'])([^"'\n]*)\2/gi;
+
+/** One link target (`fig.png`, `<my fig.png>`, `Paper.pdf#page=3`) rebased; see `rebaseLinks`. */
+function rebaseTarget(target: string, fromPath: string, toPath: string): string {
+  const angled = target.startsWith("<") && target.endsWith(">");
+  const raw = angled ? target.slice(1, -1) : target;
+  if (raw === "" || raw.startsWith("#") || raw.startsWith("/") || raw.startsWith("?") || SCHEME.test(raw)) {
+    return target;
+  }
+  const cut = raw.search(/[#?]/);
+  const pathPart = cut < 0 ? raw : raw.slice(0, cut);
+  const suffix = cut < 0 ? "" : raw.slice(cut);
+  let decoded: string;
+  try {
+    decoded = angled ? pathPart : decodeURIComponent(pathPart);
+  } catch {
+    return target;
+  }
+  const absolute = resolvePath(decoded, fromPath);
+  if (absolute === null) return target;
+  const moved = relativePath(toPath, absolute) + (decoded.endsWith("/") ? "/" : "");
+  return angled ? `<${moved}${suffix}>` : encodeLinkPath(moved) + suffix;
+}
+
+/** Escape what would end or break a bare link target; everything else stays readable. */
+function encodeLinkPath(path: string): string {
+  return path.replace(/[ %#?()<>]/g, (c) => encodeURIComponent(c).replace("(", "%28").replace(")", "%29"));
+}
