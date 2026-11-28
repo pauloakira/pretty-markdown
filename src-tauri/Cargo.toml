@@ -39,3 +39,9 @@ tauri-plugin-ipad-files = { path = "../ipad/tauri-plugin-ipad-files" }
 # for watching arbitrary files.
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 notify = "6"
+
+# swift-rs 1.0.9 with one fix for Xcode 27: it exports the SwiftRs helper
+# symbols from Tauri's archive, so the iPad build links. See
+# vendor/swift-rs/PATCHED.md. Drop this once a fixed swift-rs is released.
+[patch.crates-io]
+swift-rs = { path = "vendor/swift-rs" }

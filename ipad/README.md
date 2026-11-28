@@ -21,6 +21,11 @@ holds the iPad plan, notes and helper scripts.
   ```bash
   rustup target add aarch64-apple-ios aarch64-apple-ios-sim
   ```
+- On Xcode 27, rustup's LLVM tools (swift-rs uses `llvm-objcopy` to export the Swift
+  functions Rust calls):
+  ```bash
+  rustup component add llvm-tools
+  ```
 - `npx tauri ios init` has already been run (the generated project is committed). It
   installs XcodeGen and libimobiledevice via Homebrew if they're missing.
 
