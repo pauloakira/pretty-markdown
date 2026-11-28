@@ -20,6 +20,7 @@ import type {
 } from "../pdf/PdfViewer";
 import { ContentsSidebar, type ContentsPanel } from "./ContentsSidebar";
 import { NotesPanel } from "./NotesPanel";
+import type { NotesMoved } from "../../application/services/NotesService";
 import { PdfToolbar } from "./PdfToolbar";
 import { SelectionPopover } from "./SelectionPopover";
 
@@ -96,6 +97,10 @@ interface PdfReaderProps {
   onNotesChange: (notes: NotesPanelView) => void;
   /** Follow a link in the notes to another file, relative to the notes file at `fromPath`. */
   onFileLink: (href: string, fromPath: string) => void;
+  /** Whether a tab has the file at `path` open with unsaved edits (it can't be moved then). */
+  hasUnsavedAt: (path: string) => boolean;
+  /** The notes were moved into "Notes": a tab showing them should follow. */
+  onNotesMoved: (moved: NotesMoved) => void;
 }
 
 type Status =
@@ -133,6 +138,8 @@ export function PdfReader({
   notes,
   onNotesChange,
   onFileLink,
+  hasUnsavedAt,
+  onNotesMoved,
 }: PdfReaderProps) {
   const { documentService, pdfViewer, pdfSaver, linkOpener, notesService } = useContainer();
   // React renders nothing inside the host; the viewer's container is appended by hand.
@@ -688,6 +695,8 @@ export function PdfReader({
           onFollow={followPassage}
           onMark={markPassage}
           onFileLink={onFileLink}
+          hasUnsavedAt={hasUnsavedAt}
+          onNotesMoved={onNotesMoved}
           onOpenFile={onOpenFile}
           onRemoveHighlight={removeHighlight}
           onRecolorHighlight={recolorHighlight}

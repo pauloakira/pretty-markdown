@@ -1,5 +1,6 @@
 import { fileName } from "../../domain/entities/Document";
 import type { FolderAccess } from "../../domain/ports/FolderAccess";
+import type { KeptNotes } from "../../domain/ports/KeptNotes";
 import type { NotesStore } from "../../domain/ports/NotesStore";
 import { folderHolds, isNoAccess } from "../../domain/values/FileAccess";
 import {
@@ -10,6 +11,7 @@ import {
 import type { HighlightColor } from "../../domain/values/Highlight";
 import {
   addExcerpt,
+  isBesideDocument,
   noteOf,
   notesPathFor,
   notesPathsFor,
@@ -20,7 +22,7 @@ import {
   setNote,
   takeExcerpt,
 } from "../../domain/values/NotesFile";
-import { relativePath, resolvePath } from "../../domain/values/Link";
+import { rebaseLinks, relativePath, resolvePath } from "../../domain/values/Link";
 import { roundRect, sameArea, type HighlightPlace, type PdfRect } from "../../domain/values/PdfRect";
 import { err, ok, type Result } from "../../domain/values/Result";
 
@@ -75,6 +77,27 @@ export interface QuotedIn {
   readonly excerpts: readonly Excerpt[];
 }
 
+/** Notes moved from right beside their PDF into "Notes". */
+export interface NotesMoved {
+  readonly from: string;
+  readonly to: string;
+  /** The notes as written in their new place (relative links rebased). */
+  readonly text: string;
+  /** Why the old file is still there, if it couldn't be removed; else null. */
+  readonly leftBehind: string | null;
+}
+
+/** Kept in memory only: for tests, and where nothing is remembered between launches. */
+class MemoryKeptNotes implements KeptNotes {
+  private readonly kept = new Set<string>();
+  has(notesPath: string): boolean {
+    return this.kept.has(notesPath);
+  }
+  add(notesPath: string): void {
+    this.kept.add(notesPath);
+  }
+}
+
 /** A document's notes file, as read for the Notes panel. */
 export interface DocumentNotes {
   readonly notesPath: string;
@@ -98,6 +121,8 @@ export class NotesService {
     private readonly random: () => number = Math.random,
     /** Where folders must be allowed before files can be made in them (iPadOS); else null. */
     private readonly folderAccess: FolderAccess | null = null,
+    /** Notes the reader chose to keep beside their PDF: not offered to move again. */
+    private readonly kept: KeptNotes = new MemoryKeptNotes(),
   ) {}
 
   /**
@@ -145,6 +170,50 @@ export class NotesService {
     if (!found.ok) return found;
     const { notesPath, text } = found.value;
     return ok({ notesPath, text, excerptCount: text === null ? 0 : readExcerpts(text).length });
+  }
+
+  /**
+   * Whether to offer moving the notes at `notesPath` into "Notes": they're right beside the
+   * document at `documentPath` (made before the Notes folder), and the reader hasn't chosen
+   * to keep them there.
+   */
+  offersMove(notesPath: string, documentPath: string): boolean {
+    return isBesideDocument(notesPath, documentPath) && !this.kept.has(notesPath);
+  }
+
+  /** The reader keeps the notes at `notesPath` where they are: don't offer to move them. */
+  keepInPlace(notesPath: string): void {
+    this.kept.add(notesPath);
+  }
+
+  /**
+   * Move the notes right beside the document at `documentPath` into its "Notes" folder,
+   * with their relative links rebased so they still reach the same files. Safe at every
+   * step: the new file is written and read back before the old one goes, and nothing is
+   * written over notes already in "Notes".
+   */
+  moveToNotesFolder(documentPath: string): Promise<Result<NotesMoved>> {
+    const [to, from] = notesPathsFor(documentPath) as [string, string];
+    return this.queued(from, () =>
+      this.queued(to, async (): Promise<Result<NotesMoved>> => {
+        const there = await this.store.read(to);
+        if (!there.ok) return err(`Couldn't move your notes: ${there.error}`);
+        if (there.value !== null) return err(`There are notes in the Notes folder already, so these were kept where they are.`);
+        const current = await this.store.read(from);
+        if (!current.ok) return err(`Couldn't read your notes: ${current.error}`);
+        if (current.value === null) return err("These notes aren't beside the PDF any more.");
+        const text = rebaseLinks(current.value, from, to);
+        const written = await this.store.write(to, text);
+        if (!written.ok) return err(`Couldn't move your notes: ${written.error}`);
+        const check = await this.store.read(to);
+        if (!check.ok || check.value !== text) {
+          await this.store.remove(to);
+          return err("Couldn't move your notes: the copy in the Notes folder didn't read back the same. They were kept where they are.");
+        }
+        const removed = await this.store.remove(from);
+        return ok({ from, to, text, leftBehind: removed.ok ? null : removed.error });
+      }),
+    );
   }
 
   /** Add `passage` from the document at `documentPath` to the end of its notes' "Unsorted". */

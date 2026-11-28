@@ -291,6 +291,23 @@ fn write_text(local: &Path, path: &str, contents: String) -> Result<(), String> 
     })
 }
 
+/// Remove a text file: a notes file once it has been moved into "Notes" (its copy written
+/// and read back first, by the frontend). A file that's already gone is no error.
+#[cfg(desktop)]
+#[tauri::command]
+fn remove_text_file(path: String) -> Result<(), String> {
+    remove_text(&file_path(&path), &path)
+}
+
+fn remove_text(local: &Path, path: &str) -> Result<(), String> {
+    match std::fs::remove_file(local) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => Err(no_access(path)),
+        Err(e) => Err(format!("Failed to remove '{path}': {e}")),
+    }
+}
+
 /// Write raw bytes to a file (overwriting), e.g. a PDF with new highlights. Native side of
 /// `FileWriter.writeBytes`.
 ///
@@ -384,6 +401,12 @@ async fn write_text_file(
     contents: String,
 ) -> Result<(), String> {
     write_text(&accessible_path(&app, &path)?, &path, contents)
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+async fn remove_text_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    remove_text(&accessible_path(&app, &path)?, &path)
 }
 
 #[cfg(mobile)]
@@ -518,6 +541,7 @@ pub fn run() {
             read_text_file_if_exists,
             read_file_bytes,
             write_text_file,
+            remove_text_file,
             write_file_bytes,
             remember_document,
             print_page,
@@ -642,6 +666,17 @@ mod tests {
         let path = notes.to_string_lossy().into_owned();
         write_text(&notes, &path, "# Notes".into()).unwrap();
         assert_eq!(std::fs::read_to_string(&notes).unwrap(), "# Notes");
+    }
+
+    #[test]
+    fn removing_a_file_that_is_gone_is_no_error() {
+        let dir = temp_dir("remove");
+        let notes = dir.join("Paper.notes.md");
+        let path = notes.to_string_lossy().into_owned();
+        std::fs::write(&notes, "notes").unwrap();
+        remove_text(&notes, &path).unwrap();
+        assert!(!notes.exists());
+        remove_text(&notes, &path).unwrap();
     }
 
     #[cfg(unix)]

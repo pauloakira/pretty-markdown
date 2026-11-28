@@ -2410,6 +2410,52 @@ body {
     padding: 0.6rem 1.1rem;
   }
 }
+/* Notes made right beside the PDF, before the Notes folder: offered a move. */
+.notes-panel__offer {
+  margin: 12px 12px 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.notes-panel__offer-title {
+  color: var(--fg);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.notes-panel__offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0.7rem;
+}
+.notes-panel__offer .notes-panel__allow {
+  margin: 0;
+}
+.notes-panel__keep {
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--fg-muted);
+  font: 600 0.85rem/1.3 var(--font-sans);
+  cursor: pointer;
+}
+.notes-panel__keep:hover {
+  color: var(--fg);
+}
+.notes-panel__keep:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+@media (pointer: coarse) {
+  .notes-panel__keep {
+    min-height: 44px;
+  }
+}
 .notes-panel__footer {
   display: flex;
   align-items: center;

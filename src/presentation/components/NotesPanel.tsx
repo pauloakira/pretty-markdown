@@ -8,7 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { NoteSaved, RemovedExcerpt } from "../../application/services/NotesService";
+import type { NoteSaved, NotesMoved, RemovedExcerpt } from "../../application/services/NotesService";
 import { useContainer } from "../../composition/ContainerContext";
 import { fileName } from "../../domain/entities/Document";
 import { folderNameOf } from "../../domain/values/FileAccess";
@@ -81,6 +81,10 @@ interface NotesPanelProps {
   waitingPassage: boolean;
   /** The notes' folder was allowed (add any passage that was waiting). */
   onFolderAllowed: () => void;
+  /** Whether a tab has the file at `path` open with unsaved edits (it can't be moved then). */
+  hasUnsavedAt: (path: string) => boolean;
+  /** The notes were moved into "Notes": a tab showing them should follow. */
+  onNotesMoved: (moved: NotesMoved) => void;
 }
 
 /**
@@ -103,6 +107,8 @@ export function NotesPanel({
   onRecolorHighlight,
   waitingPassage,
   onFolderAllowed,
+  hasUnsavedAt,
+  onNotesMoved,
 }: NotesPanelProps) {
   const { fileWatcher, notesService, pipeline } = useContainer();
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
@@ -150,6 +156,34 @@ export function NotesPanel({
       reload();
       onFolderAllowed();
     }
+  };
+  // Notes made right beside the PDF, before the Notes folder: offered a move, once.
+  // (Keeping them re-renders through `setKept`; whether they're kept is the service's.)
+  const [, setKept] = useState(0);
+  const [moving, setMoving] = useState(false);
+  const offerMove = loaded.kind === "notes" && notesService.offersMove(loaded.notesPath, documentPath);
+  const moveNotes = async () => {
+    if (loaded.kind !== "notes") return;
+    if (hasUnsavedAt(loaded.notesPath)) {
+      setFailure("The notes are open in a tab with unsaved changes. Save them first, then move them.");
+      return;
+    }
+    setMoving(true);
+    const moved = await notesService.moveToNotesFolder(documentPath);
+    setMoving(false);
+    reload();
+    if (!report(moved)) return;
+    onNotesMoved(moved.value);
+    setFailure(
+      moved.value.leftBehind === null
+        ? null
+        : `Your notes are in the Notes folder now, but the old file couldn't be removed: ${moved.value.leftBehind}`,
+    );
+  };
+  const keepNotes = () => {
+    if (loaded.kind !== "notes") return;
+    notesService.keepInPlace(loaded.notesPath);
+    setKept((n) => n + 1);
   };
   // Read them again whenever the file changes on disk: edited in a tab, in another app, or
   // synced from another device. (Saves made here come back too; they read as no change.)
@@ -359,6 +393,7 @@ export function NotesPanel({
               onAllow={() => void allowFolder()}
             />
           )}
+          {offerMove && <MoveOffer moving={moving} onMove={() => void moveNotes()} onKeep={keepNotes} />}
           <article ref={articleRef} className="reader markdown-body notes-panel__notes" hidden={loaded.kind !== "notes"}>
             {parts.map((part, index) =>
               part.kind === "text" ? (
@@ -453,6 +488,30 @@ function FolderPrompt({
           a folder that holds them first.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The offer to move notes made right beside the PDF (before the Notes folder) in with the
+ * others. Keeping them where they are is a fine answer too, and is remembered.
+ */
+function MoveOffer({ moving, onMove, onKeep }: { moving: boolean; onMove: () => void; onKeep: () => void }) {
+  return (
+    <div className="notes-panel__offer" role="region" aria-label="Move these notes">
+      <p className="notes-panel__offer-title">Move these notes into the Notes folder?</p>
+      <p>
+        New notes go in a “Notes” folder beside your PDFs, which keeps the PDFs' folder tidy. These
+        were made before, right beside the PDF. Their links are updated as they move.
+      </p>
+      <div className="notes-panel__offer-actions">
+        <button type="button" className="notes-panel__allow" onClick={onMove} disabled={moving}>
+          {moving ? "Moving…" : "Move"}
+        </button>
+        <button type="button" className="notes-panel__keep" onClick={onKeep} disabled={moving}>
+          Keep here
+        </button>
+      </div>
     </div>
   );
 }

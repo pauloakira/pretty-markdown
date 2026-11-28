@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyLink, fragmentIds, relativePath, resolveFileLink, resolvePath, slugify } from "./Link";
+import { classifyLink, fragmentIds, rebaseLinks, relativePath, resolveFileLink, resolvePath, slugify } from "./Link";
 
 describe("classifyLink", () => {
   it("treats #… as a place in the same document, decoding %-escapes", () => {
@@ -93,5 +93,38 @@ describe("relativePath and resolvePath", () => {
     expect(resolvePath("../a.pdf", "/p/Notes/a.notes.md")).toBe("/p/a.pdf");
     expect(resolvePath("a.pdf", "/p/a.notes.md")).toBe("/p/a.pdf");
     expect(resolvePath("../../../a.pdf", "/p/a.notes.md")).toBeNull();
+  });
+});
+
+describe("rebaseLinks", () => {
+  const from = "/papers/Geometric Methods.notes.md";
+  const to = "/papers/Notes/Geometric Methods.notes.md";
+  const moved = (markdown: string) => rebaseLinks(markdown, from, to);
+
+  it("points relative links and images at the same files from the new place", () => {
+    expect(moved("> Lemma.\n> — [p. 3](Geometric%20Methods.pdf#page=3&ex=abcdef&color=yellow)\n")).toBe(
+      "> Lemma.\n> — [p. 3](../Geometric%20Methods.pdf#page=3&ex=abcdef&color=yellow)\n",
+    );
+    expect(moved("See ![fig](figs/a.png \"A\") and [b](<my notes.md>).")).toBe(
+      "See ![fig](../figs/a.png \"A\") and [b](<../my notes.md>).",
+    );
+    expect(moved("[x](Notes/other.md) [y](f(1).md)")).toBe("[x](other.md) [y](../f%281%29.md)");
+  });
+
+  it("rewrites reference definitions and HTML, and nothing else", () => {
+    expect(moved("[ref]: figs/b.png\n<img src=\"c.png\"> <a href='d.md'>d</a>\n")).toBe(
+      "[ref]: ../figs/b.png\n<img src=\"../c.png\"> <a href='../d.md'>d</a>\n",
+    );
+    const kept = "[web](https://x.org/a) [top](#intro) [abs](/etc/a.md) [mail](mailto:a@b.c)\n";
+    expect(moved(kept)).toBe(kept);
+  });
+
+  it("leaves code as written", () => {
+    const code = "```md\n[a](a.md)\n```\nUse `[b](b.md)` or [c](c.md).\n~~~\n![](d.png)\n~~~\n";
+    expect(moved(code)).toBe("```md\n[a](a.md)\n```\nUse `[b](b.md)` or [c](../c.md).\n~~~\n![](d.png)\n~~~\n");
+  });
+
+  it("keeps Windows line endings", () => {
+    expect(moved("[a](a.md)\r\n[b](b.md)\r\n")).toBe("[a](../a.md)\r\n[b](../b.md)\r\n");
   });
 });

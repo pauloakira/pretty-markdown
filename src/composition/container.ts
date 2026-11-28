@@ -22,6 +22,7 @@ import { KatexRenderer } from "../infrastructure/math/KatexRenderer";
 import { MathJaxRenderer } from "../infrastructure/math/MathJaxRenderer";
 import { MarkdownPipeline } from "../infrastructure/markdown/MarkdownPipeline";
 import { LocalStorageRecentFilesRepository } from "../infrastructure/persistence/LocalStorageRecentFilesRepository";
+import { LocalStorageKeptNotes } from "../infrastructure/persistence/LocalStorageKeptNotes";
 import { LocalStorageSettingsRepository } from "../infrastructure/persistence/LocalStorageSettingsRepository";
 import { TauriSessionRepository } from "../infrastructure/persistence/TauriSessionRepository";
 import { LazyPdfViewerFactory } from "../infrastructure/pdf/LazyPdfViewerFactory";
@@ -95,6 +96,7 @@ export function createContainer(): Container {
     new TauriNotesStore(),
     Math.random,
     import.meta.env.TAURI_ENV_PLATFORM === "ios" ? new TauriFolderAccess() : null,
+    new LocalStorageKeptNotes(),
   );
   const linkOpener = new TauriLinkOpener();
   const fileWatcher = new TauriFileWatcher();
