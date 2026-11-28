@@ -23,9 +23,14 @@ in a `Notes` folder beside the document. Read, Notes and Board are three views o
    `Notes/` first, then beside the document, and never starts a second file. A quote's
    link is relative to the notes file (`../Paper.pdf#page=…`), so it works in any
    Markdown app; Copy as quote uses the PDF's bare name. On iPad the folder must be
-   allowed once (the Notes panel asks); highlighting is never blocked. Still to come
-   (KAN-73): an offer to move older notes into `Notes/`, and a setting for where notes
-   are kept (beside the PDF, `Notes/`, or one chosen folder).
+   allowed once (the Notes panel asks); highlighting is never blocked. Older notes beside
+   the document get a one-time offer in the Notes panel, **Move** or **Keep here** (kept
+   ones are remembered and not asked about again). Moving rebases the file's relative
+   links (quotes, images, reference definitions, HTML `src`/`href`; code is left alone),
+   writes the new file and reads it back before removing the old one, and never writes
+   over notes already in `Notes/`; a tab showing the notes follows them, and unsaved
+   edits in it stop the move. Still to come (KAN-73): a setting for where notes are kept
+   (beside the PDF, `Notes/`, or one chosen folder).
 3. **Board (R4) stays, built last and kept small**: clusters are headings, cards are
    excerpts, drag and link; no free ink. Starts once the Outline is in daily use.
 
