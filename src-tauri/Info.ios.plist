@@ -10,6 +10,10 @@
     from fileAssociations in tauri.ios.conf.json.
   - ITSAppUsesNonExemptEncryption = NO: the app has no encryption of its own (only the
     system's), so App Store uploads need no export compliance documents (ipad/PLAN.md F2).
+  - UIApplicationSceneManifest: iPadOS 27 stops apps built with the iOS 27 SDK at launch
+    unless they use the scene lifecycle. tao (Tauri's windowing) switches to it only when
+    UIApplicationSupportsMultipleScenes is true; that also lets iPadOS open the app in
+    more than one window.
 -->
 <plist version="1.0">
 <dict>
@@ -17,6 +21,11 @@
   <false/>
   <key>LSSupportsOpeningDocumentsInPlace</key>
   <true/>
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key>
+    <true/>
+  </dict>
   <key>UTImportedTypeDeclarations</key>
   <array>
     <dict>
